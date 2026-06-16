@@ -41,10 +41,26 @@ openocd -f interface/cmsis-dap.cfg \
 ### Analysis
 
 - **Size**: 256 KB (0x08000000 - 0x08040000)
-- **Content**: Minimal firmware consisting primarily of ARM Thumb2 machine code
-- **Strings found**: Only boot/test messages (`Clock Frequency Test Success`, `Clock Test(PreRun) Unexpectedly Abort!`)
+- **Ghidra functions**: 420
 - **PIN in plaintext**: **NO** — no 4-digit sequences found via `strings` or hex search
-- **Conclusion**: U16 is a simple UART bridge. It forwards button press data from the display board to U13 and passes display data back. The PIN logic is NOT in this MCU.
+- **PIN logic**: NONE — this MCU does not handle PIN verification
+- **Real role**: **Board/peripheral MCU** — handles ALL sensors (lift, border wire, voltage), motor control (border following logic), safety monitoring (IEC 60730), and UART communication with U13
+
+### What U16 Actually Does
+
+| Function | Details |
+|----------|---------|
+| **Lift sensors** | Two hall sensors, debounced state machine (none/left/right/both) |
+| **Border wire sensors** | Two coils via SPI, reads electromagnetic field, computes position |
+| **Voltage monitoring** | SPI ADC, 5-sample average, baseline stored |
+| **Motor control** | Full border following algorithm — moves forward or stops/turns based on sensor readings. 2 PWM timer channels configured for motor output |
+| **Safety** | IEC 60730 Class B self-test (CPU, FLASH CRC32, clock, RAM, ADC) |
+| **UART bridge** | Sends JSON sensor data to U13 via cJSON; receives and parses JSON commands |
+| **Watchdog** | Kicks watchdog every task loop iteration |
+
+**Key correction:** U16 is NOT "a simple UART bridge." The actual UART bridge/human interface is handled by the **ESP32 on the display board**. U16 is a full sensor/motor control coprocessor.
+
+See [U16.md](U16.md) for the complete analysis, protocol documentation, and decompiled code.
 
 ---
 
@@ -179,38 +195,42 @@ esptool --port /dev/ttyUSB0 --baud 921600 --before no-reset write_flash 0 esp32_
 ```
 ┌──────────────────────────────────────────────────┐
 │ Display Board (SNK_DISPLAY_CP_V11)               │
-│ ┌──────────┐                                     │
-│ │   ESP32  │  (untested, unused in basic PIN)     │
-│ └──────────┘                                     │
-│ Buttons → UART → Mainboard U16 → UART → U13      │
+│ ┌──────────┐  ┌──────────────────────────────┐   │
+│ │   ESP32  │  │ Display + Buttons (U4/K1-K4) │   │
+│ │ Wi-Fi/BT │  │ 7-segment LED, buzzer        │   │
+│ │ (unused) │  └──────────────────────────────┘   │
+│ └──────────┘  Buttons → ESP32/U4 → UART → U13   │
 └──────────────────────┬───────────────────────────┘
                        │ J9/J10 ribbon
 ┌──────────────────────▼───────────────────────────┐
 │ Mainboard (SNK_MAINBOARD_CP_V11)                  │
 │                                                    │
-│ ┌─────────────────────┐    ┌──────────────────┐    │
-│ │ U16 (GD32F303)      │───▶│ U13 (GD32F305)   │    │
-│ │ UART bridge, no PIN │    │ ENV/KV system    │    │
-│ └─────────────────────┘    │ I²C ←→ U22       │    │
-│                            │ PIN verification  │    │
-│                            └───────┬──────────┘    │
-│                                    │ I²C bus       │
-│                            ┌───────▼──────────┐    │
-│                            │ U22 (24Cxx)      │    │
-│                            │ EEPROM 256-2048  │    │
-│                            │ stores PIN+config │    │
-│                            └──────────────────┘    │
+│ ┌─────────────────────────┐  ┌──────────────────┐ │
+│ │ U16 (GD32F303)          │  │ U13 (GD32F305)   │ │
+│ │ - Lift sensors (2xHall) │  │ ENV/KV system    │ │
+│ │ - Border coils (2xSPI)  │  │ I²C ←→ U22       │ │
+│ │ - Voltage ADC           │  │ PIN verification  │ │
+│ │ - Motor control logic   │  │ Motor FOC/BLDC    │ │
+│ │ - IEC 60730 safety      │  │ USB host          │ │
+│ │ UART ←→ U13 (JSON msgs) │  │ IAP updates       │ │
+│ └─────────────────────────┘  └───────┬──────────┘ │
+│                                      │ I²C bus    │
+│                              ┌───────▼──────────┐ │
+│                              │ U22 (24Cxx)      │ │
+│                              │ EEPROM 256-2048  │ │
+│                              │ stores PIN+config│ │
+│                              └──────────────────┘ │
 └────────────────────────────────────────────────────┘
 ```
 
 **PIN is NOT in MCU flash.** Both dumps confirmed no plaintext PIN. The PIN is stored in the external I²C EEPROM **U22** and loaded by U13 during boot.
 
 The flowchart:
-1. User enters PIN via buttons on display board
-2. Display board ESP32 or U16 passes key presses to U13 via UART
+1. User enters PIN via buttons on display board (ESP32 reads buttons, sends via UART)
+2. U13 receives PIN digits via UART from display board (U16 is NOT involved in button forwarding)
 3. U13 reads stored PIN from EEPROM U22 via I²C
 4. U13 compares entered PIN vs stored PIN
-5. On match → U13 commands U16 to show "IDLE"; on mismatch → "Lock"
+5. On match → U13 sends OK to display; on mismatch → lock
 
 ---
 

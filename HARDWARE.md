@@ -54,13 +54,32 @@ Three 3-phase brushless motors, controlled by MOSFET banks (bottom edge with hea
 | `BLADE` | `A B C` | Cutting disc |
 | `CHA` | `C- C+` | Charging contacts from docking station |
 
+### Inter-Board Connector: J8 (Display Board ↔ Mainboard)
+
+**J8** is the main 7-pin connector linking the display board to the mainboard via a ribbon cable. Pinout (as labeled on mainboard silkscreen):
+
+| Pin | Label | Function | Direction |
+|-----|-------|----------|-----------|
+| 1 | `+5V` | Power to display board | Mainboard → Display |
+| 2 | `ON` | Power button (K4) | Display → Mainboard (direct GPIO) |
+| 3 | `→` | **UART TX from mainboard → RX to ESP32** | Mainboard → Display |
+| 4 | `←` | **UART TX from ESP32 → RX to mainboard** | Display → Mainboard |
+| 5 | `GND` | Ground | |
+| 6 | `Start` | Start button (K1) | Display → Mainboard (direct GPIO) |
+| 7 | `OK` | OK button (K3) | Display → Mainboard (direct GPIO) |
+
+**Key architectural insight:** The three buttons (ON, Start, OK) are **forked** — they connect to both:
+1. **Mainboard directly** (via ribbon cable pins 2, 6, 7) — so mainboard responds instantly to button presses without coordination
+2. **ESP32 locally** on the display board — so ESP32 can monitor/relay button events and control display
+
+The **bidirectional UART** on pins 3-4 is the only digital communication channel between the two boards.
+
 ### Sensors & I/O Connectors
 
 | Connector | Label | Function |
 |-----------|-------|----------|
 | `J10` / `H2` | `HALL +5V GND` | Hall effect sensor on front bumper — lift/tilt or collision detection |
 | `J9` | — | Boundary wire loop coils (EM sensing, 2 coils under chassis) |
-| `J8` | — | Free sensor port (auxiliary bumper or unused) |
 | `J7` | — | 4-pin UART diagnostic port (TX/RX/GND) — **unpopulated in this unit** |
 | `U19` | `STOP` | Physical emergency stop button connector |
 
@@ -151,9 +170,9 @@ Certifications:
 
 | Connector | Pins | Function |
 |-----------|------|----------|
-| **J1** | 6-pin female header | ESP32 UART programming: `3U3 T R GND GND P` (P = IO0/Prog) — successfully used with FT232R + esptool.py to dump 4 MB flash at 921600 baud |
+| **J1** | 6-pin female header | ESP32 **programming** UART (UART0): `3U3 T R GND GND P` (P = IO0/Prog) — used with FT232R + esptool.py to dump 4 MB flash at 921600 baud. **Not connected to mainboard.** |
 | **J4** | 2 spring contacts | Rain/moisture detector (short when wet) |
-| Main header | multi-pin white | Power, UART, button matrix — connects to mainboard J9/J10 |
+| **Main header** | 7-pin white | Inter-board connector — mates with mainboard **J8**: `+5V ON → ← GND Start OK` |
 
 ---
 

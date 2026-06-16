@@ -7,22 +7,26 @@ The display board (`SNK_DISPLAY_CP_V11`) contains an **ESP32-WROOM-32UE** module
 ## Hardware Role
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│ Display Board (SNK_DISPLAY_CP_V11)                              │
-│                                                                  │
-│   Buttons (S1-S14)                                              │
-│       │                                                          │
-│       ├──→ Matrix → ESP32 (U5) reads button states              │
-│       │            → Sends UART commands to mainboard            │
-│       │            → Controls 4-digit 7-segment display          │
-│       │            → Drives buzzer (BU1)                         │
-│       │                                                          │
-│   ESP32 ──UART──→ Mainboard J9/J10 ribbon ──→ U16 ──UART──→ U13 │
-│       │                                                          │
-│       ├── J1 header (programming/debug UART)                     │
-│       ├── IPEX antenna (WiFi/BT, unused in stock)                │
-│       └── 3.3V from U2 (buck converter)                          │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ Display Board (SNK_DISPLAY_CP_V11)                                   │
+│                                                                       │
+│   Buttons (K1-K4)                                                     │
+│       │                                                               │
+│       ├──→ Local GPIO on display board → ESP32 reads state           │
+│       │                                                               │
+│       ├──→ Ribbon cable (J8 pins 2,6,7) → Mainboard direct GPIO     │
+│       │                                                               │
+│   ESP32 (U5)                                                          │
+│       │                                                               │
+│       ├──UART (115200 8N1)──→ J8 pin 4 (←) ──ribbon──→ Mainboard J8  │
+│       │                           J8 pin 3 (→)     → U16 → U13       │
+│       │                                                               │
+│       ├── J1 header (UART0, programming only, NOT to mainboard)       │
+│       ├──→ Controls 4-digit 7-segment display (GD5643CPG-1)          │
+│       ├──→ Drives buzzer (BU1)                                        │
+│       ├── IPEX antenna (WiFi/BT, unused in stock)                     │
+│       └── 3.3V from U2 (buck converter, input +5V from J8 pin 1)     │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Functions
@@ -35,7 +39,9 @@ The display board (`SNK_DISPLAY_CP_V11`) contains an **ESP32-WROOM-32UE** module
 
 ## UART Communication Protocol
 
-The ESP32 communicates with the mainboard (U16 → U13) via a bidirectional UART. The protocol is a custom binary framing format.
+The ESP32 communicates with the mainboard (U16 → U13) via a bidirectional UART over the ribbon cable (J8 pins 3-4). **Note:** This UART is NOT the same as J1 — J1 is the ESP32's programming UART (UART0, GPIO1/GPIO3) and is only used for flash dumping. The mainboard UART uses different GPIO pins on the ESP32 (to be determined).
+
+The protocol is a custom binary framing format.
 
 ### Physical Layer
 
@@ -275,17 +281,23 @@ To confirm the protocol, sniff the UART between ESP32 and mainboard:
 
 ### Physical Access Points
 
-1. **J1 header (display board)**: Pin 2 (T=ESP32 TX) and Pin 3 (R=ESP32 RX) — these are the ESP32 UART lines
-2. **Ribbon cable J9/J10**: UART lines between display board and mainboard
-3. **On mainboard**: Trace from ribbon connector to U16, then U16 to U13
+The UART lines are on the **ribbon cable** between boards. Access them at the **J8 connector on the mainboard** (labeled pins):
+
+| J8 Pin | Signal | Connect LA To |
+|--------|--------|---------------|
+| 3 (`→`) | Mainboard TX → ESP32 RX | CH1 |
+| 4 (`←`) | ESP32 TX → Mainboard RX | CH2 |
+| 5 | GND | GND |
+
+**Do NOT use J1 for sniffing** — J1 is the programming/debug UART (UART0) and is NOT connected to the mainboard.
 
 ### Setup
 
 ```bash
-# Connect logic analyzer or second UART adapter:
-# - ESP32 TX → Logic Analyzer Ch1
-# - ESP32 RX → Logic Analyzer Ch2
-# - GND → GND
+# Connect logic analyzer to J8 on mainboard:
+# - CH1 → J8 pin 3 (→) — mainboard→ESP32
+# - CH2 → J8 pin 4 (←) — ESP32→mainboard
+# - GND → J8 pin 5
 
 # Use sigrok/pulseview or saleae logic for capture
 # At 115200 baud, standard UART decoding

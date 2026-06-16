@@ -17,7 +17,7 @@ Purchased second-hand on OLX (Poland), this mower was locked with an unknown PIN
 | Component | Marking | Role |
 |-----------|---------|------|
 | **U13** | `GD32F305 AGT6` | Main MCU (Cortex-M4) — motors, sensors, navigation |
-| **U16** | `GD32F303 CGT6` | Secondary MCU (Cortex-M4) — display/UI bridge |
+| **U16** | `GD32F303 CGT6` | Secondary MCU (Cortex-M4) — sensors, motor control, UART bridge |
 | **U22** | SOIC-8 (24Cxx) | I²C EEPROM — **stores the PIN code**, config, schedule |
 | **U12** | SOIC-8 | SPI Flash / second EEPROM |
 | **U7** | Buck converter | 20V → 5V/3.3V step-down |
@@ -33,7 +33,7 @@ Purchased second-hand on OLX (Poland), this mower was locked with an unknown PIN
 |-----------|----------------|
 | `J5` | `BATTERY` — main 20V Li-Ion input |
 | `J7` | 4-pin white — UART diagnostic port (TX/RX/GND) |
-| `J8` | Free sensor connector (auxiliary/bumper) |
+| `J8` | 7-pin inter-board connector to display board: `+5V ON → ← GND Start OK` |
 | `J9` | Boundary wire loop coils (EM sensing) |
 | `J10` / `H2` | `HALL +5V GND` — Hall effect (lift/tilt/bumper) |
 | `U19` | `STOP` — physical emergency stop button |
@@ -121,7 +121,7 @@ hexdump -C flash_dump.bin | grep -E '30 30 30 [0-9a-f]|31 32 33 34'
 
 1. **PIN is NOT in MCU flash** — successfully dumped both U13 (512KB) and U16 (256KB). No plaintext PIN found. Confirmed the PIN is stored in the external EEPROM **U22**.
 
-2. **U16 firmware is minimal** — a display bridge forwarding key presses to U13. Minimal strings, no PIN logic.
+2. **U16 is a sensor/motor control coprocessor** — handles lift sensors, border wire coils, voltage ADC, motor control, and IEC 60730 safety, with UART communication to U13 (JSON). See [U16.md](U16.md).
 
 3. **U13 firmware is feature-rich** — contains:
    - KV (Key-Value) storage v4.0
@@ -166,6 +166,7 @@ This reverse engineering documentation is provided for educational purposes.
 - [**HARDWARE.md**](HARDWARE.md) — Detailed PCB analysis, component tables, pinouts, SWD wiring guide
 - [**FIRMWARE.md**](FIRMWARE.md) — Firmware dump details, string analysis, PIN storage architecture, recovery options
 - [**ESP32.md**](ESP32.md) — ESP32 firmware deep-dive: UART protocol, PIN flow, WiFi/MQTT, firmware architecture
+- [**U16.md**](U16.md) — U16 (GD32F303) firmware analysis: sensors, motor control, safety
 
 ## Photos
 
