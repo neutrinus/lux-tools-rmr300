@@ -3,117 +3,173 @@
 ## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        U13 (GD32F305) — Main Board                  │
-│                                                                     │
-│  ┌──────────────┐   USART0 @230400   ┌──────────────────────────┐   │
-│  │              │ ◄─────────────────► │  U16 (GD32F303)          │   │
-│  │  Main Loop   │   OTA, status, key  │  Blade/Drive/Lift Ctrl   │   │
-│  │  FUN_0800e800│                     │                          │   │
-│  │              │   USART1 @115200   ┌──────────────────────────┐ │   │
-│  │  Bitmask     │ ◄─────────────────► │  ESP32 (WiFi/BT)        │ │   │
-│  │  Dispatcher  │   commands, status  │  - App interface        │ │   │
-│  │              │                     │  - HTTP server          │ │   │
-│  │  USB Host    │   USART2 @115200   │  - MQTT(?)              │ │   │
-│  │  (pendrive)  │ ◄─────────────────► │  - PIN: 88888888       │ │   │
-│  │              │   3rd MCU (?)       └──────────────────────────┘ │   │
-│  │  SPI Flash   │                     └──────────────────────────┘ │
-│  │  (env/KV)    │                                                 │
-│  └──────┬───────┘                                                 │
-└─────────┼───────────────────────────────────────────────────────────┘
-          │
-          ▼
-    USB pendrive (FAT32)
-    ─────────────────
-    SNK_MB_*.bin        — Main Board firmware update
-    SNK_BB_*.bin        — Blade Board firmware update
-    SNK_DB_*.bin        — Drive Board firmware update
-    SNK_LB_*.bin        — Lift Board firmware update
-    SNK_DBL_*.bin       — Dual/Drive BTL update
-    SNK_DBS_*.bin       — Drive Board (secondary?) update
-    SNK_DBH_*.bin       — Drive Board (high?) update
-    SNK_MBTL_*.bin      — Main Board Bootloader update
-    log_yyyymmdd_hhmmss.html  — saved logs
-    FORMATFLASH.json    — signal to format internal flash
+┌──────────────────────────────────────────────────────────────────────┐
+│ Display Board (SNK_DISPLAY_CP_V11)                                   │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │  ESP32-WROOM-32UE                                            │    │
+│  │  • Buttons matrix (S1-S14) → key scan                        │    │
+│  │  • 4-digit 7-segment LED (GD5643CPG-1)                       │    │
+│  │  • Buzzer                                                     │    │
+│  │  • Rain sensor via J4                                         │    │
+│  │  • WiFi/BT (stack present, unused in retail)                  │    │
+│  │  • MQTT client (to server.sk-robot.com)                      │    │
+│  └──────────┬───────────────────────────────────────────────────┘    │
+└─────────────┼─────────────────────────────────────────────────────────┘
+              │ J8 ribbon cable
+              │ UART @115200, binary protocol (0xAA 0x55 + XOR CS)
+              │
+┌─────────────▼─────────────────────────────────────────────────────────┐
+│ Main Board                                                            │
+│                                                                       │
+│  ┌──────────────────────────────────────────────────────────────┐    │
+│  │  U16 (GD32F303CGT6) — Board MCU                               │    │
+│  │  FreeRTOS: comm_task, init_bd                                 │    │
+│  │  • Sensor processing (lift Hall, border coils, battery voltage)│    │
+│  │  • Motor control (border following logic via factory vtable)  │    │
+│  │  • Translates ESP32 binary protocol → JSON for U13           │    │
+│  │  • IEC 60730 safety self-test (CPU, RAM, FLASH CRC, clock)   │    │
+│  └──────────┬───────────────────────────────────────────────────┘    │
+│             │ UART (internal PCB) @230400, JSON via cJSON             │
+│             │                                                         │
+│  ┌──────────▼───────────────────────────────────────────────────┐    │
+│  │  U13 (GD32F305) — Main MCU                                    │    │
+│  │  • Main loop FUN_0800e800 (bitmask dispatcher)                 │    │
+│  │  • USB Host (pendrive FAT32) — IAP, FORMATFLASH.json          │    │
+│  │  • OTA over UART from U16 (230400→921600 baud)                │    │
+│  │  • Env system (key-value store on SPI flash)                  │    │
+│  │  • PIN verification (reads stored PIN from EEPROM U22)        │    │
+│  │                                                               │    │
+│  │  USART0 @230400  ←→ U16                                       │    │
+│  │  USART1 @115200  ←→ ??? (3rd onboard MCU?)                   │    │
+│  │  USART2 @115200  ←→ ???                                       │    │
+│  └───────────────────────────────────────────────────────────────┘    │
+│                                                                       │
+│  EEPROM U22 (I2C/SPI) — stores user PIN                              │
+│  SPI Flash — env_read.json (firmware versions, config)               │
+│  USB pendrive (FAT32)                                                 │
+│    SNK_MB_*.bin    — Main Board firmware update                       │
+│    SNK_BB_*.bin    — Blade Board firmware update                     │
+│    SNK_DB_*.bin    — Drive Board firmware update                     │
+│    SNK_LB_*.bin    — Lift Board firmware update                      │
+│    SNK_DBL_*.bin   — Dual/Drive BTL update                           │
+│    SNK_DBS_*.bin   — Drive Board (secondary?) update                 │
+│    SNK_DBH_*.bin   — Drive Board (high?) update                      │
+│    SNK_MBTL_*.bin  — Main Board Bootloader update                    │
+│    log_yyyymmdd_hhmmss.html — saved logs                             │
+│    FORMATFLASH.json — signal to format internal flash                │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-## 1. MCU Communication — 3 USARTs
+## 1. MCU Communication — USART mapping
 
-### USART0 — U13 ↔ U16 (GD32F303) @ 230400 baud
+### U13 USARTs (initialized in FUN_08003fa8)
 
-| Właściwość | Wartość |
-|------------|---------|
-| Baza | `0x40013800` |
-| Baudrate | `0x38400` = 230400 (zmienny dla OTA: 460800, 921600) |
-| GPIO AF | `0x25` (AF3) |
-| DMA | kanał 4 |
-| Funkcja | OTA firmware update, status, komendy |
+| USART | Baza | Baudrate | GPIO AF | DMA | Podłączony do |
+|-------|------|----------|---------|-----|---------------|
+| USART0 | `0x40013800` | `0x38400` = 230400 | `0x25` | kanał 4 | **U16** — JSON, OTA, komendy |
+| USART1 | `0x40004400` | `0x1c200` = 115200 | `0x26` | kanał 5 | Nieznany (3rd MCU?) |
+| USART2 | `0x40004800` | `0x1c200` = 115200 | `0x34` | kanał 2 | Nieznany |
 
-**Protokół:** Struktura pakietu (zweryfikowana przez `FUN_08008cb8`):
+### Protokół U13 ↔ U16 (USART0 @ 230400)
+
+Struktura pakietu OTA (zweryfikowana przez `FUN_08008cb8`):
 ```
 [2 bajty: length LE] [N bajtów: dane] [1 bajt: XOR checksum]
 ```
-Checksum to XOR wszystkich bajtów danych. Używany do:
-- OTA firmware download (do 921600 baud)
-- Przekazywanie statusu operacji (np. `FUN_08007c94` wysyła status do U16)
-- Komendy i konfiguracja
+Checksum = XOR wszystkich bajtów danych.
 
-### USART1 — U13 ↔ ESP32 @ 115200 baud
+Używany do:
+- OTA firmware download (z możliwością zmiany baud na 460800/921600)
+- Przekazywanie statusu (`FUN_08007c94` wysyła status do U16)
+- Dane sensorowe w formacie JSON (przez bibliotekę cJSON na U16)
 
-| Właściwość | Wartość |
-|------------|---------|
-| Baza | `0x40004400` |
-| Baudrate | `0x1c200` = 115200 |
-| GPIO AF | `0x26` (AF3) |
-| DMA | kanał 5 |
-| Funkcja | WiFi/BT, komendy z aplikacji |
+### Łańcuch komunikacji
 
-ESP32 przekazuje komendy i wciskanie klawiszy przez ten UART. Protokół nie został do końca odtworzony, ale ESP32 nasłuchuje na komendy HTTP/BLE i tłumaczy je na komendy UART.
+```
+Display Board (ESP32)
+    │ UART @115200, binary protocol (0xAA 0x55, XOR CS)
+    │ cmd 0x01-0x04 = button presses
+    │ cmd 0x0B = PWD_VERIFY (4-digit PIN)
+    │ cmd 0x0C = PWD_RESULT (response from mainboard)
+    │ cmd 0x0D-0x15 = status, mow, charge, bat info etc.
+    ▼
+U16 (GD32F303) — board MCU
+    │ Translates binary commands → JSON messages
+    │ UART @230400, JSON via cJSON
+    ▼
+U13 (GD32F305) — main MCU
+    │ Parses JSON, executes commands (motor, sensors, PIN verify)
+    │ Sends JSON responses back
+```
 
-### USART2 — U13 ↔ trzeci MCU @ 115200 baud
+## 2. PIN Code — gdzie jest trzymany?
 
-| Właściwość | Wartość |
-|------------|---------|
-| Baza | `0x40004800` |
-| Baudrate | `0x1c200` = 115200 |
-| GPIO AF | `0x34` |
-| DMA | kanał 2 |
-| Funkcja | Nieznany peryferia (może wyświetlacz/sensory) |
+PIN jest **4-cyfrowy** i przechowywany w **EEPROM U22** na mainboardzie. Nie ma go w ESP32 ani w U13 firmware.
 
-## 2. PIN Code — Gdzie jest trzymany?
+### Ścieżka PIN (rekonstrukcja z U16.md + ESP32.md)
 
-**PIN NIE jest przechowywany w U13.** Jest zarządzany przez ESP32:
+```
+1. Wyświetlacz pokazuje "0   " (miga)
+   → Użytkownik ustawia cyfrę przyciskami +/-
+   → "0 0  " → "0 0 0 " → "0 0 0 0"
+   
+2. ESP32 wysyła ramkę do U16:
+   0xAA 0x55 0x0B "1234" <XOR_CS>
+   (cmd 0x0B = PWD_VERIFY, payload = 4 znaki ASCII)
 
-| Klucz ESP32 | Wartość |
-|-------------|---------|
-| `robot_password` | `88888888` (domyślny PIN) |
-| `robot_ssid` | Nazwa WiFi |
-| `robot_name` | Nazwa kosiarki |
-| `robot_sn` | Numer seryjny |
-| `snk_mower` | Typ/wersja kosiarki |
-| `snk_mqtt` | Konfiguracja MQTT |
+3. U16 przekazuje do U13 jako JSON:
+   {"cmd":"verify_pin","pin":"1234"}
 
-**Mechanizm:**
-1. Aplikacja (przez WiFi/BLE) wysyła PIN do ESP32
-2. ESP32 weryfikuje: `Check password succeeded` / `Check password failed`
-3. ESP32 używa HTTP Basic Auth (`HTTP_AUTH`) do uwierzytelniania
-4. Po poprawnym PINie, ESP32 przekazuje komendy do U13 przez USART1
+4. U13 odczytuje zapisany PIN z EEPROM U22
+   → Jeśli zgadza się: zwraca OK
+   → Jeśli nie: zwraca FAIL
 
-U13 nie ma żadnej logiki PIN — tylko odbiera komendy z ESP32 i wykonuje.
+5. U16 → ESP32: 0xAA 0x55 0x0C 0x00 <CS> (OK)
+                      lub 0xAA 0x55 0x0C 0x01 <CS> (FAIL)
 
-## 3. Jak ESP32 komunikuje się z U13?
+6. ESP32 wyświetla:
+   "IdLE" (OK — odblokowany)
+   "LoCK" (FAIL — pozostaje zablokowany)
+```
 
-ESP32 **nie tylko przesyła wciskanie klawiszy**. Prawdopodobnie:
-- Odbiera komendy z aplikacji (przez BLE lub WiFi/HTTP)
-- Przekazuje skonwertowane komendy do U13 przez USART1 @ 115200
-- U13 wykonuje fizyczne operacje (jazda, koszenie, powrót do stacji)
-- Status jest odczytywany z U13 i przesyłany z powrotem do aplikacji
+### Co jest czym w ESP32?
 
-Szczegóły protokołu na USART1 nie zostały w pełni odtworzone z U13 firmware, ale na podstawie struktury OTA wiadomo że używa tego samego formatu pakietów z XOR checksum.
+| Klucz NVS ESP32 | Wartość | Znaczenie |
+|-----------------|---------|-----------|
+| `robot_password` | `88888888` | Hasło WiFi/MQTT, **NIE PIN** |
+| `robot_ssid` | `cy-public` | Nazwa WiFi sieci |
+| `wifi_passwd` | `88888888` | To samo hasło WiFi |
+| `robot_name` | `MyMower` | Nazwa urządzenia |
+| `robot_sn` | `2312CGF250600035167` | Numer seryjny |
+| `iot_mqtt_uri` | `mqtt://server.sk-robot.com` | Broker MQTT |
 
-Kluczowe stringi wskazujące na HTTP server na ESP32:
-- HTML/CSS/JS strony `Mower Log` z filtrowaniem po typie zdarzeń
-- `HTTP_AUTH` — Basic Authentication z hasłem
+ESP32 weryfikuje hasło dla WiFi/MQTT (`Check password succeeded/failed`), a PIN 4-cyfrowy jest wysyłany do mainboarda do weryfikacji na U22.
+
+## 3. Jak ESP32 komunikuje się z resztą?
+
+ESP32 **nie tylko przesyła wciskanie klawiszy** — ma pełny zestaw komend:
+
+| ID | Kierunek | Nazwa | Opis |
+|----|----------|-------|------|
+| `0x01` | ESP→MB | `BTN_UP` | Przycisk + |
+| `0x02` | ESP→MB | `BTN_DOWN` | Przycisk - |
+| `0x04` | ESP→MB | `BTN_OK` | Przycisk OK |
+| `0x0B` | ESP→MB | `PWD_VERIFY` | Wyślij PIN (4 bajty ASCII) |
+| `0x0C` | MB→ESP | `PWD_RESULT` | Wynik weryfikacji (0=OK, 1=fail) |
+| `0x0D` | ESP→MB | `STATUS_REQ` | Zapytaj o status |
+| `0x0E` | MB→ESP | `STATUS_RSP` | Status (mow/charge/idle/lock/error) |
+| `0x0F` | ESP→MB | `MOW_START` | Rozpocznij koszenie |
+| `0x10` | ESP→MB | `CHARGE_RET` | Wracaj do stacji |
+| `0x11` | ESP→MB | `DISPLAY_OFF` | Wyłącz wyświetlacz |
+| `0x12` | MB→ESP | `ERROR_INFO` | Kod błędu |
+| `0x14` | ESP→MB | `BAT_INFO_REQ` | Zapytaj o baterię |
+| `0x15` | MB→ESP | `BAT_INFO_RSP` | Napięcie baterii (mV) |
+
+Dodatkowo — jeśli WiFi jest skonfigurowane — ESP32 łączy się z MQTT brokerem
+`server.sk-robot.com` i przekazuje komendy z chmury do mainboarda.
+
+Kluczowe stringi z HTTP serverem (`Mower Log` strona HTML z JS) są częścią
+ESP32 firmware, nie U13.
 
 ## 4. Obsługa Pendrive — FORMATFLASH.json
 
@@ -179,7 +235,7 @@ Format: `env_read.json` na wewnętrznym SPI flash (prawdopodobnie W25Q64 lub pod
 - `ult_cfg` — Ultra sonic config
 - `led_cfg` — LED config
 
-**Brak parametrów PIN/hasła** w env U13 — PIN jest wyłączenie na ESP32.
+**Brak parametrów PIN/hasła** w env U13 — PIN jest przechowywany w zewnętrznym EEPROM U22.
 
 ## 6. Główna pętla (Main Loop)
 
@@ -222,19 +278,11 @@ Loop:
 - XOR checksum na każdym pakiecie
 - ESP32 nie ma bezpośredniego udziału w OTA U13
 
-## 8. ESP32 — Podsumowanie z dumpa
+## 8. Podsumowanie — pliki analizy
 
-Z dumpa ESP32 (binarny) odczytano:
-
-| Funkcja | Znalezione stringi |
-|---------|-------------------|
-| App name | `9MyMower` |
-| PIN | `robot_password` = `88888888` |
-| WiFi | `robot_ssid`, `wifi_passwd` |
-| MQTT | `snk_mqtt` |
-| Serial | `robot_sn` |
-| Auth | `HTTP_AUTH` (Basic Auth) |
-| BLE | klucze IRK, IR, DHK, ER |
-| HTTP | serwer z stroną Mower Log |
-| TLS | krzywe brainpool (ECC) |
-| SPI | `spi_tube_drive.c` (LED tube display?) |
+| Plik | Zawartość |
+|------|-----------|
+| `U16.md` | Analiza U16 (GD32F303): FreeRTOS, sensory, silniki, JSON, IEC 60730 |
+| `ESP32.md` | Analiza ESP32: wyświetlacz, klawisze, protokół binarny, WiFi/MQTT, PIN flow |
+| `FIRMWARE_ANALYSIS.md` | (ten plik) Analiza U13 (GD32F305): główna pętla, USB, OTA, env |
+| `decompilation.md` | Instrukcja konfiguracji Ghidra + ghidra-cli |
