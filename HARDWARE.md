@@ -12,7 +12,7 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 
 ## Mainboard: `SNK_MAINBOARD_CP_V11`
 
-![Mainboard top](mainboard_top.jpg) ![Mainboard bottom](mainboard_bottom.jpg)
+![Mainboard top](img/mainboard_top.jpg) ![Mainboard bottom](img/mainboard_bottom.jpg)
 
 ### Identifiers
 | Label | Value |
@@ -122,7 +122,7 @@ Black female header (pin socket), left side of board.
 
 ## Display Board: `SNK_DISPLAY_CP_V11`
 
-![Display front](display_front.jpg) ![Display back](display_back.jpg)
+![Display front](img/display_front.jpg) ![Display back](img/display_back.jpg)
 
 ### Identifiers
 | Label | Value |
