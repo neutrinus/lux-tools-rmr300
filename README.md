@@ -69,7 +69,8 @@ We tried — I2C2 (`0x40005800`) communication with the EEPROM
 (address `0xD0`) works, reading bytes 0x00–0x5F succeeded. However,
 after ~96 bytes the I2C bus wedges (slave holds SDA low) and requires
 a power cycle. The PIN wasn't in the read range, and further I2C
-efforts were unnecessary.
+efforts were unnecessary. Additionally, the entire PCB is covered in
+protective coating, making direct probing with a SOIC clip difficult.
 
 Details: [notes/eeprom_dumping.md](notes/eeprom_dumping.md).
 

@@ -29,7 +29,7 @@ communication was established and bytes 0x00–0x5F were read).
 | Component | Description |
 |-----------|-------------|
 | U13 | GD32F305 (Cortex-M4). Flash **1 MB** — `firmware/u13_flash_1mb.bin` |
-| U22 | EEPROM 24C02 (256 B) on I2C2, dev addr **`0xD0`** (7-bit `0x68`) |
+| U22 | EEPROM 24C02 (256 B) on I2C2, dev addr **`0xD0`** (7-bit `0x68`) — entire PCB covered in protective coating, difficult to probe directly |
 | I2C peripheral | **I2C2** @ `0x40005800` (APB1EN bit22). I2C1 @ `0x40005400` DISABLED |
 | I2C2 pins | **PB10 = SCL, PB11 = SDA** (GPIOB CRH: PB10=0xF, PB11=0xF = AF open-drain) |
 | GPIOB | STM32F1-style @ `0x40010C00` (NOT F3-style `0x48000400`) |

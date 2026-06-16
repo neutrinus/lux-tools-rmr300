@@ -33,7 +33,7 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 
 | Ref | Package | Likely Type | Role |
 |-----|---------|-------------|------|
-| **U22** | SOIC-8 (left of U13) | I²C EEPROM (24C02/04) | **Stores PIN code**, schedule, working hours, ENV/KV config |
+| **U22** | SOIC-8 (left of U13) | I²C EEPROM (24C02/04) | **Stores PIN code**, schedule, working hours, ENV/KV config — entire PCB covered in protective coating, difficult to probe directly |
 | **U12** | SOIC-8 (right of U13, below crystal) | SPI Flash (25xx) or 2nd EEPROM | Firmware update staging or additional logging |
 
 ### Power
