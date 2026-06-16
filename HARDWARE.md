@@ -1,0 +1,210 @@
+# Hardware Documentation — SNK Mower (Lux Tools A-RMR-300-24)
+
+## Overview
+
+The mower contains two PCBs connected via a ribbon cable/header:
+1. **Mainboard** (`SNK_MAINBOARD_CP_V11`) — motor control, sensors, navigation logic
+2. **Display Board** (`SNK_DISPLAY_CP_V11`) — UI, buttons, display, ESP32
+
+Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald Nyborg, Schou).
+
+---
+
+## Mainboard: `SNK_MAINBOARD_CP_V11`
+
+![Mainboard top](mainboard_top.jpg) ![Mainboard bottom](mainboard_bottom.jpg)
+
+### Identifiers
+| Label | Value |
+|-------|-------|
+| Board model | `SNK_MAINBOARD_CP_V11` |
+| Part number | `80102372-01` |
+| Date code | `202311074577` |
+| Certifications | `KCD E498693 KD-002`, `94V-0` |
+
+### Microcontrollers
+
+| Ref | Chip | Architecture | Role |
+|-----|------|-------------|------|
+| **U13** | `GD32F305 AGT6` (GigaDevice) | ARM Cortex-M4 | Main MCU — motors, BLDC control, navigation, boundary wire sensing, EEPROM access |
+| **U16** | `GD32F303 CGT6` (GigaDevice) | ARM Cortex-M4 | Secondary MCU — UART bridge to display board, forwards button presses to U13 |
+
+### Memory
+
+| Ref | Package | Likely Type | Role |
+|-----|---------|-------------|------|
+| **U22** | SOIC-8 (left of U13) | I²C EEPROM (24C02/04) | **Stores PIN code**, schedule, working hours, ENV/KV config |
+| **U12** | SOIC-8 (right of U13, below crystal) | SPI Flash (25xx) or 2nd EEPROM | Firmware update staging or additional logging |
+
+### Power
+
+| Ref | Function |
+|-----|----------|
+| **U7** | Buck converter — 20V battery → 3.3V/5V logic rails |
+| **J5** (`BATTERY`) | Main 20V Li-Ion battery input (2-pin white connector) |
+
+### BLDC Motor Drivers
+
+Three 3-phase brushless motors, controlled by MOSFET banks (bottom edge with heatsinks):
+
+| Connector | Phases | Function |
+|-----------|--------|----------|
+| `LEFT` | `A B C` | Left drive wheel |
+| `RIGHT` | `A B C` | Right drive wheel |
+| `BLADE` | `A B C` | Cutting disc |
+| `CHA` | `C- C+` | Charging contacts from docking station |
+
+### Sensors & I/O Connectors
+
+| Connector | Label | Function |
+|-----------|-------|----------|
+| `J10` / `H2` | `HALL +5V GND` | Hall effect sensor on front bumper — lift/tilt or collision detection |
+| `J9` | — | Boundary wire loop coils (EM sensing, 2 coils under chassis) |
+| `J8` | — | Free sensor port (auxiliary bumper or unused) |
+| `J7` | — | 4-pin UART diagnostic port (TX/RX/GND) — **unpopulated in this unit** |
+| `U19` | `STOP` | Physical emergency stop button connector |
+
+### USB Port
+- **Type**: USB-A female (host), covered by rubber grommet on mower exterior
+- **Function**: USB flash drive for log export and firmware update files
+- **IC** (U3 area): USB host controller / power switch
+
+### SWD Debug Ports
+
+Both MCUs have accessible SWD ports. Pins are labeled on the **back** of the board.
+
+#### P4 → U13 (GD32F305, Main MCU)
+
+Through-hole pads on right edge, near USB port.
+
+| Pin (top→bottom) | Label | TP Ref |
+|:---:|:---:|:---:|
+| 1 | `3V3` | TP74 |
+| 2 | `DIO` (SWDIO) | TP76 |
+| 3 | `CLK` (SWCLK) | TP77 |
+| 4 | `JTDO` | TP78 |
+| 5 | `RES` | TP80 |
+| 6 | `GND` | TP81 |
+
+#### P5 → U16 (GD32F303, Secondary MCU)
+
+Black female header (pin socket), left side of board.
+
+| Pin (top→bottom) | Label | TP Ref |
+|:---:|:---:|:---:|
+| 1 | `GND` | TP58 |
+| 2 | `RES` | TP57 |
+| 3 | `JTDO` | TP55 |
+| 4 | `CLK` (SWCLK) | TP56 |
+| 5 | `DIO` (SWDIO) | TP64 |
+| 6 | `3V3` | — |
+
+---
+
+## Display Board: `SNK_DISPLAY_CP_V11`
+
+![Display front](display_front.jpg) ![Display back](display_back.jpg)
+
+### Identifiers
+| Label | Value |
+|-------|-------|
+| Board model | `SNK_DISPLAY_CP_V11` |
+| Part number | `80102373-01` |
+| Date code | `20231020` |
+| Laminate date | `2339` (week 39, 2023) |
+
+### Wireless Module (Hidden Feature)
+
+**U5**: `ESP32-WROOM-32UE` (Espressif)
+
+Despite the mower being marketed as "simple, no wireless connectivity", the display board has a fully functional ESP32 with:
+- Dual-core Tensilica Xtensa LX6
+- Wi-Fi 802.11 b/g/n
+- Bluetooth v4.2 BR/EDR + BLE
+- External antenna via IPEX/U.FL connector (wire monopole, glued with white silicone)
+
+Certifications:
+- `FCC ID: 2AC7Z-ESPWROOM32UE`
+- `CMIT ID: 2020DP10074(M)`
+- `IC: 21098-ESPWROOMUE`
+
+### Display & Buttons
+
+| Component | Marking | Description |
+|-----------|---------|-------------|
+| Display | `GD5643CPG-1` (code `2335`) | 4-digit 7-segment LED, green/red, colon separator |
+| K4 | `ON` | Power button (top) |
+| K1 | `START` | Start mowing (2nd) |
+| K2 | `HOME` | Return to dock (3rd) |
+| K3 | `OK` | Confirm/select (bottom) |
+
+### Driver ICs
+
+| Ref | Package | Likely Type |
+|-----|---------|-------------|
+| U1, U3 | SOP-16 | Shift register / LED driver (74HC164 or 74HC595) |
+| U4 | SOP-14/16 | Display/keypad controller (TM1637 or similar) |
+| U2 | — | Local 3.3V DC-DC buck converter (coil `3R3`) |
+| BU1 | — | Piezo buzzer |
+
+### Connectors
+
+| Connector | Pins | Function |
+|-----------|------|----------|
+| **J1** | 6-pin female header | ESP32 UART programming: `3U3 T R GND GND P` (P = IO0/Prog) |
+| **J4** | 2 spring contacts | Rain/moisture detector (short when wet) |
+| Main header | multi-pin white | Power, UART, button matrix — connects to mainboard J9/J10 |
+
+---
+
+## SWD Debug Connections (RPi Pico)
+
+Flash [debugprobe](https://github.com/raspberrypi/debugprobe) UF2 on RPi Pico.
+
+### Pico Pinout for debugprobe
+
+| GPIO | Function |
+|:---:|:---:|
+| GP2 | **SWCLK** |
+| GP3 | **SWDIO** |
+
+### Wiring to Mainboard
+
+#### P4 → U13 (Main MCU, GD32F305)
+
+| Pico Pin | Pico GPIO | SWD | P4 Pin |
+|:---:|:---:|:---:|:---:|
+| Pin 3 | GND | GND | 6 (bottom) — GND (TP81) |
+| Pin 4 | GP2 | SWCLK | 3 — CLK (TP77) |
+| Pin 5 | GP3 | SWDIO | 2 — DIO (TP76) |
+
+#### P5 → U16 (Secondary MCU, GD32F303)
+
+| Pico Pin | Pico GPIO | SWD | P5 Pin |
+|:---:|:---:|:---:|:---:|
+| Pin 3 | GND | GND | 1 (top) — GND |
+| Pin 4 | GP2 | SWCLK | 4 — CLK |
+| Pin 5 | GP3 | SWDIO | 5 — DIO |
+
+> Do NOT connect Pico 3.3V. The mower powers itself from its battery.
+
+### udev Rule
+
+```bash
+echo 'SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000c", MODE="0666"' | \
+  sudo tee /etc/udev/rules.d/99-pico-debugprobe.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+---
+
+## Tools Used So Far
+
+| Tool | Usage |
+|------|-------|
+| Raspberry Pi Pico + debugprobe | SWD interface to MCUs |
+| OpenOCD (0.12.0) | Flash dumping and MCU communication |
+| Rizin (0.7.4) | Binary analysis, string search |
+| Multimeter | Voltage measurement on P4/P5 (3.3V rail) |
+| CH341A + SOIC-8 clip | **Planned** — EEPROM U22 read/write |
+| Ghidra 12.1.2 | **Planned** — full firmware decompilation (via ghidra-cli) |

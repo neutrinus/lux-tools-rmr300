@@ -1,0 +1,9 @@
+*.orig
+*.pyc
+__pycache__/
+ghidra_extracted/
+ghidra-cli/target/
+ghidra_proj/
+PXL_*.jpg
+*.log
+ghidra_12.1.2_PUBLIC_20260605.zip
