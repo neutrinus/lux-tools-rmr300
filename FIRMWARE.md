@@ -164,6 +164,8 @@ The ESP32 runs a firmware based on the **ESP-IDF** (Espressif IoT Development Fr
 
 **Conclusion:** The ESP32 ships with a complete, apparently production-intended firmware that handles the display/UI, but also includes fully functional Wi-Fi and Bluetooth stacks that are **not used** in the retail product. This strongly suggests the platform (SNK) has a "premium" variant with app connectivity.
 
+**Deep-dive analysis** of the UART protocol, PIN handling flow, WiFi/MQTT architecture, and state machine is available in [ESP32.md](ESP32.md).
+
 ### Restoring Original Firmware
 
 ```bash

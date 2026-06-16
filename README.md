@@ -165,6 +165,7 @@ This reverse engineering documentation is provided for educational purposes.
 
 - [**HARDWARE.md**](HARDWARE.md) — Detailed PCB analysis, component tables, pinouts, SWD wiring guide
 - [**FIRMWARE.md**](FIRMWARE.md) — Firmware dump details, string analysis, PIN storage architecture, recovery options
+- [**ESP32.md**](ESP32.md) — ESP32 firmware deep-dive: UART protocol, PIN flow, WiFi/MQTT, firmware architecture
 
 ## Photos
 
