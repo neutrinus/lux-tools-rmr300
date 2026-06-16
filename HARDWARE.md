@@ -217,13 +217,3 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ---
 
-## Tools Used So Far
-
-| Tool | Usage |
-|------|-------|
-| Raspberry Pi Pico + debugprobe | SWD interface to MCUs |
-| OpenOCD (0.12.0) | Flash dumping and MCU communication |
-| Rizin (0.7.4) | Binary analysis, string search |
-| Multimeter | Voltage measurement on P4/P5 (3.3V rail) |
-| CH341A + SOIC-8 clip | **Planned** — EEPROM U22 read/write |
-| Ghidra 12.1.2 | **Planned** — full firmware decompilation (via ghidra-cli) |

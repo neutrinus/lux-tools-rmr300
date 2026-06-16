@@ -14,7 +14,7 @@ This mower is an SNK OEM platform, also sold as **Adano RM5** (Harald Nyborg / S
 What you need:
 - Raspberry Pi Pico flashed with [debugprobe](https://github.com/raspberrypi/debugprobe) UF2
 - 3x Dupont wires (GND, SWCLK, SWDIO)
-- Access to the P4 pad on the mainboard (through the ventilation hole)
+- Access to the P4 pad on the mainboard — requires disassembling the entire housing and removing the PCB
 - OpenOCD on your computer
 
 ### 1. Connect SWD to U13 (GD32F305)
@@ -144,7 +144,8 @@ kosiarka/
 │   ├── GD32F305.md                   ← U13 firmware analysis + KV-store
 │   ├── U16.md                        ← U16 firmware analysis
 │   ├── ESP32.md                      ← ESP32 firmware analysis
-│   └── eeprom_dumping.md             ← I2C saga (dead end)
+│   ├── eeprom_dumping.md             ← I2C saga
+│   └── firmware_update.md            ← USB update procedure
 ├── img/
 │   ├── mainboard_top.jpg
 │   ├── mainboard_bottom.jpg
@@ -174,6 +175,7 @@ Detailed hardware documentation: [HARDWARE.md](HARDWARE.md).
 | U16 | GD32F303 CGT6 — Cortex-M4, 256 KB flash |
 | ESP32 | ESP32-WROOM-32UE — on display board |
 | U22 | 24C02 — I2C EEPROM (256 B) on I2C2 @ `0xD0` |
+| U? | Winbond 25Q64JVSIQ — 8 MB QSPI NOR flash (external, on main board) |
 | SWD P4 | U13 — through-hole pads near USB |
 | SWD P5 | U16 — black header on left side |
 
@@ -191,14 +193,21 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ### FORMATFLASH.json (USB flash drive, factory reset)
 
-The string `"FORMATFLASH.json"` exists in firmware at `0x08003990`, but:
-- **Zero references** from code to this string — confirmed by scanning
-  the entire 1 MB flash for pointers
-- Strings `"ready to format flash"` and `"format flash"` also have no references
-- Likely a leftover from firmware for a different model or version
+The string `"FORMATFLASH.json"` exists in firmware at `0x08003990`.
+Our earlier scan found no direct code references in the main app —
+but the **MBTL bootloader** (also in the same 1 MB flash) uses wildcard
+file matching on USB: `env_config*.json`, `SNK_MB_*.bin`, etc.
+`FORMATFLASH.json` is matched by the same mechanism and triggers a full
+flash erase.
 
-Conclusion: **the mechanism does not exist in this firmware**. The only way
-to recover the PIN is physical access (SWD → RAM → read PIN, as shown above).
+This was confirmed by cross-referencing with the Brucke RM500 community
+([io-tech.fi thread](https://bbs.io-tech.fi/threads/brucke-rm500-rm501-rm800-robottiruohonleikkurin-infopaketti.405186/))
+whose firmware shares identical strings and code paths.
+
+**To use**: place an empty `FORMATFLASH.json` on a FAT32 USB stick
+(≤16 GB), insert into the mower's internal USB port, and power on.
+The bootloader will erase all flash including the KV-store and PIN.
+After reboot, the mower will be factory reset — no PIN required.
 
 ---
 
@@ -206,6 +215,15 @@ to recover the PIN is physical access (SWD → RAM → read PIN, as shown above)
 
 - **Adano RM5** — Harald Nyborg (Denmark), Schou (Scandinavia)
 - Part numbers: `80102372-01` (mainboard), `80102373-01` (display)
+
+---
+
+## Related Threads & References
+
+- [Brucke RM500/RM501/RM800 infopaketti (io-tech.fi)](https://bbs.io-tech.fi/threads/brucke-rm500-rm501-rm800-robottiruohonleikkurin-infopaketti.405186/) —
+  Finnish forum thread covering the same SNK/Sunseeker platform.
+  Confirmed shared firmware codebase: wildcard USB matching, FORMATFLASH.json,
+  BMS battery strings, MBTL bootloader architecture.
 
 ---
 
