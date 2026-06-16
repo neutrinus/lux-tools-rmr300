@@ -1,5 +1,7 @@
 # SNK Mower PIN Recovery — Lux Tools A-RMR-300-24
 
+![A-RMR-300-24](img/a-rmr-300-24.png)
+
 **Recovered PIN: 9633** ✅
 
 Step-by-step procedure to recover the PIN from the mower firmware via SWD.
