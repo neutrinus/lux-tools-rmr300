@@ -54,6 +54,179 @@ Po wyłączeniu FPU — kod w SRAM uruchamia się w handlerze PendSV bez faulta.
 CR1 = `0x1401` (START=1), ale SR1=0 (SB nie gotowy), SR2=0 (BUSY=0).
 I2C START został wysłany ale nie zakończył się sukcesem w ciągu 200 ms.
 
+## Proces — jak użyć
+
+### Wymagania
+- `arm-none-eabi-gcc` (z `arm-none-eabi-gcc-cs` na Fedorze)
+- `openocd` ≥ 0.12 z obsługą CMSIS-DAP
+- Raspberry Pi Pico z debugprobe firmware (CMSIS-DAP v2)
+- Połączenie SWD: P4 na płycie → Pico (SWCLK, SWDIO, GND)
+
+### Krok po kroku
+
+#### 1. Kompilacja
+
+```bash
+arm-none-eabi-gcc -c -mcpu=cortex-m4 -mthumb -O2 \
+    -fomit-frame-pointer -ffreestanding -nostartfiles \
+    -o eeprom_read.o eeprom_read.c
+
+arm-none-eabi-gcc -T link.ld -nostartfiles -ffreestanding \
+    -o eeprom_read.elf eeprom_read.o -lgcc
+
+arm-none-eabi-objcopy -O binary eeprom_read.elf eeprom_read.bin
+```
+
+Plik wynikowy: `eeprom_read.bin` (232 B). Ładowany do SRAM pod `0x20000400`.
+
+#### 2. Uruchomienie
+
+```bash
+openocd -f load_run.cfg 2>&1
+```
+
+Skrypt `load_run.cfg` wykonuje sekwencyjnie:
+
+| Krok | Opis |
+|------|------|
+| init + halt | Zatrzymuje CPU (watchdog zaczyna odliczać ~1-2 s) |
+| load_image | Ładuje `eeprom_read.bin` do SRAM pod `0x20000400` |
+| Zero buffer | Zeruje 256 B bufora pod `0x20001000` |
+| Vector table | Wypełnia wektory 0-15 (wszystkie → nasz kod) pod `0x20000000` |
+| VTOR = `0x20000000` | Przekierowuje tablicę wektorów do SRAM |
+| Disable FPU | `CPACR=0`, `FPCCR=0` — blokada MPU na FPDSCR |
+| Mask NVIC | Wyłącza wszystkie przerwania zewnętrzne |
+| Pend PendSV | Ustawia bit PENDSVSET w ICSR |
+| Resume (200 ms) | Wznawia CPU — PendSV odpala nasz kod |
+| Halt | Zatrzymuje CPU po 200 ms |
+| Read buffer | Zapisuje 256 B do `eeprom_dump.txt` |
+| Restore VTOR | Przywraca oryginalny VTOR = `0x08000000` |
+| Resume | Wznawia firmware (watchdog restart) |
+
+### load_run.cfg
+
+```tcl
+source [find interface/cmsis-dap.cfg]
+adapter driver cmsis-dap
+cmsis_dap_vid_pid 0x2e8a 0x000c
+transport select swd
+adapter speed 1000
+source [find target/stm32f3x.cfg]
+
+set VEC_ADDR  0x20000000
+set CODE_ADDR 0x20000400
+set BUF_ADDR  0x20001000
+
+init
+halt
+
+echo "=== Load binary ==="
+load_image /home/marek/tmp/kosiarka/eeprom_read.bin $CODE_ADDR
+
+echo "=== Zero buffer ==="
+for {set i 0} {$i < 256} {incr i 4} {
+    mww [expr {$BUF_ADDR + $i}] 0
+}
+
+echo "=== Set up full vector table (exceptions 0-15) ==="
+mww [expr {$VEC_ADDR + 0x00}] 0x20000300
+for {set i 1} {$i < 16} {incr i} {
+    mww [expr {$VEC_ADDR + $i*4}] [expr {$CODE_ADDR | 1}]
+}
+
+echo "=== VTOR to SRAM, disable FPU + exceptions ==="
+mww 0xE000ED08 $VEC_ADDR
+mww 0xE000E010 0x00000000
+mww 0xE000ED04 0x0A000000
+mww 0xE000ED24 0x00000000
+mww 0xE000ED88 0x00000000
+mww 0xE000EDF0 0x00000000
+mww 0xE000E280 0xFFFFFFFF
+mww 0xE000E284 0xFFFFFFFF
+mww 0xE000E288 0xFFFFFFFF
+mww 0xE000E28C 0xFFFFFFFF
+mww 0xE000E180 0xFFFFFFFF
+mww 0xE000E184 0xFFFFFFFF
+mww 0xE000E188 0xFFFFFFFF
+mww 0xE000E18C 0xFFFFFFFF
+
+echo "=== Pend PendSV ==="
+mww 0xE000ED04 0x10000000
+
+echo "=== Resume (200ms) ==="
+reg sp 0x20000300
+reg msp 0x20000300
+resume
+sleep 200
+halt
+
+echo "=== Fault Debug ==="
+set cfsr [capture { mdw 0xE000ED28 1 }]
+echo "CFSR: $cfsr"
+# ... (CFSR, HFSR, I2C rejestry itp.)
+
+echo "=== Restore VTOR ==="
+mww 0xE000ED08 0x08000000
+
+echo "=== Read buffer ==="
+set fd [open /home/marek/tmp/kosiarka/eeprom_dump.txt w]
+for {set i 0} {$i < 256} {incr i 4} {
+    set cap [capture { mdw [expr {$BUF_ADDR + $i}] 1 }]
+    # ... parsowanie i zapis do pliku
+}
+close $fd
+
+echo "=== Done ==="
+resume
+shutdown
+```
+
+#### 3. Cykl debugowania
+
+Po każdej próbie (nawet nieudanej) watchdog resetuje płytę. Przed ponownym uruchomieniem:
+
+```bash
+# power-cycle płyty (odłącz zasilanie, podłącz)
+pkill -9 openocd 2>/dev/null; sleep 1
+openocd -f load_run.cfg 2>&1
+```
+
+Skrypt sam robi `init + halt`, więc nie trzeba nic więcej.
+
+Jeśli OpenOCD raportuje `target was in unknown state when halt was requested` — to normalne (CPU przed haltem był w stanie nieznanym dla debuggera), skrypt dalej działa.
+
+#### 4. Interpretacja wyniku
+
+Po uruchomieniu w logu OpenOCD widać:
+
+```
+current mode: Handler PendSV   ← kod działa!
+xPSR: 0x4100000e pc: 0x2000041c
+CFSR: 0x00000000               ← brak błędów
+0x40005800: 00001401           ← CR1: PE=1, ACK=1, START=1
+SR1: 0x00000000                ← SB=0 — START się nie zakończył
+SR2: 0x00000000                ← BUSY=0 — magistrala nie zajęta
+```
+
+Jeśli CFSR ≠ 0 — był fault; dekodowanie:
+- `0x00020000` = MemManage DACCVIOL (FPU lazy stacking — wyłącz FPU)
+- `0x00010000` = MemManage IACCVIOL
+- `0x00000200` = BusFault PRECISERR
+- `0x00000400` = BusFault IMPRECISERR
+
+Plik `eeprom_dump.txt` zawiera 256 bajtów z bufora (hex, little-endian).
+
+#### 4. Debugowanie
+
+Aby dodać odczyt rejestrów w skrypcie:
+
+```tcl
+set val [capture { mdw 0xE000ED28 1 }]
+echo "CFSR: $val"
+```
+
+Jeśli po resecie skrypt sypie błędami — power-cycle (odłącz i podłącz zasilanie płyty).
+
 ## Status obecny
 - kod C ładuje się i startuje poprawnie
 - I2C START jest wysyłany (CR1.START=1)
