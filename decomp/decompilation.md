@@ -1,16 +1,16 @@
 # Firmware Decompilation Setup
 
-## Jak uruchomić ghidra-cli do dekompilacji firmware
+## How to run ghidra-cli for firmware decompilation
 
-### 1. Wymagania
+### 1. Requirements
 
-| Narzędzie | Ścieżka |
-|-----------|---------|
+| Tool | Path |
+|------|------|
 | Ghidra 12.1.2 | `/home/marek/tmp/kosiarka/ghidra_extracted/ghidra_12.1.2_PUBLIC` |
-| ghidra-cli (zmodyfikowany) | `/home/marek/tmp/kosiarka/ghidra-cli/target/release/ghidra` |
+| ghidra-cli (modified) | `/home/marek/tmp/kosiarka/ghidra-cli/target/release/ghidra` |
 | JDK 21 (Adoptium Temurin) | `/home/marek/tmp/kosiarka/jdk-21.0.6+7` |
 
-### 2. Zmienne środowiskowe
+### 2. Environment variables
 
 ```bash
 export JAVA_HOME=/home/marek/tmp/kosiarka/jdk-21.0.6+7
@@ -20,7 +20,7 @@ export GHIDRA_INSTALL_DIR=/home/marek/tmp/kosiarka/ghidra_extracted/ghidra_12.1.
 alias ghidra="$GHIDRA_INSTALL_DIR/../ghidra-cli/target/release/ghidra"
 ```
 
-### 3. Konfiguracja (jednorazowo)
+### 3. Configuration (one-time)
 
 ```bash
 ghidra config set ghidra_install_dir "$GHIDRA_INSTALL_DIR"
@@ -28,10 +28,10 @@ ghidra config set ghidra_project_dir /home/marek/tmp/kosiarka/ghidra_proj
 ghidra config set default_project Mower_Firmware
 ```
 
-### 4. Import i analiza
+### 4. Import and analysis
 
 ```bash
-# Import raw binary jako ARM Cortex-M4
+# Import raw binary as ARM Cortex-M4
 "$GHIDRA_INSTALL_DIR/support/analyzeHeadless" \
   /home/marek/tmp/kosiarka/ghidra_proj Mower_Firmware \
   -import /home/marek/tmp/kosiarka/firmware/u13_flash.bin \
@@ -42,130 +42,130 @@ ghidra config set default_project Mower_Firmware
   -loader-baseAddr 0x08000000 \
   -noanalysis
 
-# Uruchom bridge + analizę (bridge kompiluje .java → .class i odpala Ghidrę)
+# Run bridge + analysis (bridge compiles .java → .class and launches Ghidra)
 ghidra analyze --project Mower_Firmware --program u13_flash.bin -vv
 ```
 
-### 5. Najczęstsze komendy
+### 5. Common commands
 
 ```bash
-# Lista funkcji
+# List functions
 ghidra function list --project Mower_Firmware --program u13_flash.bin
 
-# Filtrowanie funkcji
+# Filter functions
 ghidra function list --filter "name ~ usb OR name ~ key" --project Mower_Firmware
 
-# Dekompilacja konkretnej funkcji
+# Decompile a specific function
 ghidra decompile FUN_0800cf38 --project Mower_Firmware --program u13_flash.bin
 
-# Wyszukiwanie stringów
+# Search strings
 ghidra find string "FORMATFLASH" --project Mower_Firmware --program u13_flash.bin
 
-# Cross-reference (gdzie string/funkcja jest używana)
+# Cross-reference (where a string/function is used)
 ghidra x-ref to 0x0800300c --project Mower_Firmware --program u13_flash.bin
 
 # Cross-reference FROM
 ghidra x-ref from 0x0800cf38 --project Mower_Firmware --program u13_flash.bin
 
-# Podsumowanie programu
+# Program summary
 ghidra summary --project Mower_Firmware --program u13_flash.bin
 
-# Wyświetl memory map
+# Display memory map
 ghidra memory list --project Mower_Firmware --program u13_flash.bin
 
-# Lista stringów
+# List strings
 ghidra strings list --project Mower_Firmware --program u13_flash.bin
 ```
 
-### 6. Znane problemy i rozwiązania
+### 6. Known issues and solutions
 
-#### Problem: OSGi w Ghidra 12.1.2 nie kompiluje `.java` skryptów
+#### Issue: OSGi in Ghidra 12.1.2 won't compile `.java` scripts
 
-Ghidra 12.1.2 ma uszkodzoną kompilację Java przez OSGi (Phidias/BND) — nawet pusty skrypt
-`extends GhidraScript` nie przechodzi kompilacji. Dotyczy Java 21+ i Java 25.
+Ghidra 12.1.2 has broken Java compilation via OSGi (Phidias/BND) — even an empty
+`extends GhidraScript` script won't compile. Affects Java 21+ and Java 25.
 
-**Rozwiązanie:** ghidra-cli został zmodyfikowany (`src/ghidra/bridge.rs`):
-1. Po zapisaniu `GhidraCliBridge.java` na dysk, uruchamia `javac` z pełnym classpathem Ghidry
-2. Kompiluje do `.class` w `~/.config/ghidra-cli/class_scripts/`
-3. Uruchamia `analyzeHeadless` z `-postScript GhidraCliBridge.class` (z pominięciem OSGi)
-4. HeadlessAnalyzer ładuje `.class` bezpośrednio przez `classLoaderForDotClassScripts`
+**Solution:** ghidra-cli was modified (`src/ghidra/bridge.rs`):
+1. After saving `GhidraCliBridge.java` to disk, it runs `javac` with Ghidra's full classpath
+2. Compiles to `.class` in `~/.config/ghidra-cli/class_scripts/`
+3. Runs `analyzeHeadless` with `-postScript GhidraCliBridge.class` (bypassing OSGi)
+4. HeadlessAnalyzer loads `.class` directly via `classLoaderForDotClassScripts`
 
-Modyfikacje w `GhidraCliBridge.java`:
-- `CParserUtils.parseSignature()` API zmieniło się w Ghidra 12.x — zwraca `FunctionDefinitionDataType`
-  bezpośrednio zamiast `CParseResults.getDataType()`. Linia 2541-2549 poprawiona.
+Modifications in `GhidraCliBridge.java`:
+- `CParserUtils.parseSignature()` API changed in Ghidra 12.x — returns `FunctionDefinitionDataType`
+  directly instead of `CParseResults.getDataType()`. Lines 2541-2549 fixed.
 
-#### Problem: Java 25 z Ghidrą
+#### Issue: Java 25 with Ghidra
 
-Systemowy JDK to Java 25-openjdk. Ghidra 12.1.2 wymaga JDK ≥ 21.
-Pobrano Adoptium Temurin JDK 21.0.6+7 do `/home/marek/tmp/kosiarka/jdk-21.0.6+7`.
+System JDK is Java 25-openjdk. Ghidra 12.1.2 requires JDK ≥ 21.
+Downloaded Adoptium Temurin JDK 21.0.6+7 to `/home/marek/tmp/kosiarka/jdk-21.0.6+7`.
 
 ```bash
 export JAVA_HOME=/home/marek/tmp/kosiarka/jdk-21.0.6+7
 ```
 
-`java_home.save` jest ignorowany przez Ghidra — `JAVA_HOME` w env jest konieczny.
+`java_home.save` is ignored by Ghidra — `JAVA_HOME` in env is necessary.
 
-#### Problem: Brak x-refów dla stringów
+#### Issue: Missing x-refs for strings
 
-Po analizie część stringów (np. `FORMATFLASH.json`, `ready to format flash`)
-nie ma cross-reference — kod nie został zdysasemblowany w miejscach które je
-referencjonują. Możliwe przyczyny:
-- kod jest w niezdysasemblowanej gałęzi (dead code)
-- stringi są używane przez wskaźniki w tablicach (data-driven)
-- analiza nie wykryła wszystkich skoków (np. przez tabele skoków,vtables)
+After analysis, some strings (e.g. `FORMATFLASH.json`, `ready to format flash`)
+have no cross-references — the code referencing them was not disassembled.
+Possible causes:
+- code is in an undisassembled branch (dead code)
+- strings are used via pointers in tables (data-driven)
+- analysis didn't detect all jumps (e.g., jump tables, vtables)
 
-Aby znaleźć użycie, trzeba przeszukać binarnie offset stringa lub prześledzić
-xref-y ręcznie.
+To find usage, binary-search for the string offset or trace
+xrefs manually.
 
-### 7. Wyniki analizy u13_flash.bin (GD32F305)
+### 7. Analysis results for u13_flash.bin (GD32F305)
 
-| Parametr | Wartość |
-|----------|---------|
-| Architektura | ARM Cortex-M4 Thumb2 |
+| Parameter | Value |
+|-----------|-------|
+| Architecture | ARM Cortex-M4 Thumb2 |
 | Base address | `0x08000000` |
-| Rozmiar | 512 KB (`0x80000`) |
-| Znalezione funkcje | **1672** |
-| Format wejściowy | Raw Binary |
-| Język | `ARM:LE:32:Cortex` |
+| Size | 512 KB (`0x80000`) |
+| Functions found | **1672** |
+| Input format | Raw Binary |
+| Language | `ARM:LE:32:Cortex` |
 
-#### Kluczowe stringi
+#### Key strings
 
-| Adres | String | Znaczenie |
-|-------|--------|-----------|
-| `0x0800300c` | `env_read.json` | Konfiguracja w JSON |
-| `0x08003990` | `FORMATFLASH.json` | Przełącznik formatowania flash |
-| `0x080039a4` | `ready to format flash` | Gotowość do formatu |
-| `0x080039bc` | `format flash` | Wykonanie formatu |
-| `0x0800394c` | `USB disk Ready` | Detekcja USB |
-| `0x0800cfdc` | `key press down!` | Obsługa przycisków |
-| `0x0800d004` | `key press power on` | Przycisk power |
-| `0x08003f24` | `env file size too large` | Walidacja env |
-| `0x0800459f` | `into usb host mode` | Tryb USB host |
-| `0x080045b4` | `into usb device mode` | Tryb USB device |
+| Address | String | Meaning |
+|---------|--------|---------|
+| `0x0800300c` | `env_read.json` | JSON configuration |
+| `0x08003990` | `FORMATFLASH.json` | Flash formatting switch |
+| `0x080039a4` | `ready to format flash` | Ready to format |
+| `0x080039bc` | `format flash` | Execute format |
+| `0x0800394c` | `USB disk Ready` | USB detection |
+| `0x0800cfdc` | `key press down!` | Button handling |
+| `0x0800d004` | `key press power on` | Power button |
+| `0x08003f24` | `env file size too large` | Env validation |
+| `0x0800459f` | `into usb host mode` | USB host mode |
+| `0x080045b4` | `into usb device mode` | USB device mode |
 
-### 8. Projekt Ghidry
+### 8. Ghidra project
 
-Lokalizacja: `/home/marek/tmp/kosiarka/ghidra_proj/Mower_Firmware.gpr`
+Location: `/home/marek/tmp/kosiarka/ghidra_proj/Mower_Firmware.gpr`
 
-Stan:
-- `firmware/u13_flash.bin` — zaimportowany i przeanalizowany (1672 funkcje)
-- `firmware/u16_flash.bin` — niezaimportowany (prosty UART bridge, brak PIN logiki)
+Status:
+- `firmware/u13_flash.bin` — imported and analyzed (1672 functions)
+- `firmware/u16_flash.bin` — not imported (simple UART bridge, no PIN logic)
 
-### 9. Odtworzenie od zera (na innym komputerze)
+### 9. Recreating from scratch (on another computer)
 
 ```bash
-# 1. Zainstaluj Ghidra 12.1.2
+# 1. Install Ghidra 12.1.2
 unzip ghidra_12.1.2_PUBLIC_20260605.zip
-# 2. Zainstaluj JDK 21+ z JDK (javac wymagany!)
-# 3. Zbuduj ghidra-cli
+# 2. Install JDK 21+ with JDK (javac required!)
+# 3. Build ghidra-cli
 cd ghidra-cli
 cargo build --release
-# 4. Zmodyfikuj ghidra-cli (patrz sekcja 6. — zmiany w bridge.rs)
-# 5. Skonfiguruj
+# 4. Modify ghidra-cli (see section 6 — bridge.rs changes)
+# 5. Configure
 export JAVA_HOME=/path/to/jdk-21
 export GHIDRA_INSTALL_DIR=/path/to/ghidra_12.1.2_PUBLIC
 ghidra doctor
-# 6. Zaimportuj binarkę
-# 7. Uruchom analizę
-# 8. Gotowe
+# 6. Import binary
+# 7. Run analysis
+# 8. Done
 ```
