@@ -171,48 +171,104 @@ Dodatkowo — jeśli WiFi jest skonfigurowane — ESP32 łączy się z MQTT brok
 Kluczowe stringi z HTTP serverem (`Mower Log` strona HTML z JS) są częścią
 ESP32 firmware, nie U13.
 
-## 4. Obsługa Pendrive — FORMATFLASH.json
+## 4. Obsługa Pendrive — USB Mass Storage
 
-### Przepływ:
+### Co faktycznie działa z pendrive:
 
 ```
 1. Użytkownik wkłada USB pendrive
 2. FUN_08002f18 wykrywa USB ("USB disk Ready")
 3. FUN_08003cdc tworzy plik log_yyyymmdd_hhmmss.html ("save log to usb disk")
-4. FUN_0800303c sprawdza czy istnieją pliki:
-   a) FORMATFLASH.json  → FORMAT FLASH
-   b) SNK_MB_*.bin      → IAP aktualizacja firmware MB
-   c) SNK_BB_*.bin      → IAP aktualizacja BB
-   d) SNK_DB_*.bin      → IAP aktualizacja DB
-   e) SNK_LB_*.bin      → IAP aktualizacja LB
-   f) SNK_DBL_*.bin     → IAP aktualizacja DBL
-   g) SNK_MBTL_*.bin    → IAP aktualizacja bootloadera
+4. FUN_0800303c (IAP handler) szuka plików SNK_*.bin:
+   → "MB IAP start ..."  gdy SNK_MB_*.bin  — firmware Main Board
+   → "BB IAP start ..."  gdy SNK_BB_*.bin  — firmware Blade Board
+   → "DB IAP start ..."  gdy SNK_DB_*.bin  — firmware Drive Board
+   → "LB IAP start ..."  gdy SNK_LB_*.bin  — firmware Lift Board
+   → "BTL IAP start ..." gdy SNK_MBTL_*.bin — firmware Bootloader
+   → "DBL IAP start ..." gdy SNK_DBL_*.bin — firmware DuaL?
 ```
 
-### Co uruchamia FORMATFLASH.json?
+### FORMATFLASH.json — NIEDOSTĘPNY
 
+**String "FORMATFLASH.json" istnieje w firmware pod `0x08003990`, ale nie ma do niego ŻADNEJ referencji z kodu.** Potwierdzone przez:
+
+| Metoda wyszukania | Wynik |
+|--------------------|-------|
+| LDR literal (PC-rel) | Nie znaleziono (0 trafień w 512KB) |
+| MOVW/MOVT (Thumb2) | Nie znaleziono (0 trafień w 512KB) |
+| LE32 0x08003990 | Nie znaleziono (0 trafień w całym binary) |
+| LE16 0x3990 | Nie znaleziono (0 trafień w code area) |
+| Xref Ghidra | 0 xrefów |
+
+**Wniosek: FORMATFLASH.json to dead code.** Mechanizm formatowania przez pendrive nie istnieje w tym firmware. To są pozostałości po wcześniejszej wersji lub firmware dla innego modelu.
+
+To samo dotyczy stringów "ready to format flash" (0x080039a4) i "format flash\n" (0x080039bc) — też zero referencji.
+
+### Jak faktycznie wygląda format?
+
+Format flash jest wywoływany **przez komendę z aplikacji/display board**:
+1. Użytkownik wysyła komendę (przez przyciski lub aplikację przez WiFi)
+2. ESP32 → U16 (binary protocol)
+3. U16 → U13 (JSON command)
+4. U13 kasuje SPI flash (env) + EEPROM U22 (PIN)
+
+## 5. EEPROM U22 — System PIN / User Settings
+
+### Sprzęt
+
+| Parametr | Wartość |
+|----------|---------|
+| Układ | U22, SOIC-8 (oznaczony w HARDWARE.md jako 24C02/04) |
+| Interfejs | I2C1 (`0x40005800`) |
+| Pojemność | 256-512 bajtów (24C02 = 2Kbit = 256B, 24C04 = 4Kbit = 512B) |
+| Zasilanie | 3.3V (z mainboarda) |
+| Adres I2C | Standard 0x50 (7-bit) / 0xA0 (8-bit) dla 24Cxx |
+
+I2C1 znaleziony w kodzie U13 pod adresami: `0x08023550`, `0x080236C4`, `0x080237C0`.
+
+### Przechowywane dane
+
+Z stringów w U13 firmware (moduł `service_user_set.c`):
+
+| Kategoria | Klucze / Stringi | Opis |
+|-----------|------------------|------|
+| **PIN** | `pwd`, `pwd_en`, `pwd_rst`, `usr_pwd_en` | Hasło, enable flag, reset flag |
+| **Schedule** | `schedule`, `simple schedule` | Harmonogram koszenia |
+| **Kalibracja** | `battery calibrate`, `rtc calibration` | Kalibracja baterii i RTC |
+| **Użytkownik** | `user_name`, `language`, `cut area` | Nazwa, język, obszar koszenia |
+| **Liczniki** | `work length`, `power on minutes` | Przepracowane godziny |
+
+### Funkcje PIN (z stringów)
+
+| Funkcja | String w kodzie |
+|---------|-----------------|
+| Sprawdź PIN | `compare pwd correct` / `compare pwd uncorrect=%d` |
+| Ustaw PIN | `set pwd success` / `set pwd failed` |
+| Zmień PIN | `set pwd old failed, because input old password error` |
+| Reset PIN | `reset pwd success` / `reset pwd failed` |
+| Blokada po błędach | `compare pwd uncorrect=%d overtimes, reset and lock` |
+| Enable/disable | `set user enable password failed=%d` |
+| Wczytaj PIN | `load user password failed` |
+
+### Rate limiting
+
+System posiada zabezpieczenie przed brute-forcem:
 ```
-FUN_0800303c (USB IAP handler)
-  │
-  ├── Jeśli flag & 0x80 (MB IAP)
-  │     → "MB IAP start" → flash write
-  │
-  ├── Jeśli flag & 0x100 (BB IAP)
-  │     → "BB IAP start" → flash write
-  │
-  ├── Jeśli flag & 0x200 (DB IAP)
-  │     → ...
-  │
-  └── FORMATFLASH.json → "ready to format flash" / "format flash\n"
-        → wymazuje całą wewnętrzną flash przez FUN_080046fc
-        → czyści env (wszystkie ustawienia)
+"compare pwd uncorrect=%d overtimes, reset and lock"
 ```
+Po przekroczeniu limitu błędnych prób PIN, system **blokuje się** ("reset and lock").
+Ilość prób przed blokadą (parametr `%d`) nie została zidentyfikowana, ale typowo w takich
+systemach jest to 3-5 prób.
 
-Dokładny mechanizm: `FUN_0800303c` jest wywoływana z `param_1` jako maską bitową. Jeśli żaden z bitów IAP nie jest ustawiony, sprawdza czy na USB istnieje plik `FORMATFLASH.json`. Jeśli tak — formatuje flash i usuwa wszystkie dane konfiguracyjne.
+### Tryb resetu PIN
 
-## 5. Env System (Key-Value Store)
+PIN można zresetować przez:
+1. **Stary PIN** → `set pwd old failed, because input old password error` (wymaga znajomości starego PINu)
+2. **pwd_rst** → zdalny reset przez komendę (prawdopodobnie z aplikacji)
 
-U13 używa własnego systemu przechowywania par klucz-wartość na SPI flash.
+## 6. Env System (Key-Value Store)
+
+U13 używa własnego systemu przechowywania par klucz-wartość na SPI flash (U12, nie mylić z EEPROM U22).
 
 | Operacja | Funkcja | Opis |
 |----------|---------|------|
@@ -220,22 +276,16 @@ U13 używa własnego systemu przechowywania par klucz-wartość na SPI flash.
 | Zapis | `FUN_0800ae28(key, buf, size)` | Zapisuje parametr do env |
 | Usuń | `FUN_0800a84c(key, 0, 1)` | Usuwa parametr |
 
-Format: `env_read.json` na wewnętrznym SPI flash (prawdopodobnie W25Q64 lub podobny).
-
-**Przechowywane parametry:**
-- `MB_VER`, `mb_sv`, `MB_BVER`, `MB_SIZE`, `MB_BRF` — Main Board firmware
-- `BB_VER`, `bb_sv`, `BB_BVER`, `BB_SIZE`, `BB_BRF` — Blade Board firmware
-- `DB_VER`, `db_sv`, `DB_BVER`, `DB_SIZE`, `DB_BRF` — Drive Board firmware
-- `LB_VER`, `lb_sv`, `LB_BVER`, `LB_SIZE`, `LB_BRF` — Lift Board firmware
-- `BTL_VER`, `BTL_BVER`, `BTL_SIZE`, `BTL_BRF` — Bootloader firmware
-- `pdt_ver` — Product version
-- `ota_date` — Data ostatniej aktualizacji OTA
-- `cfgupdate`, `cfgstr` — Config update signal
-- `cfg_rst` — Reset config flag (0xa5a5 / 0xaa55)
-- `ult_cfg` — Ultra sonic config
-- `led_cfg` — LED config
-
-**Brak parametrów PIN/hasła** w env U13 — PIN jest przechowywany w zewnętrznym EEPROM U22.
+**Przechowywane parametry (wersje firmware, konfiguracja):**
+- `MB_VER`, `mb_sv`, `MB_BVER`, `MB_SIZE`, `MB_BRF` — Main Board
+- `BB_VER`, `bb_sv`, `BB_BVER`, `BB_SIZE`, `BB_BRF` — Blade Board
+- `DB_VER`, `db_sv`, `DB_BVER`, `DB_SIZE`, `DB_BRF` — Drive Board
+- `LB_VER`, `lb_sv`, `LB_BVER`, `LB_SIZE`, `LB_BRF` — Lift Board
+- `BTL_VER`, `BTL_BVER`, `BTL_SIZE`, `BTL_BRF` — Bootloader
+- `pdt_ver`, `ota_date` — Wersja produktu, data OTA
+- `cfgupdate`, `cfgstr` — Config update
+- `cfg_rst` — Reset config (0xa5a5 dwuetapowy reset)
+- `ult_cfg`, `led_cfg` — Konfiguracja czujników i LED
 
 ## 6. Główna pętla (Main Loop)
 
@@ -278,11 +328,41 @@ Loop:
 - XOR checksum na każdym pakiecie
 - ESP32 nie ma bezpośredniego udziału w OTA U13
 
-## 8. Podsumowanie — pliki analizy
+## 8. Security Assessment — PIN Recovery
+
+### Czy da się odzyskać PIN?
+
+| Metoda | Możliwe? | Uwagi |
+|--------|----------|-------|
+| **Z firmware U13** | ❌ NIE | PIN w EEPROM U22, nie w flash U13 |
+| **Z ESP32** | ❌ NIE | ESP32 przechowuje tylko WiFi hasło |
+| **Przez USB pendrive (FORMATFLASH.json)** | ❌ NIE | Dead code — format nie istnieje |
+| **Brute-force przez display** | ❌ NIE | Rate limiting — blokada po X próbach |
+| **Odczyt EEPROM U22 (CH341A + SOIC clip)** | ✅ TAK | Wymaga fizycznego dostępu do mainboarda |
+| **Reset przez aplikację (pwd_rst)** | ❓ NIEZNANE | Jeśli aplikacja ma komendę resetu PIN |
+| **Nowy firmware (IAP z SNK_*.bin)** | ❌ NIE | IAP nie kasuje EEPROM U22 |
+| **Format flash (komenda przez app)** | ✅ TAK | Jeśli app ma taką opcję — kasuje wszystko |
+
+### Rekomendowany sposób na reset PIN (jeśli zapomniałeś):
+
+1. **Fizyczny odczyt EEPROM** — CH341A + SOIC-8 clip na U22, odczyt przez `flashrom` lub `i2cget`
+2. **Zgranie zawartości** — 256-512 bajtów, PIN przechowywany jako plaintext lub prosty encoding
+3. **Modyfikacja + zapis** — zmiana PINu na znany, zapis z powrotem
+
+### Uwagi bezpieczeństwa
+
+- PIN jest przechowywany w zewnętrznym EEPROM — to **słabe** zabezpieczenie:
+  - EEPROM (24C02/04) nie ma żadnych zabezpieczeń sprzętowych
+  - Nie ma szyfrowania ani maskowania PINu (plaintext?)
+  - Dostęp przez I2C, łatwy do odczytania z zewnątrz
+- Rate limiting jest tylko programowe (w U13) — można go obejść odczytując EEPROM
+- Format flash przez pendrive nie działa → jedyna droga do resetu to app lub fizyczny dostęp
+
+## 9. Podsumowanie — pliki analizy
 
 | Plik | Zawartość |
 |------|-----------|
 | `U16.md` | Analiza U16 (GD32F303): FreeRTOS, sensory, silniki, JSON, IEC 60730 |
 | `ESP32.md` | Analiza ESP32: wyświetlacz, klawisze, protokół binarny, WiFi/MQTT, PIN flow |
-| `FIRMWARE_ANALYSIS.md` | (ten plik) Analiza U13 (GD32F305): główna pętla, USB, OTA, env |
+| `FIRMWARE_ANALYSIS.md` | (ten plik) Analiza U13 (GD32F305): główna pętla, USB, OTA, env, PIN, security |
 | `decompilation.md` | Instrukcja konfiguracji Ghidra + ghidra-cli |
