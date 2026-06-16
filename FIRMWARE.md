@@ -123,6 +123,55 @@ openocd -f interface/cmsis-dap.cfg \
 
 ---
 
+## ESP32 Firmware (`esp32_dump.bin`)
+
+### Acquisition
+
+The ESP32 (U5) flash was dumped via the **J1 UART programming header** using a FT232R USB-UART adapter. The chip was held in download mode by pulling **IO0 (P) to GND** and powered via J1 pin 1 (3U3) from the adapter's 3.3V output.
+
+| Parameter | Value |
+|-----------|-------|
+| Tool | `esptool.py` v5.3.0 |
+| Baud | 921600 |
+| Flash size | 4 MB (0x400000) |
+| Output | `esp32_dump.bin` |
+| MD5 | `1edb8f1876efccdebd608f083e682d0a` |
+
+### Chip Info
+
+| Field | Value |
+|-------|-------|
+| Chip | `ESP32-D0WD-V3` (revision v3.1) |
+| Features | Wi-Fi, BT, Dual Core + LP Core, 240MHz |
+| MAC | `08:f9:e0:b3:da:70` |
+| Crystal | 40 MHz |
+
+### Firmware Analysis
+
+The ESP32 runs a firmware based on the **ESP-IDF** (Espressif IoT Development Framework), containing:
+
+**Wireless stacks (enabled but unused in stock product):**
+- Full Wi-Fi station/AP mode (`connect to wifi ssid:%s, password:%s`, `ap_probe_send`)
+- Bluetooth controller task (`BTC_TASK`, `BTU_TASK`, `btm_adv_pkt_handler`)
+- Bluetooth configuration keys (`bt_cfg_key0`, `bt_cfg_key`)
+
+**Application layer:**
+- **`Display_esp32`** string suggests the firmware drives the 4-digit 7-segment display and reads buttons, serving as an alternative to U16 for UI handling
+- **HTTP parser** (`HTTP_AUTH`, `HTTP_PARSER_ERRNO`) — possibly for OTA or config API
+- **UART ENV** (`Uart ENV [%p]`) — reads configuration via UART from mainboard
+- **Buzzer timer** (`buzzer timer`) — piezo buzzer control
+- **LED** strings — additional indicator control
+
+**Conclusion:** The ESP32 ships with a complete, apparently production-intended firmware that handles the display/UI, but also includes fully functional Wi-Fi and Bluetooth stacks that are **not used** in the retail product. This strongly suggests the platform (SNK) has a "premium" variant with app connectivity.
+
+### Restoring Original Firmware
+
+```bash
+esptool --port /dev/ttyUSB0 --baud 921600 --before no-reset write_flash 0 esp32_dump.bin
+```
+
+---
+
 ## PIN Storage Architecture
 
 ```

@@ -135,6 +135,8 @@ hexdump -C flash_dump.bin | grep -E '30 30 30 [0-9a-f]|31 32 33 34'
 
 4. **ESP32 on display board** — the mower ships with WiFi/BT hardware despite not being advertised. The ESP32 (`ESP32-WROOM-32UE`) has an exposed UART programming header (J1) and an external antenna.
 
+5. **ESP32 firmware dumped** — successfully dumped the 4 MB ESP32 flash via J1 using a USB-UART adapter (`esptool.py`). The firmware is based on ESP-IDF and contains fully functional Wi-Fi and Bluetooth stacks that are unused in the stock product. See [FIRMWARE.md](FIRMWARE.md#esp32-firmware-esp32_dumpbin) for details.
+
 ## Recovery Options
 
 ### Option A: FORMATFLASH.json (non-invasive)

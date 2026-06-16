@@ -151,7 +151,7 @@ Certifications:
 
 | Connector | Pins | Function |
 |-----------|------|----------|
-| **J1** | 6-pin female header | ESP32 UART programming: `3U3 T R GND GND P` (P = IO0/Prog) |
+| **J1** | 6-pin female header | ESP32 UART programming: `3U3 T R GND GND P` (P = IO0/Prog) — successfully used with FT232R + esptool.py to dump 4 MB flash at 921600 baud |
 | **J4** | 2 spring contacts | Rain/moisture detector (short when wet) |
 | Main header | multi-pin white | Power, UART, button matrix — connects to mainboard J9/J10 |
 
