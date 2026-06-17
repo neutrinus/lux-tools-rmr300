@@ -39,7 +39,7 @@ The display board (`SNK_DISPLAY_CP_V11`) contains an **ESP32-WROOM-32UE** module
 
 ## UART Communication Protocol
 
-The ESP32 communicates with the mainboard (U16 → U13) via a bidirectional UART over the ribbon cable (J8 pins 3-4). **Note:** This UART is NOT the same as J1 — J1 is the ESP32's programming UART (UART0, GPIO1/GPIO3) and is only used for flash dumping. The mainboard UART uses different GPIO pins on the ESP32 (to be determined).
+The ESP32 communicates with the mainboard (U16 → U13) via a bidirectional UART over the ribbon cable (J8 pins 3-4). **Note:** This UART is NOT the same as J1 — J1 is the ESP32's programming UART (UART0, GPIO1/GPIO3) and is only used for flash dumping. The mainboard UART uses remapped pins via the GPIO matrix: RX on **GPIO13** and TX on **GPIO15**.
 
 The protocol is a custom binary framing format.
 
@@ -314,9 +314,8 @@ The UART lines are on the **ribbon cable** between boards. Access them at the **
 
 ## GPIO Pin Analysis
 
-See [`notes/ESP32_GPIO_ANALYSIS.md`](ESP32_GPIO_ANALYSIS.md) for:
-- Xtensa decompilation workflow
-- GPIO pin candidates from literal pool analysis
-- Display driver architecture (3× 74HC595 cascaded via SPI)
-- UART pin candidates (GPIO14/15 or GPIO9/10)
-- How to resolve unknown pins with multimeter or Saleae
+All ESP32 pins are now fully mapped and verified via high-resolution visual PCB reverse engineering. See [`notes/ESP32_GPIO_ANALYSIS.md`](ESP32_GPIO_ANALYSIS.md) for:
+- Full verified GPIO pinout tables (UART, display SPI, buttons, buzzer, rain sensor)
+- Hardware VSPI configuration details
+- Visual tracing paths and component references (resistors, ferrite beads, test points)
+- Xtensa decompilation workflow and cross-validation

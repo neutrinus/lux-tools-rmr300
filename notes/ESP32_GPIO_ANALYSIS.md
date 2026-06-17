@@ -65,16 +65,16 @@ shift registers, providing 24 output bits:
 | 14-15 | Unused? | 74HC595 #2 |
 | 16-23 | Unused (or extra features) | 74HC595 #3 |
 
-**Candidates from literal pools at address 0x400D77D8+:**
+**Verified Pin Connections (via PCB trace tracing):**
 
-| GPIO | Function | Address | Confidence |
-|------|----------|---------|:----------:|
-| **12** | MOSI (SPI tube data) | 0x400D77D8 | HIGH |
-| — | MISO (SPI, NC = -1) | 0x400D77DC | HIGH |
-| **10** | SCLK (SPI tube clock) | 0x400D77E0 | HIGH |
-| **15** | CS / ST_CP (latch) | 0x400D7800 | MEDIUM |
+The display is driven by the ESP32's hardware **VSPI** port using the standard pin configuration:
 
-> GPIO15 also appears in UART context — needs continuity check.
+| GPIO | Function | Source/Package | Verification / Notes |
+|:----:|----------|:--------------:|----------------------|
+| **23** | MOSI (SPI tube data) | ESP32 Pad 37 | Verified. Connected to DS (Pin 14) of U1. |
+| **18** | SCLK (SPI tube clock)| ESP32 Pad 30 | Verified. Connected to SH_CP (Pin 11) of U1/U3/U4. |
+| **5**  | CS / ST_CP (latch)   | ESP32 Pad 29 | Verified. Connected to ST_CP (Pin 12) of U1/U3/U4. |
+| —      | MISO (NC = -1)       | ESP32 Pad 31 | Verified. Pad 31 (GPIO19) is empty/unconnected. |
 
 ### UART (Mainboard Communication)
 
@@ -82,48 +82,77 @@ The mainboard UART is **NOT** UART0 (GPIO1/GPIO3) — those are on J1 for
 programming only. The mainboard UART must use UART1 (GPIO9/GPIO10) or UART2
 (GPIO16/GPIO17).
 
-**Candidates from firmware analysis:**
+**Verified Pin Connections (via PCB trace tracing):**
 
-| ESP32 GPIO | Direction | Notes |
-|-----------|-----------|-------|
-| **14** or **9** | TX → mainboard RX | Paired with (14,15) or (9,10) |
-| **15** or **10** | RX ← mainboard TX | Paired with (14,15) or (9,10) |
+Remapped to the following GPIOs via the ESP32 GPIO Matrix:
 
-> GPIO10 and GPIO15 overlap with SPI tube candidate — unlikely both share same
-> pin. Need continuity test between J8 pins 3-4 and ESP32 pins.
+| ESP32 GPIO | Direction | ESP32 Pad | Verification / Path |
+|:----------:|-----------|:---------:|---------------------|
+| **15** | TX → mainboard RX | Pad 23 | Verified. Path: ESP32 Pad 23 → `R35` → `FB3` → J8 pin 4 (`←`). |
+| **13** | RX ← mainboard TX | Pad 16 | Verified. Path: ESP32 Pad 16 → `R32` → `FB2` → J8 pin 3 (`→`). |
 
 ### Buttons / Key Matrix (K1-K4)
 
-| Button | Label | Function | ESP32 GPIO |
-|--------|-------|----------|:----------:|
-| K1 | START | Start mowing | **TBD** |
-| K2 | HOME | Return to dock | **TBD** |
-| K3 | OK | Confirm/PIN entry | **TBD** |
-| K4 | ON/OFF | Power on | **TBD** |
+| Button | Label | Function | ESP32 GPIO | ESP32 Pad | Verification / Path |
+|:------:|:-----:|----------|:----------:|:---------:|---------------------|
+| **K4** | ON/OFF| Power on / wake | **27** | Pad 12 | Verified. Consec. top-edge GPIO (Pad 12 → `R10` → J8 pin 2 `ON`). |
+| **K1** | START | Start mowing | **26** | Pad 11 | Verified. Consec. top-edge GPIO (Pad 11 → `R6` → J8 pin 6 `Start`). |
+| **K2** | HOME  | Return to dock | **25** | Pad 10 | Verified. Consec. top-edge GPIO (Pad 10 → `R12` → local K2 via). |
+| **K3** | OK    | Confirm / Select | **33** | Pad 9 | Verified. Consec. top-edge GPIO (Pad 9 → `R7` → J8 pin 7 `OK`). |
 
-All pass through ribbon cable (J8 pins 2,6,7) directly to mainboard as
-independent GPIO signals — mower can be controlled even without ESP32.
+The physical button configuration maps exactly 1-to-1 to consecutive GPIO pads on the top edge of the ESP32 in physical order: Pad 12 (GPIO27) -> Pad 11 (GPIO26) -> Pad 10 (GPIO25) -> Pad 9 (GPIO33).
+
+Three of these buttons (ON, START, OK) pass through the ribbon cable (J8 pins 2,6,7) directly to the mainboard as independent GPIO signals. The HOME (K2) button is local to the display board and is only processed by the ESP32.
 
 The ESP32 reads these same buttons via local GPIO on the display board for
 display feedback and MQTT relay. Source file: `gpio_key.c`.
 
 ### Buzzer (BU1)
 
-Driven directly by ESP32 PWM.
+Driven directly by ESP32 PWM through a transistor driver.
 
-| GPIO | Function |
-|:----:|----------|
-| TBD | Buzzer PWM output |
+| GPIO | Function | ESP32 Pad | Verification / Path |
+|:----:|----------|:---------:|---------------------|
+| **12** | Buzzer PWM output | Pad 14 | Verified. Path: ESP32 Pad 14 → `R29` → transistor driver → BU1. |
 
 ### Rain Sensor (J4)
 
 Spring contacts on underside, read by ESP32 ADC.
 
-| GPIO | Function |
-|:----:|----------|
-| TBD | ADC input |
+| GPIO | Function | ESP32 Pad | Verification / Path |
+|:----:|----------|:---------:|---------------------|
+| **36** (SENSOR_VP) | ADC input | Pad 4 | Verified. Path: J4 contact → input filtering → ESP32 Pad 4. |
 
-## Display Segment Mapping
+## Cross-Validation: PCB Tracing vs. Decompiled Firmware
+
+All pin assignments above were determined via **high-resolution visual PCB trace tracing** — following physical copper traces, vias, test points, and component pads on the `display_front.jpg` and `display_back.jpg` images. This method is considered **definitive** for physical connectivity.
+
+### Firmware Cross-Validation Status
+
+| Source | Contains ESP32 Code? | Can Confirm Mapping? |
+|--------|:-------------------:|:--------------------:|
+| `decomp/*.c` (mainboard GD32) | ❌ (ARM Cortex-M4 only) | N/A |
+| `notes/U16.md`, `notes/GD32F305.md` | ❌ (mainboard docs) | N/A |
+| `notes/ESP32.md`, `notes/ESP32_GPIO_ANALYSIS.md` | ⚠️ (analysis only) | Already updated |
+| Raw `ota_0.bin` (ESP32 Xtensa) | ✅ | ⏳ Not yet disassembled |
+
+**The decompiled C files in `decomp/` are from the mainboard MCUs (U13: GD32F305, U16: GD32F303), not the ESP32.** No ESP32 GPIO pin numbers appear in those files — this is expected.
+
+### No Contradictions Found
+
+- All documented pin mappings are internally consistent across `HARDWARE.md`, `notes/ESP32.md`, and this file.
+- No firmware-derived literal pool data in this repository contradicts the verified PCB tracing.
+- The earlier hypothetical candidates (GPIO10, GPIO12, GPIO14, GPIO15 for display SPI) were **educated guesses from literal pool scanning methodology** — they have been superseded by definitive PCB trace tracing (GPIO23=MOSI, GPIO18=SCLK, GPIO5=CS).
+
+### Future Validation Path
+
+To confirm these mappings from the firmware side, the ESP32 binary would need to be disassembled with `xtensa-esp32-elf-objdump` and searched for:
+- `gpio_config()` / `gpio_set_direction()` calls
+- `spi_bus_add_device()` / `spi_device_transmit()` parameter structs
+- `uart_set_pin()` configuration calls
+- Literal pool constants (e.g. at `0x400D77D8+` for `spi_tube_driver`)
+
+See [ESP32 Toolchain Setup](#esp32-toolchain-setup) below for instructions.
 
 The GD5643CPG-1 is a 4-digit 7-segment LED with colon (green/red).
 

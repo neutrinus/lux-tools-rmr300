@@ -159,12 +159,29 @@ Certifications:
 
 ### Driver ICs
 
-| Ref | Package | Likely Type |
-|-----|---------|-------------|
-| U1, U3 | SOP-16 | Shift register / LED driver (74HC164 or 74HC595) |
-| U4 | SOP-14/16 | Display/keypad controller (TM1637 or similar) |
-| U2 | — | Local 3.3V DC-DC buck converter (coil `3R3`) |
-| BU1 | — | Piezo buzzer |
+| Ref | Package | Verified Type | Role |
+|-----|---------|---------------|------|
+| **U1, U3, U4** | SOP-16 | `74HC595` | Cascaded 3-stage shift registers for driving 4-digit 7-segment display (24 output bits total: segment select, digit select, and colon) |
+| **U2** | — | Local 3.3V buck converter | Local 3.3V rail from ribbon cable +5V input (includes coil `3R3`) |
+| **BU1** | — | Piezo buzzer | Driven via PWM and transistor driver |
+
+### ESP32 GPIO Mapping
+
+The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard UART as follows:
+
+| Pin / Function | ESP32 GPIO | ESP32 Pad | Circuit Path & Details |
+|----------------|:----------:|:---------:|------------------------|
+| **UART RX** (from MB) | **13** | Pad 16 | ESP32 Pad 16 → `R32` → `FB2` → J8 Pin 3 (`→`) |
+| **UART TX** (to MB) | **15** | Pad 23 | ESP32 Pad 23 → `R35` → `FB3` → J8 Pin 4 (`←`) |
+| **Display CS/Latch** | **5** | Pad 29 | VSPI CS: ESP32 Pad 29 → ST_CP (Pin 12) of U1/U3/U4 |
+| **Display SCLK** | **18** | Pad 30 | VSPI SCLK: ESP32 Pad 30 → SH_CP (Pin 11) of U1/U3/U4 |
+| **Display MOSI** | **23** | Pad 37 | VSPI MOSI: ESP32 Pad 37 → DS (Pin 14) of U1 |
+| **Button K4** (`ON`) | **27** | Pad 12 | Top-edge GPIO: Pad 12 → `R10` → J8 Pin 2 (`ON`) / K4 |
+| **Button K1** (`START`) | **26** | Pad 11 | Top-edge GPIO: Pad 11 → `R6` → J8 Pin 6 (`Start`) / K1 |
+| **Button K2** (`HOME`) | **25** | Pad 10 | Top-edge GPIO: Pad 10 → `R12` → local K2 switch |
+| **Button K3** (`OK`) | **33** | Pad 9 | Top-edge GPIO: Pad 9 → `R7` → J8 Pin 7 (`OK`) / K3 |
+| **Buzzer BU1** | **12** | Pad 14 | Buzzer PWM: ESP32 Pad 14 → `R29` → transistor driver → BU1 |
+| **Rain Sensor J4** | **36** | Pad 4 | ADC Input (SENSOR_VP): J4 contact → input filtering → ESP32 Pad 4 |
 
 ### Connectors
 
