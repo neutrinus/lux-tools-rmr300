@@ -182,6 +182,99 @@ Lookup table in custom component:
 
 Configurable via YAML `substitutions` in future.
 
+## Schedule & Time
+
+### How the original system worked
+
+Confirmed from firmware analysis:
+
+- **ESP32** stores schedule in its NVS (`mon_st`, `mon_len`, `tue_st` ... = start hour + duration per day of week, secondary slots `mon2_st`/`mon2_len`)
+- **ESP32** has `rw_timer.c` — checks current time against schedule, sends MOW_START / CHARGE_RET at appropriate times
+- **U13** (main MCU) has **no schedule logic** — its main loop has no timer/calendar function, its KV-store (18 keys) has no schedule keys
+- **U16** (board MCU) also has no schedule logic — only sensors, motors, JSON forwarding
+
+**Schedule lives entirely on ESP32.** When you flash ESPHome, the schedule from NVS is gone.
+
+### What we can do instead
+
+**Option A: HA Automations (recommended)**
+
+```yaml
+automation:
+  - alias: "Mower weekday schedule"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    condition:
+      - condition: time
+        weekday:
+          - mon
+          - tue
+          - wed
+          - thu
+          - fri
+    action:
+      - service: button.press
+        target:
+          entity_id: button.mower_start_mowing
+      - delay:
+          hours: 2
+      - service: button.press
+        target:
+          entity_id: button.mower_return_to_dock
+```
+
+Advantages over original:
+- Full UI in HA (not 4-character display + 3 buttons)
+- Can add conditions (rain, battery level, season)
+- Easy to modify, history tracking
+
+**Option B: ESPHome local schedule** — can implement in custom component later if desired (ESPHome has `time` component with NTP sync).
+
+### RTC / Time setting
+
+ESP32 in original firmware fetched time via NTP (WiFi). ESPHome also supports NTP natively via `time:` platform. **No manual time setting needed** — time is always correct.
+
+### Time drift on U13
+
+U13 has its own RTC (`rtc calibration` string found), but it's irrelevant — U13 doesn't check time for anything. All time-sensitive decisions (schedule, duration) were made by ESP32.
+
+## Data Availability Summary
+
+### What we can expose via UART (implemented in custom component)
+
+| Data | Source | Status |
+|------|--------|:------:|
+| Mowing / charging / idle status | STATUS_RSP (0x0E) | ⚠️ format to confirm |
+| Battery voltage (mV → %) | BAT_RSP (0x15) | ✅ |
+| Error code | ERROR_INFO (0x12) | ⚠️ length to confirm |
+| Start mowing command | MOW_START (0x0F) | ✅ |
+| Return to dock command | CHARGE_RET (0x10) | ✅ |
+| Rain sensor | GPIO36 ADC | ✅ |
+| Physical buttons | GPIO25-27 | ✅ |
+| 7-segment display | SPI → 74HC595 | ✅ |
+
+### What's NOT available via UART (stays in U13/U16 only)
+
+| Data | Where | Reason |
+|------|-------|--------|
+| Total runtime / mileage | `run_param` (U13 KV, 80B) | No read cmd |
+| Battery temperature | BMS log (U13 internal) | Not exposed |
+| Charge cycle count | BMS log (U13 internal) | Not exposed |
+| Area calibration shape | `shape_param` (U13 KV, 40B) | No read/write cmd |
+| RTC time | U13 internal | No cmd |
+| Schedule / timer | Was in ESP32 NVS | Flash ESPHome → gone |
+
+### What we can build locally in ESPHome / HA
+
+| Feature | Approach |
+|---------|----------|
+| Mowing time today | Template sensor counting time `is_mowing` = ON |
+| Total runtime | ESPHome `total_daily_energy`-style meter on mowing state |
+| Schedule | HA automations (better than original) |
+| Mowing timer (auto-return after X min) | ESPHome script or HA automation delay |
+| Rain hold-off | HA condition on rain binary sensor |
+
 ## WiFi Loss Behavior
 
 - **Mower continues mowing** — U13/U16 are independent from ESP32
