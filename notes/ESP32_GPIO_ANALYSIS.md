@@ -1,250 +1,184 @@
 # ESP32 GPIO Mapping & Xtensa Decompilation
 
-## How to Decompile Xtensa (ESP32) Code
+## ELF Generation
 
-Ghidra's built-in Xtensa decompiler is weak — it cannot correctly resolve immediate
-operands in some instruction forms (e.g. `L8UI`, `S8I` with certain offset
-encodings), producing nonsensical literal pool references.
+Convert raw ota_0.bin (ESP32 OTA image) to ELF for `xtensa-esp32-elf-objdump`:
 
-### Working approaches
+```
+tools/esp32_img2elf.py firmware/ota_0.bin firmware/ota_0.elf
+```
 
-| Method | Tool | Quality |
-|--------|------|---------|
-| **`xtensa-esp32-elf-objdump -d`** | ESP-IDF toolchain | ✅ Perfect — official Xtensa disassembler |
-| **radare2 / rizin** | `r2 -a xtensa` | ✅ Good — supports Xtensa LX6, partial decomp |
-| **Renode emulation** | Full platform emulator | ✅ Great — can trace execution at instruction level |
-| **Ghidra + ESP32 SVD** | Ghidra 11+ | ⚠️ Partial — needs manual patching of immediate values |
-| **Manual** | ISA manual | ❌ Impractical for >100KB code |
+Segments from esptool:
 
-### Recommended workflow
+| Segment | Type | File Offset | Load Address | Size |
+|---------|------|-------------|--------------|------|
+| 0 | DROM (rodata) | 0x000018 | 0x3f400020 | 0x262b4 |
+| 1 | DRAM (data) | 0x0262d4 | 0x3ffbdb60 | 0x06cd4 |
+| 2 | IRAM0 | 0x02cfb0 | 0x40080000 | 0x03060 |
+| 3 | IROM (code) | 0x030018 | 0x400d0020 | 0xe4004 |
+| 4 | IRAM1 | 0x114024 | 0x40083060 | 0x191f8 |
+| 5 | RTC_DATA | 0x12d224 | 0x50000000 | 0x00010 |
 
-1. Install `xtensa-esp32-elf-objdump` from ESP-IDF (or use
-   `tools/xtensa-esp32-elf-objdump` if available in this repo)
-2. Convert raw dump to ELF by parsing the ESP32 image header:
-   ```
-   # The raw ota_0.bin starts with a 32-byte ESP-IDF image header,
-   # followed by segment headers:
-   #   [4B magic+flags] [4B addr] [4B size] [4B data...]
-   # Segments map to IROM (0x400D0000), DROM (0x3F400000), IRAM (0x40080000)
-   ```
-3. Extract text sections and disassemble with objdump
-4. Cross-reference string literals (found in DROM at 0x3F400000+) with code
-   addresses
+IROM first function at 0x400d2f24; first ~0x2F04 bytes are data tables.
+3579 function entries (`entry a1, N`) across all segments.
 
-## GPIO Pin Candidates (from Xtensa Literal Pool Analysis)
+## Decompilation
 
-### Methodology
+```bash
+# Full disassembly (slow, ~1.2MB output)
+xtensa-esp32-elf-objdump -d firmware/ota_0.elf > firmware/disasm.txt
 
-ESP32 firmware uses literal pools (`L8R`-addressed constants) for GPIO pin
-numbers. By scanning known constant values (0-39, typical GPIO range) in the
-IROM segment, we can identify pin assignments.
+# Specific range
+xtensa-esp32-elf-objdump -d --start-address=0x400d7704 --stop-address=0x400d7c00 firmware/ota_0.elf
+```
 
-### Display Driver: SPI Tube (3× 74HC595)
+Known application code:
+- IRAM0 (0x40080000): cache init, interrupt vectors, FreeRTOS startup
+- IRAM1 (0x40083060): FreeRTOS task management, some application code
+- IROM (0x400d0020): bulk of ESP-IDF framework + application code
 
-The firmware has a dedicated component `spi_tube_driver` with `TubeInit()`.
-Three 16-pin SOP ICs (U1, U3, U4) on the display board are cascaded 74HC595
-shift registers, providing 24 output bits:
+## GPIO Pin Mapping
+
+### SPI Tube Display — CONFIRMED
+
+**SPI Bus Config** found at DROM+0x177C0 (file offset 0x177D8):
+
+```
+struct spi_bus_config_t {
+    mosi_io_num:     12   // GPIO12 — MOSI
+    miso_io_num:     -1   // not connected (NC)
+    sclk_io_num:     10   // GPIO10 — SCLK
+    quadwp_io_num:   -1   // NC
+    quadhd_io_num:   -1   // NC
+    max_transfer_sz: -1   // default (4096)
+    flags:           -1   // default
+    intr_flags:      -1   // default
+}
+```
+
+Hex at file+0x177D8:
+```
+0c 00 00 00 ff ff ff ff 0a 00 00 00 ff ff ff ff
+12            -1           10           -1
+ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff
+   -1          -1           -1           -1
+```
+
+The CS (chip select) pin is set in `spi_device_interface_config_t.spics_io_num` —
+not found yet (candidate: GPIO15 based on proximity in data table).
+
+### Candidate GPIOs from Nearby Data
+
+Before the SPI config (DROM+0x177A8):
+
+| DROM Offset | Value | Candidate |
+|-------------|-------|-----------|
+| +0x177A8 | 29 | ? |
+| +0x177AC | 27 | ? |
+| +0x177B0 | 11 | ? |
+| +0x177B4 | -1 | NC |
+
+After the SPI config (DROM+0x177F8):
+
+| DROM Offset | Value | Candidate |
+|-------------|-------|-----------|
+| +0x177FC | 15 | CS (display latch) or UART TX |
+| +0x17800 | 14 | CS or UART RX |
+| +0x17804 | 16 | ? |
+| +0x17808 | 13 | ? |
+
+### Die wichtigsten Kandidaten
+
+| Function | Candidate GPIOs | Confidence |
+|----------|----------------|:----------:|
+| SPI MOSI | **12** | **HIGH** |
+| SPI SCLK | **10** | **HIGH** |
+| SPI MISO | -1 (NC) | **HIGH** |
+| SPI CS/latch | 15 | MEDIUM |
+| UART TX | 14 or 9 | MEDIUM |
+| UART RX | 15 or 10 | MEDIUM |
+
+## Display Driver
+
+Source file: `../main/src/app/rw_display.c`
+Component: `../components/spi_tube_driver/src/spi_tube_drive.c`
+
+Strings found in DROM trace:
+- `"spi_tube_driver"` @ 0x3f407532
+- `"TubeInit"` @ 0x3f407557
+- `"tube driver not initialed"` @ 0x3f4039ae
+- `"rw_display.c"` @ 0x3f403467
+- `"W (%s) %s: tube driver not initialed\n"` context
+
+Display patterns ("IdLE", "LoCK", "Mow", "HoME", "ChAr") are **NOT stored as ASCII strings** in DROM. They are likely encoded as 7-segment bitmap patterns in a lookup table.
+
+### 3× 74HC595 Cascaded (24-bit shift register)
 
 ```
 74HC595 #1        74HC595 #2        74HC595 #3
 ┌──────────┐      ┌──────────┐      ┌──────────┐
 │ Q0-Q7    │─────▶│ Q0-Q7    │─────▶│ Q0-Q7    │
-│          │      │          │      │          │
-│ 8 bits   │      │ 8 bits   │      │ 8 bits   │
-│  (seg)   │      │  (digits)│      │  (colon)  │
+│ segments │      │ digits   │      │ colon/etc│
+│ (8 bits) │      │ (4 bits) │      │ (2+ bits) │
 └──────────┘      └──────────┘      └──────────┘
 ```
 
-**24-bit shift register allocation (hypothetical):**
+Each write: 24 bits shifted serially via MOSI (GPIO12), clocked by SCLK (GPIO10),
+latched by ST_CP (CS, likely GPIO15).
 
-| Bit(s) | Function | Source |
-|--------|----------|--------|
-| 0-7 | Segments A-G, DP (digit 0-3 shared) | 74HC595 #1 |
-| 8-11 | Digit select (4× anodes) | 74HC595 #2 |
-| 12-13 | Colon (left, right) | 74HC595 #2 |
-| 14-15 | Unused? | 74HC595 #2 |
-| 16-23 | Unused (or extra features) | 74HC595 #3 |
+To decode the segment map: write known patterns to the display via SPI (in a custom
+firmware build) and observe which segments light up.
 
-**Verified Pin Connections (via PCB trace tracing):**
+## UART (Mainboard Communication)
 
-The display is driven by the ESP32's hardware **VSPI** port using the standard pin configuration:
+Protocol binary framing: `0xAA 0x55 [CMD] [payload...] [XOR CS]` @ 115200 8N1.
 
-| GPIO | Function | Source/Package | Verification / Notes |
-|:----:|----------|:--------------:|----------------------|
-| **23** | MOSI (SPI tube data) | ESP32 Pad 37 | Verified. Connected to DS (Pin 14) of U1. |
-| **18** | SCLK (SPI tube clock)| ESP32 Pad 30 | Verified. Connected to SH_CP (Pin 11) of U1/U3/U4. |
-| **5**  | CS / ST_CP (latch)   | ESP32 Pad 29 | Verified. Connected to ST_CP (Pin 12) of U1/U3/U4. |
-| —      | MISO (NC = -1)       | ESP32 Pad 31 | Verified. Pad 31 (GPIO19) is empty/unconnected. |
+UART NOT on UART0 (GPIO1/GPIO3 — those are J1 programming only).
+Likely UART1 (GPIO9/GPIO10) or UART2 (GPIO14/GPIO15).
 
-### UART (Mainboard Communication)
+Candidate pairs from code analysis:
+- TX=14, RX=15 (or vice versa)
+- TX=9, RX=10 (but GPIO10 is SCLK — shared unlikely)
 
-The mainboard UART is **NOT** UART0 (GPIO1/GPIO3) — those are on J1 for
-programming only. The mainboard UART must use UART1 (GPIO9/GPIO10) or UART2
-(GPIO16/GPIO17).
+### Known Command IDs
 
-**Verified Pin Connections (via PCB trace tracing):**
+| ID | Direction | Name | Payload |
+|----|-----------|------|---------|
+| 0x01 | ESP→MB | BTN_UP | 1B scancode |
+| 0x02 | ESP→MB | BTN_DOWN | 1B scancode |
+| 0x04 | ESP→MB | BTN_OK | 1B scancode |
+| 0x0B | ESP→MB | PWD_VERIFY | 4B ASCII PIN |
+| 0x0C | MB→ESP | PWD_RESULT | 1B (0=OK, 1=fail) |
+| 0x0D | ESP→MB | STATUS_REQ | 0B |
+| 0x0E | MB→ESP | STATUS_RSP | 4B+ flags |
+| 0x0F | ESP→MB | MOW_START | 0B |
+| 0x10 | ESP→MB | CHARGE_RET | 0B |
+| 0x14 | ESP→MB | BAT_INFO_REQ | 0B |
+| 0x15 | MB→ESP | BAT_INFO_RSP | 2B voltage mV |
 
-Remapped to the following GPIOs via the ESP32 GPIO Matrix:
+## How to Verify Pins (Multimeter / Saleae)
 
-| ESP32 GPIO | Direction | ESP32 Pad | Verification / Path |
-|:----------:|-----------|:---------:|---------------------|
-| **15** | TX → mainboard RX | Pad 23 | Verified. Path: ESP32 Pad 23 → `R35` → `FB3` → J8 pin 4 (`←`). |
-| **13** | RX ← mainboard TX | Pad 16 | Verified. Path: ESP32 Pad 16 → `R32` → `FB2` → J8 pin 3 (`→`). |
+### Continuity test (5 min)
+1. **SPI**: meter in continuity mode, probe between U1 pins and ESP32
+   - U1 pin 14 (SER/SI) → ESP32 GPIO12 (MOSI)
+   - U1 pin 11 (SCK) → ESP32 GPIO10 (SCLK)
+   - U1 pin 12 (RCLK/ST_CP) → GPIO15 (CS)
+2. **UART**: continuity between J8 pins 3-4 and ESP32 pins
+3. **Buttons**: K1-K4 pads → ESP32 pins
+4. **Buzzer**: BU1 → ESP32 PWM pin
 
-### Buttons / Key Matrix (K1-K4)
+### Saleae capture (15 min)
+Probe all accessible ESP32 pins, then:
+- Press buttons → identify GPIO inputs
+- Display patterns → identify SPI signals  
+- Sniff J8 UART → confirm baud + protocol
 
-| Button | Label | Function | ESP32 GPIO | ESP32 Pad | Verification / Path |
-|:------:|:-----:|----------|:----------:|:---------:|---------------------|
-| **K4** | ON/OFF| Power on / wake | **27** | Pad 12 | Verified. Consec. top-edge GPIO (Pad 12 → `R10` → J8 pin 2 `ON`). |
-| **K1** | START | Start mowing | **26** | Pad 11 | Verified. Consec. top-edge GPIO (Pad 11 → `R6` → J8 pin 6 `Start`). |
-| **K2** | HOME  | Return to dock | **25** | Pad 10 | Verified. Consec. top-edge GPIO (Pad 10 → `R12` → local K2 via). |
-| **K3** | OK    | Confirm / Select | **33** | Pad 9 | Verified. Consec. top-edge GPIO (Pad 9 → `R7` → J8 pin 7 `OK`). |
+## Existing Toolchain
 
-The physical button configuration maps exactly 1-to-1 to consecutive GPIO pads on the top edge of the ESP32 in physical order: Pad 12 (GPIO27) -> Pad 11 (GPIO26) -> Pad 10 (GPIO25) -> Pad 9 (GPIO33).
-
-Three of these buttons (ON, START, OK) pass through the ribbon cable (J8 pins 2,6,7) directly to the mainboard as independent GPIO signals. The HOME (K2) button is local to the display board and is only processed by the ESP32.
-
-The ESP32 reads these same buttons via local GPIO on the display board for
-display feedback and MQTT relay. Source file: `gpio_key.c`.
-
-### Buzzer (BU1)
-
-Driven directly by ESP32 PWM through a transistor driver.
-
-| GPIO | Function | ESP32 Pad | Verification / Path |
-|:----:|----------|:---------:|---------------------|
-| **12** | Buzzer PWM output | Pad 14 | Verified. Path: ESP32 Pad 14 → `R29` → transistor driver → BU1. |
-
-### Rain Sensor (J4)
-
-Spring contacts on underside, read by ESP32 ADC.
-
-| GPIO | Function | ESP32 Pad | Verification / Path |
-|:----:|----------|:---------:|---------------------|
-| **36** (SENSOR_VP) | ADC input | Pad 4 | Verified. Path: J4 contact → input filtering → ESP32 Pad 4. |
-
-## Cross-Validation: PCB Tracing vs. Decompiled Firmware
-
-All pin assignments above were determined via **high-resolution visual PCB trace tracing** — following physical copper traces, vias, test points, and component pads on the `display_front.jpg` and `display_back.jpg` images. This method is considered **definitive** for physical connectivity.
-
-### Firmware Cross-Validation Status
-
-| Source | Contains ESP32 Code? | Can Confirm Mapping? |
-|--------|:-------------------:|:--------------------:|
-| `decomp/*.c` (mainboard GD32) | ❌ (ARM Cortex-M4 only) | N/A |
-| `notes/U16.md`, `notes/GD32F305.md` | ❌ (mainboard docs) | N/A |
-| `notes/ESP32.md`, `notes/ESP32_GPIO_ANALYSIS.md` | ⚠️ (analysis only) | Already updated |
-| Raw `ota_0.bin` (ESP32 Xtensa) | ✅ | ⏳ Not yet disassembled |
-
-**The decompiled C files in `decomp/` are from the mainboard MCUs (U13: GD32F305, U16: GD32F303), not the ESP32.** No ESP32 GPIO pin numbers appear in those files — this is expected.
-
-### No Contradictions Found
-
-- All documented pin mappings are internally consistent across `HARDWARE.md`, `notes/ESP32.md`, and this file.
-- No firmware-derived literal pool data in this repository contradicts the verified PCB tracing.
-- The earlier hypothetical candidates (GPIO10, GPIO12, GPIO14, GPIO15 for display SPI) were **educated guesses from literal pool scanning methodology** — they have been superseded by definitive PCB trace tracing (GPIO23=MOSI, GPIO18=SCLK, GPIO5=CS).
-
-### Future Validation Path
-
-To confirm these mappings from the firmware side, the ESP32 binary would need to be disassembled with `xtensa-esp32-elf-objdump` and searched for:
-- `gpio_config()` / `gpio_set_direction()` calls
-- `spi_bus_add_device()` / `spi_device_transmit()` parameter structs
-- `uart_set_pin()` configuration calls
-- Literal pool constants (e.g. at `0x400D77D8+` for `spi_tube_driver`)
-
-See [ESP32 Toolchain Setup](#esp32-toolchain-setup) below for instructions.
-
-The GD5643CPG-1 is a 4-digit 7-segment LED with colon (green/red).
-
+The Xtensa toolchain exists at a backup location:
 ```
- Segment layout:
-    AAA
-   F   B
-    GGG
-   E   C
-    DDD   ::
-
- DP = decimal point
+/home/marek/stary_marek/home/marek/.platformio/packages/toolchain-xtensa32/bin/
 ```
 
-Observed firmware patterns:
-
-| Display | Segment Data (raw) | Meaning |
-|---------|-------------------|---------|
-| `----` | 0x00 0x00 0x00 0x00 | Off |
-| `IdLE` | see firmware patterns | Idle |
-| `LoCK` | see firmware patterns | PIN locked |
-| `Mow ` | see firmware patterns | Mowing |
-| `HoME` | see firmware patterns | Returning to dock |
-| `ChAr` | see firmware patterns | Charging |
-| `Err ` | see firmware patterns | Error |
-
-Segment codes need extraction from the firmware's display lookup tables.
-
-## How to Resolve Unknown Pins
-
-### With a multimeter (5 min)
-
-1. **SPI display**: Put meter in continuity mode. Touch one probe to a known
-   pad on U1 (e.g. pin 14 = SER/SI, pin 11 = SCK, pin 12 = RCLK/ST_CP).
-   Sweep the other probe across ESP32 pins until you get continuity.
-2. **UART**: Continuity from J8 pins 3-4 to ESP32 pins.
-3. **Buttons**: Continuity from K1-K4 pads to ESP32 pins.
-4. **Buzzer**: Continuity from BU1 terminals to ESP32 pins.
-
-### With a Saleae logic analyzer (15 min)
-
-1. Probe all accessible ESP32 pins on the display board
-2. Capture while:
-   - Pressing each button → look for GPIO transitions
-   - Display shows different patterns → look for SPI activity (CS, MOSI, CLK)
-   - Mower is operating → look for UART TX at 115200 baud
-3. Decode each signal to identify its function
-
-## ESP32 Toolchain Setup
-
-```bash
-# Option 1: ESP-IDF (official)
-git clone --recursive https://github.com/espressif/esp-idf.git
-cd esp-idf
-./install.sh
-. ./export.sh
-# Now xtensa-esp32-elf-objdump is available
-
-# Option 2: Standalone toolchain (smaller)
-# Download from Espressif: xtensa-esp32-elf-{os}-{version}.tar.gz
-# Add bin/ to PATH
-```
-
-## ELF Reconstruction
-
-To disassemble properly, reconstruct an ELF from the raw dump:
-
-```bash
-# The ota_0 partition at flash offset 0x10000 starts with:
-#  [4B image header] [segment headers...]
-
-# Segment header format (ESP-IDF):
-#  uint32_t addr;   // destination address (IROM/DROM/IRAM)
-#  uint32_t size;   // data size
-#  uint8_t  data[size];  // aligned to 4B
-
-# Typical segments in ota_0:
-#  1. IROM: 0x400D0000 (code, ~900KB)
-#  2. DROM: 0x3F400000 (rodata, strings, ~100KB)
-#  3. IRAM: 0x40080000 (fast code, cache, entry point ~20KB)
-#  4. DRAM: 0x3FFB0000 (data/BSS, ~10KB)
-
-# Extract IROM for analysis:
-python3 -c "
-import struct
-with open('firmware/ota_0.bin', 'rb') as f:
-    header = f.read(32)  # skip image header
-    while True:
-        seg = f.read(8)
-        if len(seg) < 8: break
-        addr, size = struct.unpack('<II', seg)
-        data = f.read((size + 3) & ~3)  # 4B aligned
-        print(f'0x{addr:08X}: {size} bytes')
-"
-```
+This is GCC 5.2.0 / binutils 2.25.1 (old but functional for disassembly).
+Symlinked into `tools/xtensa-toolchain/`.
