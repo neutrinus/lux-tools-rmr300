@@ -311,3 +311,12 @@ The UART lines are on the **ribbon cable** between boards. Access them at the **
 4. **Examine `FUN_4015be24` / `FUN_4015bdd4`**: Suspected serialization helpers
 5. **Analyze string cross-references**: Most application strings are called via tables, not directly — find the string table structure to match strings to functions
 6. **WiFi enablement testing**: Modify NVS or inject WiFi configuration to test if the IoT/MQTT path actually works
+
+## GPIO Pin Analysis
+
+See [`notes/ESP32_GPIO_ANALYSIS.md`](ESP32_GPIO_ANALYSIS.md) for:
+- Xtensa decompilation workflow
+- GPIO pin candidates from literal pool analysis
+- Display driver architecture (3× 74HC595 cascaded via SPI)
+- UART pin candidates (GPIO14/15 or GPIO9/10)
+- How to resolve unknown pins with multimeter or Saleae
