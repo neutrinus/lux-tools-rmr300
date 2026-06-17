@@ -24,18 +24,64 @@ IROM first function at 0x400d2f24; first ~0x2F04 bytes are data tables.
 
 ## Decompilation
 
+### Toolchain Setup
+
+The Xtensa toolchain exists at a backup location:
+```
+/home/marek/stary_marek/home/marek/.platformio/packages/toolchain-xtensa32/bin/
+```
+
+GCC 5.2.0 / binutils 2.25.1 — old but functional for disassembly.
+Symlinked into `tools/xtensa-toolchain/`:
+
 ```bash
-# Full disassembly (slow, ~1.2MB output)
-xtensa-esp32-elf-objdump -d firmware/ota_0.elf > firmware/disasm.txt
+export PATH="$PWD/tools/xtensa-toolchain:$PATH"
+```
+
+### ELF Generation
+
+The firmware dump `ota_0.bin` is a raw ESP32 OTA image (not an ELF).
+Convert it first using the Python script:
+
+```bash
+python3 tools/esp32_img2elf.py firmware/ota_0.bin firmware/ota_0.elf
+```
+
+The script parses the 24-byte ESP-IDF image header and 6 segment headers,
+then creates a minimal ELF with 6 LOAD segments and proper section headers.
+
+### Disassembly
+
+```bash
+# Full disassembly (~400K lines)
+xtensa-esp32-elf-objdump -d firmware/ota_0.elf > firmware/disasm.s
 
 # Specific range
 xtensa-esp32-elf-objdump -d --start-address=0x400d7704 --stop-address=0x400d7c00 firmware/ota_0.elf
+
+# Section/header info
+xtensa-esp32-elf-objdump -x firmware/ota_0.elf
 ```
 
-Known application code:
-- IRAM0 (0x40080000): cache init, interrupt vectors, FreeRTOS startup
-- IRAM1 (0x40083060): FreeRTOS task management, some application code
-- IROM (0x400d0020): bulk of ESP-IDF framework + application code
+### Memory Regions
+
+| Region | Virtual Address | Physical Flash | Contents |
+|--------|----------------|----------------|----------|
+| IRAM0 | 0x40080000 | file+0x2cfb0 | Cache init, vectors, FreeRTOS startup |
+| IRAM1 | 0x40083060 | file+0x114024 | FreeRTOS tasks, some app code |
+| IROM  | 0x400d0020 | file+0x30018 | ESP-IDF framework + application code |
+| DROM  | 0x3f400020 | file+0x00018 | Read-only data, strings, configs |
+| DRAM  | 0x3ffbdb60 | file+0x262d4 | Data, BSS, GOT |
+
+3579 function entries (`entry a1, N`) across all code segments.
+IROM first function at 0x400d2f24; first ~0x2F04 bytes are data tables.
+
+### Approach for Finding GPIO Numbers
+
+1. **Literal pool scanning** — IROM contains 4285 references to DROM as 32-bit literal pool entries. Each `L32R a, label` instruction loads an absolute address from a pool.
+2. **Struct matching** — Known struct patterns (e.g. `spi_bus_config_t` with fields `{mosi, miso, sclk, quadwp, quadhd, ...}`) can be found by scanning DROM for sequences of small integers (-1, 0-39).
+3. **String cross-references** — Application strings (log tags, error messages) are referenced indirectly through the GOT in DRAM, not directly via L32R. Search DRAM for DROM pointers.
+4. **Call tracing** — Each function is identified by `entry a1, N` prologue. Trace `call8` targets to understand call hierarchy.
 
 ## GPIO Pin Mapping
 
@@ -67,36 +113,42 @@ ff ff ff ff  ff ff ff ff  ff ff ff ff  ff ff ff ff
 The CS (chip select) pin is set in `spi_device_interface_config_t.spics_io_num` —
 not found yet (candidate: GPIO15 based on proximity in data table).
 
-### Candidate GPIOs from Nearby Data
+### Other GPIOs from Nearby Data Table
 
-Before the SPI config (DROM+0x177A8):
+Adjacent to the SPI bus config there are more GPIO pin numbers in the same
+data structure (likely a GPIO config table or similar struct):
 
-| DROM Offset | Value | Candidate |
-|-------------|-------|-----------|
-| +0x177A8 | 29 | ? |
-| +0x177AC | 27 | ? |
-| +0x177B0 | 11 | ? |
-| +0x177B4 | -1 | NC |
+| DROM Offset | File Offset | GPIO | Candidate Function | Confidence |
+|-------------|-------------|------|-------------------|:----------:|
+| +0x177A8 | 0x177C0 | **29** | Buzzer PWM or Rain sensor | LOW |
+| +0x177AC | 0x177C4 | **27** | Buzzer PWM or Rain sensor | LOW |
+| +0x177B0 | 0x177C8 | **11** | UART TX or Button | LOW |
+| +0x177B4 | 0x177CC | -1 | NC | HIGH |
+| +0x177D8 | 0x177F0 | — | *SPI bus config starts here* | — |
+| +0x177FC | 0x17814 | **15** | SPI CS (ST_CP/latch) or UART | MEDIUM |
+| +0x17800 | 0x17818 | **14** | UART TX or RX | MEDIUM |
+| +0x17804 | 0x1781C | **16** | Buzzer or button | LOW |
+| +0x17808 | 0x17820 | **13** | CS or button | LOW |
 
-After the SPI config (DROM+0x177F8):
+### Summary
 
-| DROM Offset | Value | Candidate |
-|-------------|-------|-----------|
-| +0x177FC | 15 | CS (display latch) or UART TX |
-| +0x17800 | 14 | CS or UART RX |
-| +0x17804 | 16 | ? |
-| +0x17808 | 13 | ? |
+| Function | GPIO | Status |
+|----------|:----:|:------:|
+| SPI MOSI | **12** | **CONFIRMED** via spi_bus_config_t in DROM |
+| SPI SCLK | **10** | **CONFIRMED** via spi_bus_config_t in DROM |
+| SPI MISO | -1 (NC) | **CONFIRMED** via spi_bus_config_t in DROM |
+| SPI CS / ST_CP (latch) | **15** | **LIKELY** — candidate based on data table proximity |
+| UART TX (to mainboard) | **14** | **CANDIDATE** — paired with 15? |
+| UART RX (from mainboard) | **15** | **CANDIDATE** — but conflicts with CS |
+| Buzzer PWM | 16 or 29 or 27 | **UNKNOWN** |
+| Rain sensor ADC | 11 or 29 or 27 | **UNKNOWN** |
+| Button K1 (START) | ? | **UNKNOWN** — needs continuity test |
+| Button K2 (HOME) | ? | **UNKNOWN** |
+| Button K3 (OK) | ? | **UNKNOWN** |
+| Button K4 (ON) | ? | **UNKNOWN** |
 
-### Die wichtigsten Kandidaten
-
-| Function | Candidate GPIOs | Confidence |
-|----------|----------------|:----------:|
-| SPI MOSI | **12** | **HIGH** |
-| SPI SCLK | **10** | **HIGH** |
-| SPI MISO | -1 (NC) | **HIGH** |
-| SPI CS/latch | 15 | MEDIUM |
-| UART TX | 14 or 9 | MEDIUM |
-| UART RX | 15 or 10 | MEDIUM |
+> **Note**: GPIO15 appears in both UART and SPI CS candidate lists — it cannot
+> serve both functions. Continuity test with a multimeter will resolve this.
 
 ## Display Driver
 
@@ -173,12 +225,14 @@ Probe all accessible ESP32 pins, then:
 - Display patterns → identify SPI signals  
 - Sniff J8 UART → confirm baud + protocol
 
-## Existing Toolchain
+## Unknowns Requiring Physical Probing
 
-The Xtensa toolchain exists at a backup location:
-```
-/home/marek/stary_marek/home/marek/.platformio/packages/toolchain-xtensa32/bin/
-```
-
-This is GCC 5.2.0 / binutils 2.25.1 (old but functional for disassembly).
-Symlinked into `tools/xtensa-toolchain/`.
+| What | How to resolve |
+|------|----------------|
+| GPIO15: CS or UART? | Continuity from ESP32 pin to U1 pin 12 (RCLK) vs J8 pin 3-4 |
+| UART TX/RX pins | Continuity from J8 pins 3-4 to ESP32 pins |
+| Button GPIOs | Continuity from K1-K4 pads to ESP32 pins |
+| Buzzer GPIO | Continuity from BU1 to ESP32 pin |
+| Rain sensor GPIO | Continuity from J4 to ESP32 pin |
+| Display 7-seg bitmap | Trial: write SPI patterns in custom firmware, observe |
+| Protocol command 0x03 | Not found in decompilation — sniff UART traffic |
