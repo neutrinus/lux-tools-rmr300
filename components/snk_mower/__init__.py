@@ -20,6 +20,7 @@ CONF_DISPLAY_CS = "display_cs"
 CONF_BUZZER_PIN = "buzzer_pin"
 CONF_DISPLAY_OFF_TIMEOUT = "display_off_timeout"
 CONF_RAIN_PIN = "rain_pin"
+CONF_PIN_DIAG = "pin_diag"
 
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
@@ -65,6 +66,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
             cv.Optional(CONF_RAIN_PIN): cv.int_range(0, 39),
+            cv.Optional(CONF_PIN_DIAG, default=False): cv.boolean,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -186,6 +188,9 @@ async def to_code(config):
 
     if CONF_RAIN_PIN in config:
         cg.add(var.set_rain_pin(config[CONF_RAIN_PIN]))
+
+    if config[CONF_PIN_DIAG]:
+        cg.add(var.set_pin_diag(True))
 
     if config[CONF_DISPLAY_OFF_TIMEOUT] > 0:
         cg.add(var.set_display_off_timeout(config[CONF_DISPLAY_OFF_TIMEOUT]))

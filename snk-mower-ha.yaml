@@ -41,129 +41,13 @@ ota:
 
 uart:
   id: mower_uart
-  tx_pin: GPIO15
-  rx_pin: GPIO13
+  tx_pin: GPIO4
+  rx_pin: GPIO16
   baud_rate: 115200
-  rx_buffer_size: 512
-  debug:
-    direction: RX
-    dummy_receiver: false
-    after:
-      bytes: 256
+  rx_buffer_size: 256
 
 snk_mower:
   id: my_mower
   uart_id: mower_uart
   pin: "9633"
-  battery_level:
-    name: "${friendly_name} Battery Level"
-  battery_voltage:
-    name: "${friendly_name} Battery Voltage"
-  error_code:
-    name: "${friendly_name} Error Code"
-  light_level:
-    name: "${friendly_name} Light Level"
-  signal_level:
-    name: "${friendly_name} Signal Level"
-  work_area:
-    name: "${friendly_name} Work Area"
-  cut_area:
-    name: "${friendly_name} Cut Area"
-  total_minutes:
-    name: "${friendly_name} Total Minutes"
-  on_minutes:
-    name: "${friendly_name} On Minutes"
-  bat_health:
-    name: "${friendly_name} Battery Health"
-  bat_level_bars:
-    name: "${friendly_name} Battery Bars"
-  rain_delay:
-    name: "${friendly_name} Rain Delay"
-
-  is_mowing:
-    name: "${friendly_name} Mowing"
-  is_charging:
-    name: "${friendly_name} Charging"
-  is_docked:
-    name: "${friendly_name} Docked"
-  has_error:
-    name: "${friendly_name} Has Error"
-  is_locked:
-    name: "${friendly_name} Locked"
-  is_returning:
-    name: "${friendly_name} Returning"
-
-  device_name:
-    name: "${friendly_name} Device Name"
-  model:
-    name: "${friendly_name} Model"
-  serial:
-    name: "${friendly_name} Serial"
-  firmware_version:
-    name: "${friendly_name} Firmware Version"
-  battery_name:
-    name: "${friendly_name} Battery Type"
-  mower_state:
-    name: "${friendly_name} State"
-
-binary_sensor:
-  - platform: gpio
-    name: "${friendly_name} Start Button"
-    pin:
-      number: GPIO26
-      mode: INPUT_PULLUP
-      inverted: true
-    filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
-    on_press:
-      then:
-        - lambda: 'id(my_mower)->start_mowing();'
-
-  - platform: gpio
-    name: "${friendly_name} Home Button"
-    pin:
-      number: GPIO25
-      mode: INPUT_PULLUP
-      inverted: true
-    filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
-    on_press:
-      then:
-        - lambda: 'id(my_mower)->return_to_dock();'
-
-  - platform: gpio
-    name: "${friendly_name} Rain Detected"
-    pin:
-      number: GPIO36
-      mode: INPUT
-    device_class: moisture
-    filters:
-      - delayed_on: 200ms
-      - delayed_off: 200ms
-
-button:
-  - platform: template
-    name: "${friendly_name} Start Mowing"
-    icon: mdi:play
-    on_press:
-      - lambda: 'id(my_mower)->start_mowing();'
-
-  - platform: template
-    name: "${friendly_name} Return to Dock"
-    icon: mdi:home-import-outline
-    on_press:
-      - lambda: 'id(my_mower)->return_to_dock();'
-
-sensor:
-  - platform: wifi_signal
-    name: "${friendly_name} Wi-Fi Signal"
-    update_interval: 60s
-
-  - platform: uptime
-    name: "${friendly_name} Uptime"
-    update_interval: 5min
-
-bluetooth_proxy:
-  active: true
+  pin_diag: true

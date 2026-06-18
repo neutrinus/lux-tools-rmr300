@@ -69,6 +69,13 @@ static const char *const STATE_DISPLAY[] = {
     "ChAr", "IdLE", "Err ", "LoCK",
 };
 
+static const int DIAG_SCAN_PINS[] = {
+    0, 1, 2, 3, 4, 5, 12, 13, 14, 15,
+    16, 17, 18, 19, 21, 22, 23, 25, 26, 27,
+    32, 33, 34, 35, 36, 39
+};
+static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
+
 static const float VOLTAGE_LUT[101] = {
     15.0f, 15.05f, 15.1f, 15.15f, 15.2f, 15.25f, 15.3f, 15.35f, 15.4f, 15.5f,
     15.6f, 15.7f,  15.8f, 15.85f, 15.9f, 16.0f,  16.1f, 16.15f, 16.2f, 16.25f,
@@ -110,6 +117,21 @@ SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 void SnkMower::setup() {
   ESP_LOGI(TAG, "SNK Mower starting (PIN: %s, JSON at 230400)", pin_.c_str());
+
+  if (pin_diag_) {
+    ESP_LOGI(TAG, "=== GPIO PIN DIAGNOSTIC MODE ===");
+    ESP_LOGI(TAG, "Scanning %d pins every %ums for changes...",
+             NUM_DIAG_SCAN_PINS, DIAG_INTERVAL_MS);
+    for (int i = 0; i < NUM_DIAG_SCAN_PINS; i++) {
+      int gpio = DIAG_SCAN_PINS[i];
+      int level = gpio_get_level((gpio_num_t)gpio);
+      diag_prev_[gpio] = level;
+      ESP_LOGI(TAG, "  GPIO%02d: initial=%d", gpio, level);
+    }
+    ESP_LOGI(TAG, "=== DIAG: monitoring started ===");
+    return;
+  }
+
   last_activity_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
@@ -256,6 +278,10 @@ void SnkMower::set_rain_pin(gpio_num_t pin) {
   rain_pin_ = pin;
 }
 
+void SnkMower::set_pin_diag(bool enable) {
+  pin_diag_ = enable;
+}
+
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
   display_off_timeout_ms_ = minutes * 60000UL;
   ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
@@ -377,6 +403,21 @@ void SnkMower::read_rain_sensor() {
 
 void SnkMower::loop() {
   uint32_t now = millis();
+
+  if (pin_diag_) {
+    if (now - last_diag_ms_ >= DIAG_INTERVAL_MS) {
+      last_diag_ms_ = now;
+      for (int i = 0; i < NUM_DIAG_SCAN_PINS; i++) {
+        int gpio = DIAG_SCAN_PINS[i];
+        int level = gpio_get_level((gpio_num_t)gpio);
+        if ((uint8_t)level != diag_prev_[gpio]) {
+          ESP_LOGD(TAG, "DIAG: GPIO%02d: %d\u2192%d", gpio, diag_prev_[gpio], level);
+          diag_prev_[gpio] = level;
+        }
+      }
+    }
+    return;
+  }
 
   while (available() > 0) {
     uint8_t byte;

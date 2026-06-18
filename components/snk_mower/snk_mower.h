@@ -65,6 +65,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_buzzer_pin(gpio_num_t pin);
   void set_display_off_timeout(uint32_t minutes);
   void set_rain_pin(gpio_num_t pin);
+  void set_pin_diag(bool enable);
 
  protected:
   std::string pin_;
@@ -153,6 +154,11 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   uint32_t display_off_timeout_ms_{0};
   bool display_off_{false};
+
+  bool pin_diag_{false};
+  uint8_t diag_prev_[40]{0};
+  uint32_t last_diag_ms_{0};
+  static constexpr uint32_t DIAG_INTERVAL_MS = 20;
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];
