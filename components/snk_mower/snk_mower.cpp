@@ -1,50 +1,68 @@
 #include "snk_mower.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/application.h"
 
 namespace esphome {
 namespace snk_mower {
 
 static const char *const TAG = "snk_mower";
 
-// ── JSON command IDs (from captures) ─────────────────────────
-static const uint32_t CMD_ESP_BOOT     = 0x40000004;
-static const uint32_t CMD_ESP_INIT     = 0x40000001;
-static const uint32_t CMD_ESP_INFO     = 0x40000006;
-static const uint32_t CMD_ESP_KEEPALIVE = 0x30000005;
-static const uint32_t CMD_ESP_POLL     = 0x300000A1;
-static const uint32_t CMD_ESP_WIFI     = 0x30000021;
-static const uint32_t CMD_ESP_BT       = 0x30000022;
-static const uint32_t CMD_PIN_SEND     = 0x41000005;
-static const uint32_t CMD_PIN_RESULT   = 0x33000021;
-static const uint32_t CMD_STATUS       = 0x330000A0;
-static const uint32_t CMD_LOCK         = 0x41000002;
-static const uint32_t CMD_ERROR_NOTIFY = 0x41000004;
-static const uint32_t CMD_START_ACK    = 0x41000020;
-static const uint32_t CMD_EXEC_ACTION  = 0x41000003;
-static const uint32_t CMD_SHUTDOWN     = 0x41000008;
-static const uint32_t CMD_DEVICE_INFO  = 0x330000A1;
-static const uint32_t CMD_HW_VERSIONS  = 0x330000A2;
-static const uint32_t CMD_BATTERY      = 0x50000021;
-static const uint32_t CMD_RTC          = 0x40000011;
-static const uint32_t CMD_LIGHT        = 0x40000020;
-static const uint32_t CMD_MAP_CFG      = 0x330000B0;
-static const uint32_t CMD_SCHEDULE     = 0x330000A6;
-static const uint32_t CMD_RAIN_CFG     = 0x330000A7;
-static const uint32_t CMD_MULTIZONE    = 0x330000A8;
-static const uint32_t CMD_ERR_ACK      = 0x10000007;
-static const uint32_t CMD_RAIN         = 0x22000000;
-static const uint32_t CMD_POWER_ON     = 0x20000001;
-static const uint32_t CMD_POWER_READY  = 0x20000004;
-static const uint32_t CMD_BOOT_HEART   = 0x40000009;
-static const uint32_t CMD_BOOT_INIT    = 0x40000008;
+static const uint32_t CMD_POWER_ON       = 0x20000001;
+static const uint32_t CMD_POWER_READY    = 0x20000004;
+static const uint32_t CMD_RAIN           = 0x22000000;
+static const uint32_t CMD_ESP_KEEPALIVE  = 0x30000005;
+static const uint32_t CMD_SETTING_MODE   = 0x30000006;
+static const uint32_t CMD_SETTING_APPLY  = 0x30000007;
+static const uint32_t CMD_ESP_STATE      = 0x30000028;
+static const uint32_t CMD_ESP_WIFI       = 0x30000021;
+static const uint32_t CMD_ESP_BT         = 0x30000022;
+static const uint32_t CMD_ESP_POLL       = 0x300000A1;
+static const uint32_t CMD_ESP_TRIM       = 0x300000A6;
+static const uint32_t CMD_ESP_RAIN_CFG   = 0x300000A7;
+static const uint32_t CMD_ESP_MULTIZONE  = 0x300000A8;
+static const uint32_t CMD_SETTING_START  = 0x31000016;
+static const uint32_t CMD_SETTING_SUB    = 0x31000017;
+static const uint32_t CMD_PIN_RESULT     = 0x33000021;
+static const uint32_t CMD_PIN_RESULT2    = 0x33000022;
+static const uint32_t CMD_STATUS         = 0x330000A0;
+static const uint32_t CMD_DEVICE_INFO    = 0x330000A1;
+static const uint32_t CMD_HW_VERSIONS    = 0x330000A2;
+static const uint32_t CMD_SCHEDULE       = 0x330000A6;
+static const uint32_t CMD_RAIN_CFG_RSP   = 0x330000A7;
+static const uint32_t CMD_MULTIZONE_RSP  = 0x330000A8;
+static const uint32_t CMD_SCHEDULE_END   = 0x330000AA;
+static const uint32_t CMD_MAP_CFG        = 0x330000B0;
+static const uint32_t CMD_ESP_BOOT       = 0x40000004;
+static const uint32_t CMD_ESP_INIT       = 0x40000001;
+static const uint32_t CMD_ESP_INFO       = 0x40000006;
+static const uint32_t CMD_BOOT_INIT      = 0x40000008;
+static const uint32_t CMD_BOOT_HEART     = 0x40000009;
+static const uint32_t CMD_RTC            = 0x40000011;
+static const uint32_t CMD_START_TIME_Q   = 0x40000012;
+static const uint32_t CMD_CUT_TIME_Q     = 0x40000013;
+static const uint32_t CMD_UNKNOWN_14     = 0x40000014;
+static const uint32_t CMD_LIGHT          = 0x40000020;
+static const uint32_t CMD_BOOT_ACK       = 0x40000021;
+static const uint32_t CMD_LOCK           = 0x41000002;
+static const uint32_t CMD_EXEC_ACTION    = 0x41000003;
+static const uint32_t CMD_ERROR_NOTIFY   = 0x41000004;
+static const uint32_t CMD_PIN_SEND       = 0x41000005;
+static const uint32_t CMD_SHUTDOWN       = 0x41000008;
+static const uint32_t CMD_START_ACK      = 0x41000020;
+static const uint32_t CMD_BATTERY        = 0x50000021;
+static const uint32_t CMD_RETURN_HOME    = 0x10000001;
+static const uint32_t CMD_ERR_ACK2       = 0x10000002;
+static const uint32_t CMD_ERR_ACK7       = 0x10000007;
 
-static const char *const STATUS_NAMES[] = {
+static const uint32_t CMD_SETTING_ACK_BASE = 0x33000000;
+
+static const char *const STATE_NAMES[] = {
     "unknown", "idle",    "mowing", "returning",
     "charging", "docked", "error",  "locked",
 };
 
-static const char *const STATUS_DISPLAY[] = {
+static const char *const STATE_DISPLAY[] = {
     "IdLE", "IdLE", "Mow ", "HoME",
     "ChAr", "IdLE", "Err ", "LoCK",
 };
@@ -72,7 +90,6 @@ static int voltage_to_percent(float v) {
   return 50;
 }
 
-// ── Bit-bang SPI: shift out 24 bits (3 bytes) ───────────────
 static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
                     uint8_t b0, uint8_t b1, uint8_t b2) {
   gpio_set_level(cs, 0);
@@ -87,10 +104,8 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
   gpio_set_level(cs, 1);
 }
 
-// ── Constructor ──────────────────────────────────────────────
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
-// ── setup ────────────────────────────────────────────────────
 void SnkMower::setup() {
   ESP_LOGI(TAG, "SNK Mower starting (PIN: %s, JSON at 230400)", pin_.c_str());
   last_activity_ms_ = millis();
@@ -99,6 +114,11 @@ void SnkMower::setup() {
     gpio_set_direction(buzzer_pin_, GPIO_MODE_OUTPUT);
     gpio_set_level(buzzer_pin_, 0);
     ESP_LOGI(TAG, "Buzzer on GPIO%d", (int)buzzer_pin_);
+  }
+
+  if (rain_pin_ != GPIO_NUM_NC) {
+    gpio_set_direction(rain_pin_, GPIO_MODE_INPUT);
+    ESP_LOGI(TAG, "Rain sensor on GPIO%d", (int)rain_pin_);
   }
 
   setup_display();
@@ -165,12 +185,11 @@ void SnkMower::set_display_battery(int percent) {
   char buf[5];
   percent = std::min(100, std::max(0, percent));
   if (percent == 100) {
-    buf[0] = ' ', buf[1] = '1', buf[2] = '0', buf[3] = '0';
+    buf[0] = 'b', buf[1] = '1', buf[2] = '0', buf[3] = '0';
   } else {
-    buf[0] = ' ', buf[1] = '0' + (percent / 10);
+    buf[0] = 'b', buf[1] = '0' + (percent / 10);
     buf[2] = '0' + (percent % 10), buf[3] = ' ';
   }
-  buf[0] = 'b';
   set_display_text(buf);
 }
 
@@ -231,6 +250,10 @@ void SnkMower::set_buzzer_pin(uint8_t pin) {
   buzzer_pin_ = (gpio_num_t)pin;
 }
 
+void SnkMower::set_rain_pin(uint8_t pin) {
+  rain_pin_ = (gpio_num_t)pin;
+}
+
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
   display_off_timeout_ms_ = minutes * 60000UL;
   ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
@@ -244,7 +267,6 @@ void SnkMower::buzz(int duration_ms) {
   gpio_set_level(buzzer_pin_, 0);
 }
 
-// ── JSON send ────────────────────────────────────────────────
 void SnkMower::send_json(const JsonDocument &doc) {
   size_t n = serializeJson(doc, tx_buf_, BUF_SIZE);
   if (n > 0) {
@@ -282,11 +304,15 @@ void SnkMower::send_keepalive() {
 
 void SnkMower::send_wifi_status() {
   StaticJsonDocument<64> doc;
+  bool wifi_connected = (WiFi.status() == WL_CONNECTED);
+  int wifi_str = wifi_connected ? 1 : 0;
+
   doc["cmd"] = CMD_ESP_WIFI;
-  doc["wifi"] = 0;
-  doc["str"] = 0;
+  doc["wifi"] = wifi_str;
+  doc["str"] = wifi_str;
   send_json(doc);
 
+  doc.clear();
   doc["cmd"] = CMD_ESP_BT;
   doc["bt"] = 0;
   doc["str"] = 0;
@@ -299,21 +325,50 @@ void SnkMower::send_esp_info() {
   doc["hv"] = 60400;
   doc["sv"] = 30202;
   doc["spw"] = 0;
-  doc["mac"] = "08-f9-e0-b3-da-70";
+  uint8_t mac[6];
+  esp_efuse_mac_get_default(mac);
+  char mac_str[18];
+  snprintf(mac_str, sizeof(mac_str), "%02x-%02x-%02x-%02x-%02x-%02x",
+           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  doc["mac"] = mac_str;
   send_json(doc);
 }
 
 void SnkMower::send_error_ack() {
   StaticJsonDocument<64> doc;
-  doc["cmd"] = CMD_ERR_ACK;
+  doc["cmd"] = CMD_ERR_ACK7;
   send_json(doc);
 }
 
-// ── loop ─────────────────────────────────────────────────────
+void SnkMower::send_return_home() {
+  StaticJsonDocument<64> doc;
+  doc["cmd"] = CMD_RETURN_HOME;
+  send_json(doc);
+}
+
+void SnkMower::send_esp_state(int state) {
+  StaticJsonDocument<64> doc;
+  doc["cmd"] = CMD_ESP_STATE;
+  doc["state"] = state;
+  send_json(doc);
+}
+
+void SnkMower::send_rain_status(int rain) {
+  StaticJsonDocument<64> doc;
+  doc["cmd"] = CMD_RAIN;
+  doc["rain"] = rain;
+  send_json(doc);
+}
+
+void SnkMower::read_rain_sensor() {
+  if (rain_pin_ == GPIO_NUM_NC) return;
+  int rain = gpio_get_level(rain_pin_);
+  send_rain_status(rain);
+}
+
 void SnkMower::loop() {
   uint32_t now = millis();
 
-  // Read available bytes, accumulate JSON
   while (available() > 0) {
     uint8_t byte;
     read_byte(&byte);
@@ -324,7 +379,7 @@ void SnkMower::loop() {
     }
 
     if (rx_in_json_) {
-      if (rx_index_ < RX_BUF_SIZE - 1) {
+      if (rx_index_ < BUF_SIZE - 1) {
         rx_buf_[rx_index_++] = (char)byte;
       }
 
@@ -341,7 +396,6 @@ void SnkMower::loop() {
     }
   }
 
-  // Init sequence (once)
   if (!boot_sent_ && now > 100) {
     boot_sent_ = true;
     send_boot();
@@ -349,32 +403,38 @@ void SnkMower::loop() {
     send_init();
     delay(50);
     send_esp_info();
+    send_esp_state(0);
   }
 
-  // Send PIN after boot
-  if (!pin_sent_ && boot_sent_ && now > 2000) {
+  if (!pin_sent_ && boot_sent_ && power_ready_ && now > 2000) {
     send_pin();
   }
 
-  // Keepalive every ~200ms (matching observed frequency)
   if (now - last_keepalive_ > 200) {
     last_keepalive_ = now;
     send_keepalive();
   }
 
-  // WiFi/BT status every ~5s
   if (now - last_wifi_status_ > 5000) {
     last_wifi_status_ = now;
     send_wifi_status();
   }
 
-  // ESP info every ~30s
   if (now - last_esp_info_ > 30000) {
     last_esp_info_ = now;
     send_esp_info();
   }
 
-  // Display auto-off
+  if (now - last_esp_state_ > 10000) {
+    last_esp_state_ = now;
+    send_esp_state(state_);
+  }
+
+  if (now - last_rain_read_ > 60000) {
+    last_rain_read_ = now;
+    read_rain_sensor();
+  }
+
   if (display_off_timeout_ms_ > 0 && !display_off_ &&
       current_state_ != MowerState::MOWING &&
       current_state_ != MowerState::CHARGING &&
@@ -389,38 +449,42 @@ void SnkMower::loop() {
   refresh_display();
 }
 
-// ── JSON handlers ────────────────────────────────────────────
 void SnkMower::handle_json(const JsonDocument &doc) {
   uint32_t cmd = doc["cmd"];
 
   switch (cmd) {
-    case CMD_PIN_RESULT:
-      handle_pin_result(doc);
-      break;
-    case CMD_STATUS:
-      handle_status(doc);
-      break;
-    case CMD_ERROR_NOTIFY:
-      handle_error_notify(doc);
-      break;
-    case CMD_RTC:
-      handle_rtc(doc);
-      break;
-    case CMD_DEVICE_INFO:
-      handle_device_info(doc);
-      break;
-    case CMD_BATTERY:
-      handle_battery_info(doc);
-      break;
-    case CMD_SHUTDOWN:
-      ESP_LOGI(TAG, "Shutdown requested");
-      publish_mower_state(MowerState::IDLE);
-      break;
-    case CMD_LOCK:
-      ESP_LOGD(TAG, "Lock: %d", doc["lock"] | 0);
-      break;
+    case CMD_PIN_RESULT:       handle_pin_result(doc); break;
+    case CMD_PIN_RESULT2:      handle_pin_result2(doc); break;
+    case CMD_STATUS:           handle_status(doc); break;
+    case CMD_ERROR_NOTIFY:     handle_error_notify(doc); break;
+    case CMD_RTC:              handle_rtc(doc); break;
+    case CMD_DEVICE_INFO:      handle_device_info(doc); break;
+    case CMD_HW_VERSIONS:      handle_hw_versions(doc); break;
+    case CMD_BATTERY:          handle_battery_info(doc); break;
+    case CMD_MAP_CFG:          handle_map_cfg(doc); break;
+    case CMD_SCHEDULE:         handle_schedule(doc); break;
+    case CMD_SCHEDULE_END:     handle_schedule_end(doc); break;
+    case CMD_RAIN_CFG_RSP:     handle_rain_cfg(doc); break;
+    case CMD_MULTIZONE_RSP:    handle_multizone(doc); break;
+    case CMD_LIGHT:            handle_light(doc); break;
+    case CMD_POWER_ON:         handle_power_on(doc); break;
+    case CMD_POWER_READY:      handle_power_ready(doc); break;
+    case CMD_BOOT_HEART:       handle_boot_heart(doc); break;
+    case CMD_BOOT_INIT:        handle_boot_init(doc); break;
+    case CMD_LOCK:             handle_lock(doc); break;
+    case CMD_START_ACK:        handle_start_ack(doc); break;
+    case CMD_EXEC_ACTION:      handle_exec_action(doc); break;
+    case CMD_SHUTDOWN:         handle_shutdown(doc); break;
+    case CMD_BOOT_ACK:         ESP_LOGD(TAG, "Boot ACK"); break;
+    case CMD_START_TIME_Q:     handle_start_time_query(doc); break;
+    case CMD_CUT_TIME_Q:       handle_cut_time_query(doc); break;
+    case CMD_UNKNOWN_14:       ESP_LOGV(TAG, "Unknown 0x40000014"); break;
     default:
-      ESP_LOGD(TAG, "RX: 0x%08lX", (unsigned long)cmd);
+      if ((cmd & 0xFFFFFF00) == CMD_SETTING_ACK_BASE && (cmd & 0xFF) >= 0x09 && (cmd & 0xFF) <= 0x27) {
+        handle_setting_ack(doc, cmd);
+      } else {
+        ESP_LOGD(TAG, "RX: 0x%08lX", (unsigned long)cmd);
+      }
       break;
   }
 }
@@ -431,9 +495,13 @@ void SnkMower::handle_status(const JsonDocument &doc) {
   }
   if (doc.containsKey("error")) {
     error_code_ = doc["error"];
+    if (error_code_sensor_)
+      error_code_sensor_->publish_state(error_code_);
   }
   if (doc.containsKey("bat_lv")) {
     bat_lv_ = doc["bat_lv"];
+    if (bat_level_bars_sensor_)
+      bat_level_bars_sensor_->publish_state(bat_lv_);
   }
   if (doc.containsKey("bat_per")) {
     bat_per_ = doc["bat_per"];
@@ -441,24 +509,64 @@ void SnkMower::handle_status(const JsonDocument &doc) {
     if (battery_level_sensor_)
       battery_level_sensor_->publish_state(bat_per_);
   }
+  if (doc.containsKey("rain_delay")) {
+    rain_delay = doc["rain_delay"];
+    if (rain_delay_sensor_)
+      rain_delay_sensor_->publish_state(rain_delay);
+  }
+  if (doc.containsKey("rain_state")) {
+    rain_state = doc["rain_state"];
+  }
+  if (doc.containsKey("bat_health")) {
+    bat_health = doc["bat_health"];
+    if (bat_health_sensor_)
+      bat_health_sensor_->publish_state(bat_health);
+  }
+  if (doc.containsKey("work_area")) {
+    work_area_ = doc["work_area"];
+    if (work_area_sensor_)
+      work_area_sensor_->publish_state(work_area_);
+  }
+  if (doc.containsKey("cut_area")) {
+    cut_area_ = doc["cut_area"];
+    if (cut_area_sensor_)
+      cut_area_sensor_->publish_state(cut_area_);
+  }
+  if (doc.containsKey("total_minutes")) {
+    total_minutes_ = doc["total_minutes"];
+    if (total_minutes_sensor_)
+      total_minutes_sensor_->publish_state(total_minutes_);
+  }
+  if (doc.containsKey("on_minutes")) {
+    on_minutes_ = doc["on_minutes"];
+    if (on_minutes_sensor_)
+      on_minutes_sensor_->publish_state(on_minutes_);
+  }
+  if (doc.containsKey("bat_ctime")) {
+    bat_ctime_ = doc["bat_ctime"];
+  }
+  if (doc.containsKey("bat_dtime")) {
+    bat_dtime_ = doc["bat_dtime"];
+  }
+  if (doc.containsKey("cur_minutes")) {
+    cur_minutes_ = doc["cur_minutes"];
+  }
+  if (doc.containsKey("bat_min_temp")) {
+    bat_min_temp_ = doc["bat_min_temp"];
+  }
 
-  bool station = doc["station"] | false;
+  station_ = doc["station"] | false;
 
   MowerState s;
-  if (station) {
+  if (station_ && (state_ == 0 || state_ == 1)) {
     s = MowerState::DOCKED;
   } else {
     switch (state_) {
-      case 2:
-        s = MowerState::MOWING;
-        break;
-      case 6:
-      case 7:
-        s = MowerState::ERROR_STATE;
-        break;
-      default:
-        s = MowerState::IDLE;
-        break;
+      case 2:  s = MowerState::MOWING; break;
+      case 6:  s = MowerState::RETURNING; break;
+      case 7:  s = MowerState::ERROR_STATE; break;
+      case 11: s = MowerState::CHARGING; break;
+      default: s = MowerState::IDLE; break;
     }
   }
 
@@ -471,8 +579,8 @@ void SnkMower::handle_status(const JsonDocument &doc) {
 
   publish_mower_state(s);
 
-  ESP_LOGD(TAG, "Status: state=%d bat_lv=%d bat_per=%d error=%d",
-           state_, bat_lv_, bat_per_, error_code_);
+  ESP_LOGD(TAG, "Status: state=%d bat_lv=%d bat_per=%d error=%d station=%d area=%d",
+           state_, bat_lv_, bat_per_, error_code_, station_, work_area_);
 }
 
 void SnkMower::handle_pin_result(const JsonDocument &doc) {
@@ -492,6 +600,11 @@ void SnkMower::handle_pin_result(const JsonDocument &doc) {
       pin_sent_ = false;
     }
   }
+}
+
+void SnkMower::handle_pin_result2(const JsonDocument &doc) {
+  bool ok = doc["result"] | false;
+  ESP_LOGD(TAG, "PIN result2: %s", ok ? "OK" : "FAIL");
 }
 
 void SnkMower::handle_error_notify(const JsonDocument &doc) {
@@ -520,25 +633,189 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     const char *sn = doc["sn"] | "";
     int version = doc["version"] | 0;
     int pwd_en = doc["pwd_en"] | 0;
+
     ESP_LOGI(TAG, "Device: %s (%s) S/N=%s v=%d pwd_en=%d",
              name, model, sn, version, pwd_en);
+
+    if (device_name_sensor_)
+      device_name_sensor_->publish_state(name);
+    if (model_sensor_)
+      model_sensor_->publish_state(model);
+    if (serial_sensor_)
+      serial_sensor_->publish_state(sn);
+    if (firmware_version_sensor_) {
+      char ver_str[16];
+      snprintf(ver_str, sizeof(ver_str), "%d", version);
+      firmware_version_sensor_->publish_state(ver_str);
+    }
+    if (doc.containsKey("bat_name") && battery_name_sensor_) {
+      battery_name_sensor_->publish_state(doc["bat_name"] | "");
+    }
   }
+}
+
+void SnkMower::handle_hw_versions(const JsonDocument &doc) {
+  int mb_hv = doc["mb_hv"] | 0;
+  int mb_sv = doc["mb_sv"] | 0;
+  int bb_hv = doc["bb_hv"] | 0;
+  int bb_sv = doc["bb_sv"] | 0;
+  int db_hv = doc["db_hv"] | 0;
+  int db_sv = doc["db_sv"] | 0;
+  int mblt_sv = doc["mblt_sv"] | 0;
+
+  ESP_LOGI(TAG, "HW: MB hv=%d sv=%d, BB hv=%d sv=%d, DB hv=%d sv=%d, MBLT sv=%d",
+           mb_hv, mb_sv, bb_hv, bb_sv, db_hv, db_sv, mblt_sv);
 }
 
 void SnkMower::handle_battery_info(const JsonDocument &doc) {
   if (doc.containsKey("bat")) {
     int bars = doc["bat"];
     ESP_LOGD(TAG, "Battery bars: %d", bars);
+    if (bat_level_bars_sensor_)
+      bat_level_bars_sensor_->publish_state(bars);
   }
 }
 
-// ── Public API ───────────────────────────────────────────────
+void SnkMower::handle_map_cfg(const JsonDocument &doc) {
+  int area = doc["area"] | 0;
+  int map_sn = doc["map_sn"] | 0;
+  ESP_LOGI(TAG, "Map: area=%d m², map_sn=%d", area, map_sn);
+  work_area_ = area;
+  if (work_area_sensor_)
+    work_area_sensor_->publish_state(area);
+}
+
+void SnkMower::handle_schedule(const JsonDocument &doc) {
+  int trim = doc["trim"] | 0;
+  bool auto_mode = doc["auto"] | false;
+  int pause = doc["pause"] | 0;
+
+  ESP_LOGI(TAG, "Schedule: trim=%d auto=%d pause=%d", trim, auto_mode, pause);
+
+  const char *days[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
+  for (int i = 0; i < 7; i++) {
+    char st_key[8], len_key[8];
+    snprintf(st_key, sizeof(st_key), "%s_st", days[i]);
+    snprintf(len_key, sizeof(len_key), "%s_len", days[i]);
+    if (doc.containsKey(st_key)) {
+      int st = doc[st_key];
+      int len = doc[len_key] | 0;
+      ESP_LOGD(TAG, "  %s: start=%d min, len=%d min", days[i], st, len);
+    }
+  }
+}
+
+void SnkMower::handle_schedule_end(const JsonDocument &doc) {
+  ESP_LOGD(TAG, "Schedule block end");
+}
+
+void SnkMower::handle_rain_cfg(const JsonDocument &doc) {
+  bool rain_en = doc["rain_en"] | false;
+  int delay = doc["rain_delay"] | 0;
+  ESP_LOGI(TAG, "Rain config: enabled=%d, delay=%d min", rain_en, delay);
+  rain_delay = delay;
+  if (rain_delay_sensor_)
+    rain_delay_sensor_->publish_state(delay);
+}
+
+void SnkMower::handle_multizone(const JsonDocument &doc) {
+  bool mul_en = doc["mul_en"] | false;
+  bool mul_auto = doc["mul_auto"] | false;
+  ESP_LOGI(TAG, "Multizone: enabled=%d, auto=%d", mul_en, mul_auto);
+
+  for (int i = 1; i <= 4; i++) {
+    char z_key[8], per_key[8], meter_key[8];
+    snprintf(z_key, sizeof(z_key), "mul_z%d", i);
+    snprintf(per_key, sizeof(per_key), "per_z%d", i);
+    snprintf(meter_key, sizeof(meter_key), "meter_z%d", i);
+    if (doc.containsKey(z_key)) {
+      ESP_LOGD(TAG, "  Zone %d: start=%d%%, per=%d%%, meter=%d",
+               i, doc[z_key] | 0, doc[per_key] | 0, doc[meter_key] | 0);
+    }
+  }
+}
+
+void SnkMower::handle_light(const JsonDocument &doc) {
+  if (doc.containsKey("lv")) {
+    light_lv_ = doc["lv"];
+    ESP_LOGD(TAG, "Light level: %d", light_lv_);
+    if (light_level_sensor_)
+      light_level_sensor_->publish_state(light_lv_);
+  }
+}
+
+void SnkMower::handle_signal_level(const JsonDocument &doc) {
+  if (doc.containsKey("lv")) {
+    signal_lv_ = doc["lv"];
+    ESP_LOGD(TAG, "Signal level: %d", signal_lv_);
+    if (signal_level_sensor_)
+      signal_level_sensor_->publish_state(signal_lv_);
+  }
+}
+
+void SnkMower::handle_power_on(const JsonDocument &doc) {
+  int action = doc["action"] | 0;
+  ESP_LOGI(TAG, "Power ON (action=%d)", action);
+}
+
+void SnkMower::handle_power_ready(const JsonDocument &doc) {
+  ESP_LOGI(TAG, "Power READY");
+  power_ready_ = true;
+}
+
+void SnkMower::handle_boot_heart(const JsonDocument &doc) {
+  ESP_LOGV(TAG, "Boot heartbeat");
+}
+
+void SnkMower::handle_boot_init(const JsonDocument &doc) {
+  ESP_LOGD(TAG, "Boot init");
+}
+
+void SnkMower::handle_lock(const JsonDocument &doc) {
+  lock_ = doc["lock"] | 0;
+  ESP_LOGD(TAG, "Lock: %d", lock_);
+  if (is_locked_sensor_)
+    is_locked_sensor_->publish_state(lock_ != 0);
+}
+
+void SnkMower::handle_start_ack(const JsonDocument &doc) {
+  int result = doc["result"] | 0;
+  ESP_LOGI(TAG, "START ACK: result=%d", result);
+}
+
+void SnkMower::handle_exec_action(const JsonDocument &doc) {
+  ESP_LOGD(TAG, "Exec action");
+}
+
+void SnkMower::handle_shutdown(const JsonDocument &doc) {
+  ESP_LOGI(TAG, "Shutdown requested");
+  publish_mower_state(MowerState::IDLE);
+}
+
+void SnkMower::handle_start_time_query(const JsonDocument &doc) {
+  int hour = doc["hour"] | 0;
+  int minute = doc["minute"] | 0;
+  ESP_LOGI(TAG, "Start time query: %02d:%02d", hour, minute);
+}
+
+void SnkMower::handle_cut_time_query(const JsonDocument &doc) {
+  int len = doc["len"] | 0;
+  ESP_LOGI(TAG, "Cut time query: %d min", len);
+}
+
+void SnkMower::handle_setting_ack(const JsonDocument &doc, uint32_t cmd) {
+  bool result = doc["result"] | false;
+  uint8_t sub = cmd & 0xFF;
+  ESP_LOGD(TAG, "Setting ACK 0x%02X: %s", sub, result ? "OK" : "FAIL");
+}
+
 void SnkMower::start_mowing() {
-  ESP_LOGI(TAG, "Command: start mowing");
+  ESP_LOGI(TAG, "Command: start mowing (physical button on mainboard)");
 }
 
 void SnkMower::return_to_dock() {
   ESP_LOGI(TAG, "Command: return to dock");
+  send_return_home();
 }
 
 void SnkMower::publish_mower_state(MowerState state) {
@@ -557,24 +834,47 @@ void SnkMower::publish_mower_state(MowerState state) {
   if (has_error_sensor_)
     has_error_sensor_->publish_state(state == MowerState::ERROR_STATE ||
                                       state == MowerState::LOCKED);
+  if (is_returning_sensor_)
+    is_returning_sensor_->publish_state(state == MowerState::RETURNING);
+
+  if (mower_state_sensor_)
+    mower_state_sensor_->publish_state(STATE_NAMES[idx]);
 
   if (state == MowerState::MOWING) {
     set_display_battery(last_battery_percent_);
   } else if (state == MowerState::CHARGING) {
     set_charging_display(last_battery_percent_);
   } else {
-    set_display_text(STATUS_DISPLAY[idx]);
+    set_display_text(STATE_DISPLAY[idx]);
   }
 }
 
-// ── Sensor setters ───────────────────────────────────────────
 void SnkMower::set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
 void SnkMower::set_battery_voltage_sensor(sensor::Sensor *s) { battery_voltage_sensor_ = s; }
 void SnkMower::set_error_code_sensor(sensor::Sensor *s) { error_code_sensor_ = s; }
+void SnkMower::set_light_level_sensor(sensor::Sensor *s) { light_level_sensor_ = s; }
+void SnkMower::set_signal_level_sensor(sensor::Sensor *s) { signal_level_sensor_ = s; }
+void SnkMower::set_work_area_sensor(sensor::Sensor *s) { work_area_sensor_ = s; }
+void SnkMower::set_cut_area_sensor(sensor::Sensor *s) { cut_area_sensor_ = s; }
+void SnkMower::set_total_minutes_sensor(sensor::Sensor *s) { total_minutes_sensor_ = s; }
+void SnkMower::set_on_minutes_sensor(sensor::Sensor *s) { on_minutes_sensor_ = s; }
+void SnkMower::set_bat_health_sensor(sensor::Sensor *s) { bat_health_sensor_ = s; }
+void SnkMower::set_bat_level_bars_sensor(sensor::Sensor *s) { bat_level_bars_sensor_ = s; }
+void SnkMower::set_rain_delay_sensor(sensor::Sensor *s) { rain_delay_sensor_ = s; }
+
 void SnkMower::set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
 void SnkMower::set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
 void SnkMower::set_is_docked_sensor(binary_sensor::BinarySensor *s) { is_docked_sensor_ = s; }
 void SnkMower::set_has_error_sensor(binary_sensor::BinarySensor *s) { has_error_sensor_ = s; }
+void SnkMower::set_is_locked_sensor(binary_sensor::BinarySensor *s) { is_locked_sensor_ = s; }
+void SnkMower::set_is_returning_sensor(binary_sensor::BinarySensor *s) { is_returning_sensor_ = s; }
+
+void SnkMower::set_device_name_sensor(text_sensor::TextSensor *s) { device_name_sensor_ = s; }
+void SnkMower::set_model_sensor(text_sensor::TextSensor *s) { model_sensor_ = s; }
+void SnkMower::set_serial_sensor(text_sensor::TextSensor *s) { serial_sensor_ = s; }
+void SnkMower::set_firmware_version_sensor(text_sensor::TextSensor *s) { firmware_version_sensor_ = s; }
+void SnkMower::set_battery_name_sensor(text_sensor::TextSensor *s) { battery_name_sensor_ = s; }
+void SnkMower::set_mower_state_sensor(text_sensor::TextSensor *s) { mower_state_sensor_ = s; }
 
 }  // namespace snk_mower
 }  // namespace esphome
