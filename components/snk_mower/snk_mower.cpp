@@ -436,8 +436,6 @@ void SnkMower::publish_mower_state(MowerState state) {
   current_state_ = state;
   int idx = static_cast<int>(state);
 
-  if (status_text_sensor_) status_text_sensor_->publish_state(STATUS_NAMES[idx]);
-
   if (is_mowing_sensor_)
     is_mowing_sensor_->publish_state(state == MowerState::MOWING);
   if (is_charging_sensor_)
@@ -463,8 +461,6 @@ void SnkMower::publish_mower_state(MowerState state) {
 void SnkMower::set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
 void SnkMower::set_battery_voltage_sensor(sensor::Sensor *s) { battery_voltage_sensor_ = s; }
 void SnkMower::set_error_code_sensor(sensor::Sensor *s) { error_code_sensor_ = s; }
-void SnkMower::set_status_text_sensor(text_sensor::TextSensor *s) { status_text_sensor_ = s; }
-void SnkMower::set_status_message_sensor(text_sensor::TextSensor *s) { status_message_sensor_ = s; }
 void SnkMower::set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
 void SnkMower::set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
 void SnkMower::set_is_docked_sensor(binary_sensor::BinarySensor *s) { is_docked_sensor_ = s; }

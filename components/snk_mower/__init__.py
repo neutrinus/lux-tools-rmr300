@@ -5,7 +5,7 @@ from esphome.const import (
     CONF_BATTERY_LEVEL,
     CONF_BATTERY_VOLTAGE,
 )
-from esphome.components import uart, sensor, text_sensor, binary_sensor
+from esphome.components import uart, sensor, binary_sensor
 
 DEPENDENCIES = ["uart"]
 
@@ -17,8 +17,6 @@ CONF_DISPLAY_CLK = "display_clk"
 CONF_DISPLAY_MOSI = "display_mosi"
 CONF_DISPLAY_CS = "display_cs"
 
-CONF_STATUS_TEXT = "status_text"
-CONF_STATUS_MESSAGE = "status_message"
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
 CONF_IS_CHARGING = "is_charging"
@@ -56,8 +54,6 @@ CONFIG_SCHEMA = (
                 icon="mdi:alert-circle",
                 accuracy_decimals=0,
             ),
-            cv.Optional(CONF_STATUS_TEXT): text_sensor.text_sensor_schema(),
-            cv.Optional(CONF_STATUS_MESSAGE): text_sensor.text_sensor_schema(),
             cv.Optional(CONF_IS_MOWING): binary_sensor.binary_sensor_schema(
                 device_class="running",
             ),
@@ -102,14 +98,6 @@ async def to_code(config):
     if CONF_ERROR_CODE in config:
         sens = await sensor.new_sensor(config[CONF_ERROR_CODE])
         cg.add(var.set_error_code_sensor(sens))
-
-    if CONF_STATUS_TEXT in config:
-        sens = await text_sensor.new_text_sensor(config[CONF_STATUS_TEXT])
-        cg.add(var.set_status_text_sensor(sens))
-
-    if CONF_STATUS_MESSAGE in config:
-        sens = await text_sensor.new_text_sensor(config[CONF_STATUS_MESSAGE])
-        cg.add(var.set_status_message_sensor(sens))
 
     if CONF_IS_MOWING in config:
         sens = await binary_sensor.new_binary_sensor(config[CONF_IS_MOWING])

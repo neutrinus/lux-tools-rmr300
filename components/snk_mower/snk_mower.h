@@ -4,7 +4,6 @@
 #include "esphome/core/hal.h"
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
-#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 
 namespace esphome {
@@ -33,9 +32,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_battery_level_sensor(sensor::Sensor *s);
   void set_battery_voltage_sensor(sensor::Sensor *s);
   void set_error_code_sensor(sensor::Sensor *s);
-
-  void set_status_text_sensor(text_sensor::TextSensor *s);
-  void set_status_message_sensor(text_sensor::TextSensor *s);
 
   void set_is_mowing_sensor(binary_sensor::BinarySensor *s);
   void set_is_charging_sensor(binary_sensor::BinarySensor *s);
@@ -115,8 +111,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   sensor::Sensor *battery_level_sensor_{nullptr};
   sensor::Sensor *battery_voltage_sensor_{nullptr};
   sensor::Sensor *error_code_sensor_{nullptr};
-  text_sensor::TextSensor *status_text_sensor_{nullptr};
-  text_sensor::TextSensor *status_message_sensor_{nullptr};
   binary_sensor::BinarySensor *is_mowing_sensor_{nullptr};
   binary_sensor::BinarySensor *is_charging_sensor_{nullptr};
   binary_sensor::BinarySensor *is_docked_sensor_{nullptr};
