@@ -148,6 +148,7 @@ void SnkMower::setup() {
   setup_display();
   set_display_text("----");
 
+  ESP_LOGI(TAG, "Sending boot sequence...");
   send_boot();
   delay(50);
   send_init();
@@ -155,6 +156,8 @@ void SnkMower::setup() {
   send_esp_info();
   send_esp_state(0);
   boot_sent_ = true;
+  ESP_LOGI(TAG, "Boot sequence sent");
+
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -320,7 +323,7 @@ void SnkMower::send_boot() {
 void SnkMower::send_init() {
   JsonDocument doc;
   doc["cmd"] = CMD_ESP_INIT;
-  doc["init"] = 3;
+  doc["init"] = 2;
   send_json(doc);
 }
 
@@ -460,12 +463,12 @@ void SnkMower::loop() {
     send_pin();
   }
 
-  if (now - last_poll_ > 100) {
+  if (now > 2000 && now - last_poll_ > 100) {
     last_poll_ = now;
     send_poll();
   }
 
-  if (now - last_keepalive_ > 200) {
+  if (now > 2000 && now - last_keepalive_ > 200) {
     last_keepalive_ = now;
     send_keepalive();
   }
