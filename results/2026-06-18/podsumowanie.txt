@@ -1,0 +1,80 @@
+============================================
+  Wyszukiwanie SNK: czw, 18 cze 2026, 09:38:47 CEST
+============================================
+
+═══ OLX ═══
+[Lux Tools A-RMR-300-24] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Lux+Tools+A-RMR-300-24/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Adano RM5] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Adano+RM5/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Scheppach BRMR300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Scheppach+BRMR300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Scheppach BTRM300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Scheppach+BTRM300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Scheppach RRMA300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Scheppach+RRMA300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Brucke RM500] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Brucke+RM500/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Brucke RM501] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Brucke+RM501/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Brucke RM800] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Brucke+RM800/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Gomag Go-MR300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Gomag+Go-MR300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Grouw City 300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Grouw+City+300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Meec Tools robot] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Meec+Tools+kosiarka+robot/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Julan robot] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Julan+robot+kosz%C4%85cy/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Landxcape robot] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Landxcape+robot+kosz%C4%85cy/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Sunseeker robot] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Sunseeker+robot+kosz%C4%85cy/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Smart 365 robot] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Smart+365+robot+kosz%C4%85cy/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[robot 300m2] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-kosiarka+robot+300m2/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[automat 300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-kosiarka+automatyczna+300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+
+═══ eBay Kleinanzeigen (DE) ═══
+https://www.kleinanzeigen.de/s-scheppach-brmr300/k0
+https://www.kleinanzeigen.de/s-scheppach-btrm300/k0
+https://www.kleinanzeigen.de/s-scheppach-rrma300/k0
+https://www.kleinanzeigen.de/s-lux-tools-a-rmr-300-24/k0
+https://www.kleinanzeigen.de/s-brucke-rm500/k0
+https://www.kleinanzeigen.de/s-brucke-rm501/k0
+https://www.kleinanzeigen.de/s-brucke-rm800/k0
+https://www.kleinanzeigen.de/s-adano-rm5/k0
+https://www.kleinanzeigen.de/s-gomag-go-mr300/k0
+https://www.kleinanzeigen.de/s-grouw-city-300/k0
+https://www.kleinanzeigen.de/s-smart-365-maehroboter/k0
+https://www.kleinanzeigen.de/s-meec-tools-maehroboter/k0
+https://www.kleinanzeigen.de/s-julan-maehroboter/k0
+https://www.kleinanzeigen.de/s-landxcape-maehroboter/k0
+https://www.kleinanzeigen.de/s-sunseeker-maehroboter/k0
+
+═══ Blocket (SE) ═══
+https://www.blocket.se/annonser?q=scheppach+brmr300&sort=date
+https://www.blocket.se/annonser?q=scheppach+btrm300&sort=date
+https://www.blocket.se/annonser?q=scheppach+rrma300&sort=date
+https://www.blocket.se/annonser?q=lux+tools+robotgr%C3%A4sklippare&sort=date
+https://www.blocket.se/annonser?q=brucke+rm500&sort=date
+https://www.blocket.se/annonser?q=adano+rm5&sort=date
+https://www.blocket.se/annonser?q=gomag+go-mr300&sort=date
+https://www.blocket.se/annonser?q=grouw+city+300&sort=date
+https://www.blocket.se/annonser?q=meec+tools+robotgr%C3%A4sklippare&sort=date
+https://www.blocket.se/annonser?q=julan+robotgr%C3%A4sklippare&sort=date
+https://www.blocket.se/annonser?q=sunseeker+robotgr%C3%A4sklippare&sort=date
+
+═══ eBay (DE) ═══
+https://www.ebay.de/sch/i.html?_nkw=scheppach+brmr300&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=scheppach+btrm300&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=scheppach+rrma300&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=lux+tools+a-rmr-300-24&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=brucke+rm500&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=adano+rm5&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=gomag+go-mr300&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=grouw+city+300&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=meec+tools+maehroboter&_sop=10
+https://www.ebay.de/sch/i.html?_nkw=sunseeker+maehroboter&_sop=10
+
+============================================
+  INSTRUKCJA
+============================================
+
+1. Otwórz linki z OLX w przeglądarce
+2. Otwórz linki z Kleinanzeigen w przeglądarce
+3. Otwórz linki z Blocket w przeglądarce
+4. Otwórz linki z eBay w przeglądarce
+5. Ręcznie Allegro:
+   https://allegro.pl/kategoria/roboty-koszace-154355?condition=USED&order=qd
+     - szukaj: scheppach, brucke, lux tools, adano
+6. Allegro Lokalnie:
+   https://allegrolokalnie.pl/oferty/roboty-koszace?conditionType=USED&priceTo=300
+
+Zapisano: results/2026-06-18/podsumowanie.txt

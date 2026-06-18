@@ -5,7 +5,7 @@
 **Recovered PIN: 9633** ✅
 
 Step-by-step procedure to recover the PIN from the mower firmware via SWD.
-This mower is an SNK OEM platform, also sold as **Adano RM5** (Harald Nyborg / Schou).
+This mower is an **SNK OEM platform** — the same hardware is sold under many brands across Europe.
 
 ---
 
@@ -134,6 +134,7 @@ mainboard for verification — the ESP32 does not store it.
 ```
 kosiarka/
 ├── README.md                         ← this file
+├── ALIASES.md                        ← all known SNK rebrand names
 ├── HARDWARE.md                       ← PCB analysis, pinouts, SWD
 ├── firmware/
 │   ├── u13_flash_1mb.bin             ← full U13 flash dump (1 MB)
@@ -212,10 +213,25 @@ After reboot, the mower will be factory reset — no PIN required.
 
 ---
 
-## Related Products
+## Known Rebrands (same SNK platform)
 
-- **Adano RM5** — Harald Nyborg (Denmark), Schou (Scandinavia)
-- Part numbers: `80102372-01` (mainboard), `80102373-01` (display)
+All of these are the same hardware — PIN recovery works identically on every one:
+
+| Brand | Model(s) | Sold at / Region |
+|-------|----------|-----------------|
+| **Lux Tools** | A-RMR-300-24, Oryx 300 Vision A-RMR-300-26 | OBI (PL/DE) |
+| **Scheppach** | BRMR300, **BTRM300** ✅, RRMA300 | Bauhaus, Aldi, Blocket (DE/SE) |
+| **Brucke** | RM500, RM501, RM800 | Finland |
+| **Adano** | RM5 | Harald Nyborg, Schou (DK/SE) |
+| **Gomag** | Go-MR300 | DE |
+| **Grouw** | City 300² | Schou (Scandinavia) |
+| **Smart** | 365 500m² | Schou (Scandinavia) |
+| **Meec Tools** | 300 m² (art. 027415) | Jula (FI/SE) |
+| **Julan** | 300 m² | Jula (FI/SE) |
+| **Landxcape** | (referenced in firmware) | — |
+| **Sunseeker** | V1 300m² Vision AI | Puuilo (FI) |
+
+**Part numbers:** mainboard `80102372-01` (SNK_MAINBOARD_CP_V11), display `80102373-01` (SNK_DISPLAY_CP_V11).
 
 ---
 

@@ -1,0 +1,43 @@
+============================================
+  Wyszukiwanie okazji: śro, 17 cze 2026, 22:35:12 CEST
+============================================
+
+═══ OLX ═══
+[Lux Tools A-RMR-300-24] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Lux+Tools+A-RMR-300-24/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Adano RM5] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Adano+RM5/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Scheppach BRMR300] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Scheppach+BRMR300/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Brucke RM500] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Brucke+RM500/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[brak PIN] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-robot+kosz%C4%85cy+brak+pinu/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[zablokowany] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-robot+kosz%C4%85cy+zablokowany/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[uszkodzony ogólnie] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-robot+kosz%C4%85cy+uszkodzony/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Worx brak PIN] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Worx+Landroid+brak+pinu/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Worx uszkodzony] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Worx+Landroid+uszkodzony/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Einhell uszkodzony] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Einhell+Freelexo+uszkodzony/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Bosch uszkodzony] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Bosch+Indego+uszkodzony/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+[Gardena uszkodzony] https://www.olx.pl/dom-ogrod/ogrod/kosiarki/q-Gardena+Sileno+uszkodzony/?search%5Border%5D=created_at:desc&search%5Bfilter_float_price:to%5D=300
+
+═══ eBay Kleinanzeigen (DE) ═══
+https://www.kleinanzeigen.de/s-maehroboter-defekt-pin/preis:20:300/k0
+https://www.kleinanzeigen.de/s-maehroboter-pin-vergessen/k0
+https://www.kleinanzeigen.de/s-scheppach-brmr300-defekt/k0
+https://www.kleinanzeigen.de/s-lux-tools-a-rmr-300-24-defekt/k0
+https://www.kleinanzeigen.de/s-brucke-rm500/k0
+
+============================================
+  INSTRUKCJA
+============================================
+
+1. Otwórz linki z OLX w przeglądarce
+2. Otwórz linki z Kleinanzeigen w przeglądarce
+3. Sprawdź Allegro (blokuje boty, trzeba ręcznie):
+   https://allegro.pl/kategoria/roboty-koszace-154355?condition=USED&damaged=1&order=qd
+4. Sprawdź Allegro Lokalnie:
+   https://allegrolokalnie.pl/oferty/roboty-koszace?conditionType=USED&priceTo=300
+
+Co kupować:
+- SNK (nasza) do 300 zł -> bierz, FORMATFLASH.json ogarnia
+- Worx Landroid do 150 zł -> bierz, PIN do odzyskania
+- Inne do 100 zł -> bierz jeśli jest stacja ładująca
+- Bosch Indego -> tylko jeśli sprzedawca odblokuje z konta
+
+Zapisano: results/2026-06-17/podsumowanie.txt

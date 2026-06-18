@@ -25,11 +25,13 @@ substitutions:
   api_key: !secret api_key
   ota_password: !secret ota_password
 
+external_components:
+  - source: github://neutrinus/lux-tools-rmr300@main:components
+    components: [snk_mower]
+
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-  includes:
-    - components/snk_mower
 
 esp32:
   board: esp32dev

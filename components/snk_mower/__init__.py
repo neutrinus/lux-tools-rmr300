@@ -7,7 +7,7 @@ from esphome.const import (
 )
 from esphome.components import uart, sensor, text_sensor, binary_sensor
 
-DEPENDENCIES = ["uart", "spi"]
+DEPENDENCIES = ["uart"]
 
 snk_mower_ns = cg.esphome_ns.namespace("snk_mower")
 SnkMower = snk_mower_ns.class_("SnkMower", cg.Component, uart.UARTDevice)
