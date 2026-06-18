@@ -131,6 +131,13 @@ void SnkMower::setup() {
   last_display_ms_ = 0;
   charging_frame_ = 0;
   last_charging_frame_ms_ = 0;
+  last_activity_ms_ = millis();
+
+  if (buzzer_pin_ != GPIO_NUM_NC) {
+    gpio_set_direction(buzzer_pin_, GPIO_MODE_OUTPUT);
+    gpio_set_level(buzzer_pin_, 0);
+    ESP_LOGI(TAG, "Buzzer on GPIO%d", (int)buzzer_pin_);
+  }
 
   setup_display();
   set_display_text("----");
@@ -159,6 +166,7 @@ void SnkMower::setup_display() {
 
 void SnkMower::refresh_display() {
   if (display_clk_ == GPIO_NUM_NC) return;
+  if (display_off_) return;
 
   uint32_t now = millis();
   if (now - last_display_ms_ < DISPLAY_REFRESH_MS) return;
@@ -222,7 +230,23 @@ uint8_t SnkMower::char_to_segments_(char c) {
   return char_to_segments_impl(c);
 }
 
-// ── UART ─────────────────────────────────────────────────────
+void SnkMower::set_buzzer_pin(uint8_t pin) {
+  buzzer_pin_ = (gpio_num_t)pin;
+}
+
+void SnkMower::set_display_off_timeout(uint32_t minutes) {
+  display_off_timeout_ms_ = minutes * 60000UL;
+  ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
+           (unsigned)minutes, (unsigned)display_off_timeout_ms_);
+}
+
+void SnkMower::buzz(int duration_ms) {
+  if (buzzer_pin_ == GPIO_NUM_NC) return;
+  gpio_set_level(buzzer_pin_, 1);
+  delay(duration_ms);
+  gpio_set_level(buzzer_pin_, 0);
+}
+
 void SnkMower::send_frame(uint8_t cmd, const uint8_t *payload, size_t len) {
   uint8_t cs = cmd;
   for (size_t i = 0; i < len; i++) cs ^= payload[i];
@@ -234,6 +258,7 @@ void SnkMower::send_frame(uint8_t cmd, const uint8_t *payload, size_t len) {
   write_byte(cs);
 
   expecting_response_ = true;
+  last_request_ms_ = millis();
 
   ESP_LOGD(TAG, "TX: AA 55 %02X [%zuB] CS=%02X", cmd, len, cs);
 }
@@ -249,11 +274,17 @@ void SnkMower::poll_battery() { send_frame(CMD_BAT_INFO_REQ, nullptr, 0); }
 
 void SnkMower::start_mowing() {
   ESP_LOGI(TAG, "Command: start mowing");
+  last_activity_ms_ = millis();
+  display_off_ = false;
+  buzz(100);
   send_frame(CMD_MOW_START, nullptr, 0);
 }
 
 void SnkMower::return_to_dock() {
   ESP_LOGI(TAG, "Command: return to dock");
+  last_activity_ms_ = millis();
+  display_off_ = false;
+  buzz(100);
   send_frame(CMD_CHARGE_RET, nullptr, 0);
 }
 
@@ -298,6 +329,12 @@ void SnkMower::loop() {
     }
   }
 
+  if (expecting_response_ && millis() - last_request_ms_ > RESPONSE_TIMEOUT_MS) {
+    ESP_LOGW(TAG, "Response timeout (cmd=0x%02X, %ums elapsed), resetting",
+             rx_cmd_, (unsigned)(millis() - last_request_ms_));
+    expecting_response_ = false;
+  }
+
   if (!expecting_response_ && millis() - last_poll_ > 2000) {
     last_poll_ = millis();
 
@@ -318,6 +355,17 @@ void SnkMower::loop() {
       else
         poll_battery();
     }
+  }
+
+  if (display_off_timeout_ms_ > 0 && !display_off_ &&
+      current_state_ != MowerState::MOWING &&
+      current_state_ != MowerState::CHARGING &&
+      current_state_ != MowerState::RETURNING &&
+      current_state_ != MowerState::ERROR_STATE &&
+      current_state_ != MowerState::LOCKED &&
+      millis() - last_activity_ms_ > display_off_timeout_ms_) {
+    ESP_LOGD(TAG, "Display auto-off (idle %ums)", (unsigned)(millis() - last_activity_ms_));
+    display_off_ = true;
   }
 
   refresh_display();
@@ -356,6 +404,7 @@ void SnkMower::handle_pin_response(const uint8_t *data, size_t len) {
       ESP_LOGI(TAG, "PIN accepted");
       pin_ok_ = true;
       pin_retries_ = 0;
+      buzz(80);
       publish_mower_state(MowerState::IDLE);
     } else {
       ESP_LOGW(TAG, "PIN rejected (attempt %d/5)", pin_retries_);
@@ -385,6 +434,8 @@ void SnkMower::handle_status_response(const uint8_t *data, size_t len) {
   else
     s = MowerState::IDLE;
 
+  if (s == MowerState::ERROR_STATE && current_state_ != MowerState::ERROR_STATE)
+    buzz(300);
   publish_mower_state(s);
   ESP_LOGD(TAG, "Status 0x%02X -> %s", flags, STATUS_NAMES[static_cast<int>(s)]);
 }
@@ -418,6 +469,8 @@ void SnkMower::handle_error_info(const uint8_t *data, size_t len) {
 
 void SnkMower::publish_mower_state(MowerState state) {
   current_state_ = state;
+  last_activity_ms_ = millis();
+  display_off_ = false;
   int idx = static_cast<int>(state);
 
   if (is_mowing_sensor_)

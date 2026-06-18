@@ -16,6 +16,8 @@ CONF_PIN = "pin"
 CONF_DISPLAY_CLK = "display_clk"
 CONF_DISPLAY_MOSI = "display_mosi"
 CONF_DISPLAY_CS = "display_cs"
+CONF_BUZZER_PIN = "buzzer_pin"
+CONF_DISPLAY_OFF_TIMEOUT = "display_off_timeout"
 
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
@@ -39,6 +41,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_DISPLAY_CLK, default=18): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_MOSI, default=23): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_CS, default=5): cv.int_range(0, 39),
+            cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
+            cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -86,6 +90,12 @@ async def to_code(config):
         config[CONF_DISPLAY_MOSI],
         config[CONF_DISPLAY_CS],
     ))
+
+    if CONF_BUZZER_PIN in config:
+        cg.add(var.set_buzzer_pin(config[CONF_BUZZER_PIN]))
+
+    if config[CONF_DISPLAY_OFF_TIMEOUT] > 0:
+        cg.add(var.set_display_off_timeout(config[CONF_DISPLAY_OFF_TIMEOUT]))
 
     if CONF_BATTERY_LEVEL in config:
         sens = await sensor.new_sensor(config[CONF_BATTERY_LEVEL])

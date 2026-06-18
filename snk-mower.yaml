@@ -73,6 +73,8 @@ snk_mower:
   display_clk: 18                   # SCLK → 74HC595 SH_CP
   display_mosi: 23                  # MOSI → 74HC595 DS
   display_cs: 5                     # CS/latch → 74HC595 ST_CP
+  buzzer_pin: 12                    # optional, 0-39, omit to disable
+  display_off_timeout: 5            # minutes of idle before display off (0=never)
 
   battery_level:
     name: "${friendly_name} Battery Level"
@@ -80,10 +82,6 @@ snk_mower:
     name: "${friendly_name} Battery Voltage"
   error_code:
     name: "${friendly_name} Error Code"
-  status_text:
-    name: "${friendly_name} Status"
-  status_message:
-    name: "${friendly_name} Status Detail"
   is_mowing:
     name: "${friendly_name} Mowing"
   is_charging:

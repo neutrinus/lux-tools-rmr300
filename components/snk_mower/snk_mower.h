@@ -41,6 +41,9 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   void start_mowing();
   void return_to_dock();
+  void buzz(int duration_ms);
+  void set_buzzer_pin(uint8_t pin);
+  void set_display_off_timeout(uint32_t minutes);
 
  protected:
   std::string pin_;
@@ -65,12 +68,20 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   bool expecting_response_{false};
   uint32_t last_poll_{0};
+  uint32_t last_request_ms_{0};
+  static constexpr uint32_t RESPONSE_TIMEOUT_MS = 500;
 
   int8_t rx_state_{-1};
   uint8_t rx_cmd_{0};
   uint8_t rx_buf_[32];
   size_t rx_len_{0};
   size_t rx_index_{0};
+
+  uint8_t buzzer_pin_{GPIO_NUM_NC};
+
+  uint32_t display_off_timeout_ms_{0};
+  uint32_t last_activity_ms_{0};
+  bool display_off_{false};
 
   // --- Display (3x 74HC595 -> 4-digit 7-segment) ---
   void setup_display();

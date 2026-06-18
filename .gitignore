@@ -18,3 +18,4 @@ ghidra/
 tools/bridge_compile/
 tools/bridge_compile_test/
 *.class
+.esphome/
