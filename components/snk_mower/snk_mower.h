@@ -5,7 +5,9 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include <driver/gpio.h>
+#include <ArduinoJson.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -33,59 +35,129 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_battery_level_sensor(sensor::Sensor *s);
   void set_battery_voltage_sensor(sensor::Sensor *s);
   void set_error_code_sensor(sensor::Sensor *s);
+  void set_light_level_sensor(sensor::Sensor *s);
+  void set_signal_level_sensor(sensor::Sensor *s);
+  void set_work_area_sensor(sensor::Sensor *s);
+  void set_cut_area_sensor(sensor::Sensor *s);
+  void set_total_minutes_sensor(sensor::Sensor *s);
+  void set_on_minutes_sensor(sensor::Sensor *s);
+  void set_bat_health_sensor(sensor::Sensor *s);
+  void set_bat_level_bars_sensor(sensor::Sensor *s);
+  void set_rain_delay_sensor(sensor::Sensor *s);
 
   void set_is_mowing_sensor(binary_sensor::BinarySensor *s);
   void set_is_charging_sensor(binary_sensor::BinarySensor *s);
   void set_is_docked_sensor(binary_sensor::BinarySensor *s);
   void set_has_error_sensor(binary_sensor::BinarySensor *s);
+  void set_is_locked_sensor(binary_sensor::BinarySensor *s);
+  void set_is_returning_sensor(binary_sensor::BinarySensor *s);
+
+  void set_device_name_sensor(text_sensor::TextSensor *s);
+  void set_model_sensor(text_sensor::TextSensor *s);
+  void set_serial_sensor(text_sensor::TextSensor *s);
+  void set_firmware_version_sensor(text_sensor::TextSensor *s);
+  void set_battery_name_sensor(text_sensor::TextSensor *s);
+  void set_mower_state_sensor(text_sensor::TextSensor *s);
 
   void start_mowing();
   void return_to_dock();
   void buzz(int duration_ms);
   void set_buzzer_pin(uint8_t pin);
   void set_display_off_timeout(uint32_t minutes);
+  void set_rain_pin(uint8_t pin);
 
  protected:
   std::string pin_;
 
-  // --- UART ---
-  void send_frame(uint8_t cmd, const uint8_t *payload, size_t len);
+  void send_json(const JsonDocument &doc);
+  void send_boot();
+  void send_init();
   void send_pin();
-  void poll_status();
-  void poll_battery();
+  void send_keepalive();
+  void send_wifi_status();
+  void send_esp_info();
+  void send_error_ack();
+  void send_return_home();
+  void send_esp_state(int state);
+  void send_rain_status(int rain);
 
-  void handle_response(uint8_t cmd, const uint8_t *data, size_t len);
-  void handle_status_response(const uint8_t *data, size_t len);
-  void handle_battery_response(const uint8_t *data, size_t len);
-  void handle_pin_response(const uint8_t *data, size_t len);
-  void handle_error_info(const uint8_t *data, size_t len);
+  void handle_json(const JsonDocument &doc);
+
+  void handle_status(const JsonDocument &doc);
+  void handle_pin_result(const JsonDocument &doc);
+  void handle_error_notify(const JsonDocument &doc);
+  void handle_rtc(const JsonDocument &doc);
+  void handle_device_info(const JsonDocument &doc);
+  void handle_hw_versions(const JsonDocument &doc);
+  void handle_battery_info(const JsonDocument &doc);
+  void handle_map_cfg(const JsonDocument &doc);
+  void handle_schedule(const JsonDocument &doc);
+  void handle_rain_cfg(const JsonDocument &doc);
+  void handle_multizone(const JsonDocument &doc);
+  void handle_light(const JsonDocument &doc);
+  void handle_power_on(const JsonDocument &doc);
+  void handle_power_ready(const JsonDocument &doc);
+  void handle_boot_heart(const JsonDocument &doc);
+  void handle_boot_init(const JsonDocument &doc);
+  void handle_lock(const JsonDocument &doc);
+  void handle_start_ack(const JsonDocument &doc);
+  void handle_exec_action(const JsonDocument &doc);
+  void handle_shutdown(const JsonDocument &doc);
+  void handle_pin_result2(const JsonDocument &doc);
+  void handle_schedule_end(const JsonDocument &doc);
+  void handle_setting_ack(const JsonDocument &doc, uint32_t cmd);
+  void handle_signal_level(const JsonDocument &doc);
+  void handle_cut_time_query(const JsonDocument &doc);
+  void handle_start_time_query(const JsonDocument &doc);
 
   void publish_mower_state(MowerState state);
-  void send_action(uint8_t cmd);
+  void read_rain_sensor();
 
+  bool boot_sent_{false};
   bool pin_sent_{false};
   bool pin_ok_{false};
   int pin_retries_{0};
+  bool power_ready_{false};
 
-  bool expecting_response_{false};
-  uint32_t last_poll_{0};
-  uint32_t last_request_ms_{0};
-  uint8_t poll_phase_{0};
-  static constexpr uint32_t RESPONSE_TIMEOUT_MS = 500;
+  uint32_t last_keepalive_{0};
+  uint32_t last_wifi_status_{0};
+  uint32_t last_esp_info_{0};
+  uint32_t last_esp_state_{0};
+  uint32_t last_activity_ms_{0};
+  uint32_t last_rain_read_{0};
 
-  int8_t rx_state_{-1};
-  uint8_t rx_cmd_{0};
-  static constexpr uint8_t RX_BUF_SIZE = 32;
-  uint8_t rx_buf_[RX_BUF_SIZE];
-  size_t rx_index_{0};
+  int state_{0};
+  int error_code_{0};
+  int bat_lv_{0};
+  int bat_per_{0};
+  int light_lv_{0};
+  int signal_lv_{0};
+  int work_area_{0};
+  int cut_area_{0};
+  int total_minutes_{0};
+  int on_minutes_{0};
+  int bat_health_{0};
+  int rain_delay_{0};
+  int rain_state_{0};
+  int bat_ctime_{0};
+  int bat_dtime_{0};
+  int cur_minutes_{0};
+  int bat_min_temp_{0};
+  bool station_{false};
+  int lock_{0};
 
   uint8_t buzzer_pin_{GPIO_NUM_NC};
+  uint8_t rain_pin_{GPIO_NUM_NC};
 
   uint32_t display_off_timeout_ms_{0};
-  uint32_t last_activity_ms_{0};
   bool display_off_{false};
 
-  // --- Display (3x 74HC595 -> 4-digit 7-segment) ---
+  static constexpr size_t BUF_SIZE = 512;
+  char rx_buf_[BUF_SIZE];
+  size_t rx_index_{0};
+  bool rx_in_json_{false};
+  char tx_buf_[BUF_SIZE];
+
   void setup_display();
   void refresh_display();
   void set_display_text(const char *text, bool colon = false);
@@ -119,14 +191,32 @@ class SnkMower : public Component, public uart::UARTDevice {
   MowerState current_state_{MowerState::UNKNOWN};
   int last_battery_percent_{0};
 
-  // --- Sensors ---
   sensor::Sensor *battery_level_sensor_{nullptr};
   sensor::Sensor *battery_voltage_sensor_{nullptr};
   sensor::Sensor *error_code_sensor_{nullptr};
+  sensor::Sensor *light_level_sensor_{nullptr};
+  sensor::Sensor *signal_level_sensor_{nullptr};
+  sensor::Sensor *work_area_sensor_{nullptr};
+  sensor::Sensor *cut_area_sensor_{nullptr};
+  sensor::Sensor *total_minutes_sensor_{nullptr};
+  sensor::Sensor *on_minutes_sensor_{nullptr};
+  sensor::Sensor *bat_health_sensor_{nullptr};
+  sensor::Sensor *bat_level_bars_sensor_{nullptr};
+  sensor::Sensor *rain_delay_sensor_{nullptr};
+
   binary_sensor::BinarySensor *is_mowing_sensor_{nullptr};
   binary_sensor::BinarySensor *is_charging_sensor_{nullptr};
   binary_sensor::BinarySensor *is_docked_sensor_{nullptr};
   binary_sensor::BinarySensor *has_error_sensor_{nullptr};
+  binary_sensor::BinarySensor *is_locked_sensor_{nullptr};
+  binary_sensor::BinarySensor *is_returning_sensor_{nullptr};
+
+  text_sensor::TextSensor *device_name_sensor_{nullptr};
+  text_sensor::TextSensor *model_sensor_{nullptr};
+  text_sensor::TextSensor *serial_sensor_{nullptr};
+  text_sensor::TextSensor *firmware_version_sensor_{nullptr};
+  text_sensor::TextSensor *battery_name_sensor_{nullptr};
+  text_sensor::TextSensor *mower_state_sensor_{nullptr};
 };
 
 }  // namespace snk_mower

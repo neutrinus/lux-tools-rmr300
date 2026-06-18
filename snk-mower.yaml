@@ -59,12 +59,12 @@ api:
 ota:
   password: ${ota_password}
 
-# ── UART to mainboard (GPIO13 RX, GPIO15 TX, 115200 8N1) ───
+# ── UART to mainboard (GPIO13 RX, GPIO15 TX, 230400 8N1 JSON) ─
 uart:
   id: mower_uart
   tx_pin: GPIO15
   rx_pin: GPIO13
-  baud_rate: 115200
+  baud_rate: 230400
 
 # ── SNK Mower custom component ─────────────────────────────
 snk_mower:
