@@ -276,20 +276,20 @@ void SnkMower::send_json(const JsonDocument &doc) {
 }
 
 void SnkMower::send_boot() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ESP_BOOT;
   send_json(doc);
 }
 
 void SnkMower::send_init() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ESP_INIT;
   doc["init"] = 3;
   send_json(doc);
 }
 
 void SnkMower::send_pin() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_PIN_SEND;
   doc["pwd"] = atoi(pin_.c_str());
   send_json(doc);
@@ -297,13 +297,13 @@ void SnkMower::send_pin() {
 }
 
 void SnkMower::send_keepalive() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ESP_KEEPALIVE;
   send_json(doc);
 }
 
 void SnkMower::send_wifi_status() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   bool wifi_connected = (WiFi.status() == WL_CONNECTED);
   int wifi_str = wifi_connected ? 1 : 0;
 
@@ -320,7 +320,7 @@ void SnkMower::send_wifi_status() {
 }
 
 void SnkMower::send_esp_info() {
-  StaticJsonDocument<128> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ESP_INFO;
   doc["hv"] = 60400;
   doc["sv"] = 30202;
@@ -335,26 +335,26 @@ void SnkMower::send_esp_info() {
 }
 
 void SnkMower::send_error_ack() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ERR_ACK7;
   send_json(doc);
 }
 
 void SnkMower::send_return_home() {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_RETURN_HOME;
   send_json(doc);
 }
 
 void SnkMower::send_esp_state(int state) {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_ESP_STATE;
   doc["state"] = state;
   send_json(doc);
 }
 
 void SnkMower::send_rain_status(int rain) {
-  StaticJsonDocument<64> doc;
+  JsonDocument doc;
   doc["cmd"] = CMD_RAIN;
   doc["rain"] = rain;
   send_json(doc);
@@ -387,7 +387,7 @@ void SnkMower::loop() {
         rx_buf_[rx_index_] = '\0';
         rx_in_json_ = false;
 
-        StaticJsonDocument<512> doc;
+        JsonDocument doc;
         DeserializationError err = deserializeJson(doc, rx_buf_);
         if (!err && doc.containsKey("cmd")) {
           handle_json(doc);
