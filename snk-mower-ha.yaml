@@ -41,9 +41,9 @@ ota:
 
 uart:
   id: mower_uart
-  tx_pin: GPIO14
-  rx_pin: GPIO15
-  baud_rate: 230400
+  tx_pin: GPIO15
+  rx_pin: GPIO13
+  baud_rate: 115200
   rx_buffer_size: 512
   debug:
     direction: RX
