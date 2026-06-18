@@ -41,8 +41,8 @@ ota:
 
 uart:
   id: mower_uart
-  tx_pin: GPIO15
-  rx_pin: GPIO14
+  tx_pin: GPIO14
+  rx_pin: GPIO15
   baud_rate: 230400
   rx_buffer_size: 512
   debug:
@@ -55,9 +55,9 @@ snk_mower:
   id: my_mower
   uart_id: mower_uart
   pin: "9633"
-  display_clk: 18
-  display_mosi: 23
-  display_cs: 5
+  display_clk: 10
+  display_mosi: 12
+  display_cs: 15
 
   battery_level:
     name: "${friendly_name} Battery Level"
