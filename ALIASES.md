@@ -8,7 +8,7 @@ To jest ten sam OEM (SNK) sprzedawany pod różnymi markami:
 | **Lux Tools** | Oryx 300 Vision A-RMR-300-26 | OBI |
 | **Adano** | RM5 | Harald Nyborg, Schou (Dania, Skandynawia) |
 | **Brucke** | RM500 / RM501 / RM800 | Finlandia |
-| **Scheppach** | BRMR300 | Bauhaus (Niemcy) |
+| **Scheppach** | **BRMR300** ✅ potwierdzony | Bauhaus, Kleinanzeigen (Niemcy) |
 | **Scheppach** | **BTRM300** ✅ potwierdzony | Blocket/Szwecja |
 | **Scheppach** | RRMA300 | Aldi (Niemcy) |
 | **Gomag** | Go-MR300 | Niemcy |

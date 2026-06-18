@@ -41,7 +41,7 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 | Ref | Function |
 |-----|----------|
 | **U7** | Buck converter — 20V battery → 3.3V/5V logic rails |
-| **J5** (`BATTERY`) | Main 20V Li-Ion battery input (2-pin white connector) |
+| **J5** (`BATTERY`) | Main 20V Li-Ion battery input (4-pin white connector — V+, GND, SDA, SCL or UART) |
 
 ### BLDC Motor Drivers
 

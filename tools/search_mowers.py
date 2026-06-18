@@ -26,7 +26,12 @@ OLX_QUERIES = [
     "Scheppach BRMR300", "Scheppach BTRM300", "Scheppach RRMA300",
     "Brucke RM500", "Brucke RM501", "Brucke RM800",
     "Gomag Go-MR300", "Grouw City 300",
-    "Meec Tools", "Julan", "Smart 365",
+    "Meec Tools robot", "Julan", "Smart 365",
+    "kosiarka lux tools", "robot koszący lux tools",
+    "kosiarka scheppach", "robot scheppach",
+    "kosiarka adano", "kosiarka brucke",
+    "robot koszący meec", "robot koszący grouw",
+    "robot koszący 300m2 uszkodzony",
 ]
 
 BLOCKET_QUERIES = [
@@ -45,11 +50,14 @@ KLEINANZEIGEN_QUERIES = [
 ALLEGRO_URLS = [
     ("Kategoria roboty koszące", "https://allegro.pl/kategoria/roboty-koszace-154355?condition=USED&order=qd"),
     ("Scheppach BRMR300", "https://allegro.pl/listing?string=scheppach+brmr300&condition=USED&order=qd"),
-    ("Scheppach BTRM300", "https://allegro.pl/listing?string=scheppach+btrm300&condition=USED&order=qd"),
+    ("Scheppach RRMA300", "https://allegro.pl/listing?string=scheppach+rrma300&condition=USED&order=qd"),
     ("Brucke RM500", "https://allegro.pl/listing?string=brucke+rm500&condition=USED&order=qd"),
     ("Lux Tools A-RMR-300-24", "https://allegro.pl/listing?string=lux+tools+a-rmr-300-24&condition=USED&order=qd"),
+    ("Lux Tools robot", "https://allegro.pl/listing?string=lux+tools+robot+kosz%C4%85cy&condition=USED&order=qd"),
     ("Adano RM5", "https://allegro.pl/listing?string=adano+rm5&condition=USED&order=qd"),
     ("Gomag Go-MR300", "https://allegro.pl/listing?string=gomag+go-mr300&condition=USED&order=qd"),
+    ("Grouw City 300", "https://allegro.pl/listing?string=grouw+city+300&condition=USED&order=qd"),
+    ("Meec Tools robot", "https://allegro.pl/listing?string=meec+tools+robot+kosz%C4%85cy&condition=USED&order=qd"),
 ]
 
 ALLEGROLOKALNIE = "https://allegrolokalnie.pl/oferty/roboty-koszace?conditionType=USED&priceTo=300"
