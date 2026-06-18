@@ -5,6 +5,7 @@
 #include "esphome/components/uart/uart.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include <driver/gpio.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -71,30 +72,28 @@ class SnkMower : public Component, public uart::UARTDevice {
   size_t rx_len_{0};
   size_t rx_index_{0};
 
-  // --- Display (3× 74HC595 → 4-digit 7-segment) ---
+  // --- Display (3x 74HC595 -> 4-digit 7-segment) ---
   void setup_display();
   void refresh_display();
   void set_display_text(const char *text, bool colon = false);
   void set_display_battery(int percent);
-
   void set_charging_display(int percent);
 
-  uint8_t char_to_segments_(char c) const;
+  static uint8_t char_to_segments_(char c);
 
   static constexpr uint8_t DIGITS = 4;
   static constexpr uint8_t DISPLAY_REFRESH_MS = 4;
 
-  // Charging animation: segment patterns for digit 0
   static constexpr uint8_t CHG_FRAMES[3] = {
-      0b00001000,  // frame 0: segment D (bottom)       →
-      0b01001000,  // frame 1: segments D + G (bottom + middle)
-      0b01001001,  // frame 2: segments D + G + A (bottom + middle + top)
+      0b00001000,
+      0b01001000,
+      0b01001001,
   };
   static constexpr uint32_t CHG_FRAME_MS = 350;
 
-  ISRInternalGPIOPin display_clk_;
-  ISRInternalGPIOPin display_mosi_;
-  ISRInternalGPIOPin display_cs_;
+  gpio_num_t display_clk_{GPIO_NUM_NC};
+  gpio_num_t display_mosi_{GPIO_NUM_NC};
+  gpio_num_t display_cs_{GPIO_NUM_NC};
 
   uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
   uint8_t display_colon_{0};

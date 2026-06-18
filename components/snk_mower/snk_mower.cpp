@@ -54,52 +54,69 @@ static int voltage_to_percent(float v) {
   return 50;
 }
 
-// ── 7-segment character map ──────────────────────────────────
-// Layout: bit 0= A (top), 1= B (top-right), 2= C (bot-right),
-//         3= D (bot), 4= E (bot-left), 5= F (top-left),
-//         6= G (middle), 7= DP
-static const uint8_t SEG_CHARS[256] = {
-    [' '] = 0b00000000,
-    ['-'] = 0b01000000,
-    ['_'] = 0b00001000,
-    ['0'] = 0b00111111,
-    ['1'] = 0b00000110,
-    ['2'] = 0b01011011,
-    ['3'] = 0b01001111,
-    ['4'] = 0b01100110,
-    ['5'] = 0b01101101,
-    ['6'] = 0b01111101,
-    ['7'] = 0b00000111,
-    ['8'] = 0b01111111,
-    ['9'] = 0b01101111,
-    ['A'] = 0b01110111,
-    ['b'] = 0b01111100,
-    ['C'] = 0b00111001,
-    ['c'] = 0b01011000,
-    ['d'] = 0b01011110,
-    ['E'] = 0b01111001,
-    ['F'] = 0b01110001,
-    ['H'] = 0b01110110,
-    ['h'] = 0b01110100,
-    ['I'] = 0b00110000,
-    ['J'] = 0b00011110,
-    ['L'] = 0b00111000,
-    ['n'] = 0b01010100,
-    ['o'] = 0b01011100,
-    ['P'] = 0b01110011,
-    ['r'] = 0b01010000,
-    ['S'] = 0b01101101,
-    ['t'] = 0b01111000,
-    ['U'] = 0b00111110,
-    ['u'] = 0b00011100,
-};
+static uint8_t char_to_segments_impl(char c) {
+  switch (c) {
+    case ' ': return 0b00000000;
+    case '-': return 0b01000000;
+    case '_': return 0b00001000;
+    case '0': return 0b00111111;
+    case '1': return 0b00000110;
+    case '2': return 0b01011011;
+    case '3': return 0b01001111;
+    case '4': return 0b01100110;
+    case '5': return 0b01101101;
+    case '6': return 0b01111101;
+    case '7': return 0b00000111;
+    case '8': return 0b01111111;
+    case '9': return 0b01101111;
+    case 'A': return 0b01110111;
+    case 'b': return 0b01111100;
+    case 'C': return 0b00111001;
+    case 'c': return 0b01011000;
+    case 'd': return 0b01011110;
+    case 'E': return 0b01111001;
+    case 'F': return 0b01110001;
+    case 'H': return 0b01110110;
+    case 'h': return 0b01110100;
+    case 'I': return 0b00110000;
+    case 'J': return 0b00011110;
+    case 'L': return 0b00111000;
+    case 'n': return 0b01010100;
+    case 'o': return 0b01011100;
+    case 'P': return 0b01110011;
+    case 'r': return 0b01010000;
+    case 'S': return 0b01101101;
+    case 't': return 0b01111000;
+    case 'U': return 0b00111110;
+    case 'u': return 0b00011100;
+    default: return 0;
+  }
+}
+
+// ── Bit-bang SPI: shift out 24 bits (3 bytes) ───────────────
+static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
+                    uint8_t b0, uint8_t b1, uint8_t b2) {
+  gpio_set_level(cs, 0);
+  for (int i = 7; i >= 0; i--) {
+    gpio_set_level(mosi, (b0 >> i) & 1);
+    gpio_set_level(clk, 1);
+    gpio_set_level(clk, 0);
+  }
+  for (int i = 7; i >= 0; i--) {
+    gpio_set_level(mosi, (b1 >> i) & 1);
+    gpio_set_level(clk, 1);
+    gpio_set_level(clk, 0);
+  }
+  for (int i = 7; i >= 0; i--) {
+    gpio_set_level(mosi, (b2 >> i) & 1);
+    gpio_set_level(clk, 1);
+    gpio_set_level(clk, 0);
+  }
+  gpio_set_level(cs, 1);
+}
 
 // ── Constructor ──────────────────────────────────────────────
-SnkMower::SnkMower(const std::string &pin)
-    : pin_(pin),
-      display_clk_(GPIO_NUM_NC),
-      display_mosi_(GPIO_NUM_NC),
-      display_cs_(GPIO_NUM_NC) {}
+SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 // ── setup ────────────────────────────────────────────────────
 void SnkMower::setup() {
@@ -120,51 +137,28 @@ void SnkMower::setup() {
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
-  display_clk_ = ISRInternalGPIOPin(clk);
-  display_mosi_ = ISRInternalGPIOPin(mosi);
-  display_cs_ = ISRInternalGPIOPin(cs);
+  display_clk_ = (gpio_num_t)clk;
+  display_mosi_ = (gpio_num_t)mosi;
+  display_cs_ = (gpio_num_t)cs;
 }
 
 void SnkMower::setup_display() {
-  if (display_clk_.get_pin() == GPIO_NUM_NC) {
+  if (display_clk_ == GPIO_NUM_NC) {
     ESP_LOGW(TAG, "Display pins not configured, skipping display init");
     return;
   }
-  display_clk_.pin_mode(gpio::FLAG_OUTPUT);
-  display_mosi_.pin_mode(gpio::FLAG_OUTPUT);
-  display_cs_.pin_mode(gpio::FLAG_OUTPUT);
-  display_clk_.digital_write(false);
-  display_mosi_.digital_write(false);
-  display_cs_.digital_write(true);  // latch inactive
+  gpio_set_direction(display_clk_, GPIO_MODE_OUTPUT);
+  gpio_set_direction(display_mosi_, GPIO_MODE_OUTPUT);
+  gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
+  gpio_set_level(display_clk_, 0);
+  gpio_set_level(display_mosi_, 0);
+  gpio_set_level(display_cs_, 1);
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
-           display_clk_.get_pin(), display_mosi_.get_pin(), display_cs_.get_pin());
-}
-
-// ── Bit-bang SPI: shift out 24 bits (3 bytes) ───────────────
-static void shift24(ISRInternalGPIOPin &clk, ISRInternalGPIOPin &mosi,
-                    ISRInternalGPIOPin &cs, uint8_t b0, uint8_t b1,
-                    uint8_t b2) {
-  cs.digital_write(false);
-  for (int i = 7; i >= 0; i--) {
-    mosi.digital_write((b0 >> i) & 1);
-    clk.digital_write(true);
-    clk.digital_write(false);
-  }
-  for (int i = 7; i >= 0; i--) {
-    mosi.digital_write((b1 >> i) & 1);
-    clk.digital_write(true);
-    clk.digital_write(false);
-  }
-  for (int i = 7; i >= 0; i--) {
-    mosi.digital_write((b2 >> i) & 1);
-    clk.digital_write(true);
-    clk.digital_write(false);
-  }
-  cs.digital_write(true);
+           (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 }
 
 void SnkMower::refresh_display() {
-  if (display_clk_.get_pin() == GPIO_NUM_NC) return;
+  if (display_clk_ == GPIO_NUM_NC) return;
 
   uint32_t now = millis();
   if (now - last_display_ms_ < DISPLAY_REFRESH_MS) return;
@@ -172,7 +166,6 @@ void SnkMower::refresh_display() {
 
   uint8_t seg = display_segments_[current_digit_];
 
-  // Charging animation on digit 0: override segment with animation frame
   if (current_state_ == MowerState::CHARGING && current_digit_ == 0) {
     if (now - last_charging_frame_ms_ >= CHG_FRAME_MS) {
       last_charging_frame_ms_ = now;
@@ -184,11 +177,10 @@ void SnkMower::refresh_display() {
   uint8_t dig = 1 << current_digit_;
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  // 3 bytes: chip3 (unused), chip2 (digit selects + colon), chip1 (segments)
   shift24(display_clk_, display_mosi_, display_cs_,
-          0x00,                     // chip 3 – unused
-          display_colon_ | dig,     // chip 2 – colon + digit select
-          seg);                     // chip 1 – segments
+          0x00,
+          display_colon_ | dig,
+          seg);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
@@ -208,15 +200,12 @@ void SnkMower::set_display_battery(int percent) {
     buf[0] = ' ', buf[1] = '0' + (percent / 10);
     buf[2] = '0' + (percent % 10), buf[3] = ' ';
   }
-  // Add 'b' prefix on first digit (battery indicator)
   buf[0] = 'b';
   set_display_text(buf);
 }
 
 void SnkMower::set_charging_display(int percent) {
-  // Digit 0: blank (animation overrides in refresh_display)
   display_segments_[0] = 0;
-  // Digits 1-3: battery percentage
   percent = std::min(100, std::max(0, percent));
   if (percent == 100) {
     display_segments_[1] = char_to_segments_('1');
@@ -229,9 +218,8 @@ void SnkMower::set_charging_display(int percent) {
   }
 }
 
-uint8_t SnkMower::char_to_segments_(char c) const {
-  uint8_t v = SEG_CHARS[static_cast<uint8_t>(c)];
-  return v;
+uint8_t SnkMower::char_to_segments_(char c) {
+  return char_to_segments_impl(c);
 }
 
 // ── UART ─────────────────────────────────────────────────────
@@ -271,7 +259,6 @@ void SnkMower::return_to_dock() {
 
 // ── loop ─────────────────────────────────────────────────────
 void SnkMower::loop() {
-  // RX parser
   while (available() > 0) {
     uint8_t byte;
     read_byte(&byte);
@@ -311,7 +298,6 @@ void SnkMower::loop() {
     }
   }
 
-  // Periodic polling
   if (!expecting_response_ && millis() - last_poll_ > 2000) {
     last_poll_ = millis();
 
@@ -334,7 +320,6 @@ void SnkMower::loop() {
     }
   }
 
-  // Display refresh
   refresh_display();
 }
 
@@ -401,7 +386,7 @@ void SnkMower::handle_status_response(const uint8_t *data, size_t len) {
     s = MowerState::IDLE;
 
   publish_mower_state(s);
-  ESP_LOGD(TAG, "Status 0x%02X → %s", flags, STATUS_NAMES[static_cast<int>(s)]);
+  ESP_LOGD(TAG, "Status 0x%02X -> %s", flags, STATUS_NAMES[static_cast<int>(s)]);
 }
 
 void SnkMower::handle_battery_response(const uint8_t *data, size_t len) {
@@ -414,13 +399,12 @@ void SnkMower::handle_battery_response(const uint8_t *data, size_t len) {
   if (battery_voltage_sensor_) battery_voltage_sensor_->publish_state(volts);
   if (battery_level_sensor_) battery_level_sensor_->publish_state(pct);
 
-  // Update display with battery
   if (current_state_ == MowerState::MOWING)
     set_display_battery(pct);
   else if (current_state_ == MowerState::CHARGING)
     set_charging_display(pct);
 
-  ESP_LOGD(TAG, "Battery: %dmV → %.2fV → %d%%", mv, volts, pct);
+  ESP_LOGD(TAG, "Battery: %dmV -> %.2fV -> %d%%", mv, volts, pct);
 }
 
 void SnkMower::handle_error_info(const uint8_t *data, size_t len) {
@@ -447,7 +431,6 @@ void SnkMower::publish_mower_state(MowerState state) {
     has_error_sensor_->publish_state(state == MowerState::ERROR_STATE ||
                                       state == MowerState::LOCKED);
 
-  // Display
   if (state == MowerState::MOWING) {
     set_display_battery(last_battery_percent_);
   } else if (state == MowerState::CHARGING) {
