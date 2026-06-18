@@ -2,6 +2,8 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 #include "esphome/core/application.h"
+#include "esphome/components/wifi/wifi_component.h"
+#include <esp_mac.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -246,12 +248,12 @@ uint8_t SnkMower::char_to_segments_(char c) {
   }
 }
 
-void SnkMower::set_buzzer_pin(uint8_t pin) {
-  buzzer_pin_ = (gpio_num_t)pin;
+void SnkMower::set_buzzer_pin(gpio_num_t pin) {
+  buzzer_pin_ = pin;
 }
 
-void SnkMower::set_rain_pin(uint8_t pin) {
-  rain_pin_ = (gpio_num_t)pin;
+void SnkMower::set_rain_pin(gpio_num_t pin) {
+  rain_pin_ = pin;
 }
 
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
@@ -304,7 +306,8 @@ void SnkMower::send_keepalive() {
 
 void SnkMower::send_wifi_status() {
   JsonDocument doc;
-  bool wifi_connected = (WiFi.status() == WL_CONNECTED);
+  auto *wifi = wifi::global_wifi_component;
+  bool wifi_connected = wifi && wifi->is_connected();
   int wifi_str = wifi_connected ? 1 : 0;
 
   doc["cmd"] = CMD_ESP_WIFI;
@@ -326,7 +329,7 @@ void SnkMower::send_esp_info() {
   doc["sv"] = 30202;
   doc["spw"] = 0;
   uint8_t mac[6];
-  esp_efuse_mac_get_default(mac);
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
   char mac_str[18];
   snprintf(mac_str, sizeof(mac_str), "%02x-%02x-%02x-%02x-%02x-%02x",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
@@ -510,17 +513,17 @@ void SnkMower::handle_status(const JsonDocument &doc) {
       battery_level_sensor_->publish_state(bat_per_);
   }
   if (doc.containsKey("rain_delay")) {
-    rain_delay = doc["rain_delay"];
+    rain_delay_ = doc["rain_delay"];
     if (rain_delay_sensor_)
-      rain_delay_sensor_->publish_state(rain_delay);
+      rain_delay_sensor_->publish_state(rain_delay_);
   }
   if (doc.containsKey("rain_state")) {
-    rain_state = doc["rain_state"];
+    rain_state_ = doc["rain_state"];
   }
   if (doc.containsKey("bat_health")) {
-    bat_health = doc["bat_health"];
+    bat_health_ = doc["bat_health"];
     if (bat_health_sensor_)
-      bat_health_sensor_->publish_state(bat_health);
+      bat_health_sensor_->publish_state(bat_health_);
   }
   if (doc.containsKey("work_area")) {
     work_area_ = doc["work_area"];
@@ -713,7 +716,7 @@ void SnkMower::handle_rain_cfg(const JsonDocument &doc) {
   bool rain_en = doc["rain_en"] | false;
   int delay = doc["rain_delay"] | 0;
   ESP_LOGI(TAG, "Rain config: enabled=%d, delay=%d min", rain_en, delay);
-  rain_delay = delay;
+  rain_delay_ = delay;
   if (rain_delay_sensor_)
     rain_delay_sensor_->publish_state(delay);
 }

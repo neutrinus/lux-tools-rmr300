@@ -62,9 +62,9 @@ class SnkMower : public Component, public uart::UARTDevice {
   void start_mowing();
   void return_to_dock();
   void buzz(int duration_ms);
-  void set_buzzer_pin(uint8_t pin);
+  void set_buzzer_pin(gpio_num_t pin);
   void set_display_off_timeout(uint32_t minutes);
-  void set_rain_pin(uint8_t pin);
+  void set_rain_pin(gpio_num_t pin);
 
  protected:
   std::string pin_;
@@ -146,8 +146,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool station_{false};
   int lock_{0};
 
-  uint8_t buzzer_pin_{GPIO_NUM_NC};
-  uint8_t rain_pin_{GPIO_NUM_NC};
+  gpio_num_t buzzer_pin_{GPIO_NUM_NC};
+  gpio_num_t rain_pin_{GPIO_NUM_NC};
 
   uint32_t display_off_timeout_ms_{0};
   bool display_off_{false};
