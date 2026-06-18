@@ -304,6 +304,12 @@ void SnkMower::send_keepalive() {
   send_json(doc);
 }
 
+void SnkMower::send_poll() {
+  JsonDocument doc;
+  doc["cmd"] = CMD_ESP_POLL;
+  send_json(doc);
+}
+
 void SnkMower::send_wifi_status() {
   JsonDocument doc;
   auto *wifi = wifi::global_wifi_component;
@@ -376,6 +382,8 @@ void SnkMower::loop() {
     uint8_t byte;
     read_byte(&byte);
 
+    ESP_LOGV(TAG, "RX byte: 0x%02X '%c'", byte, byte >= 32 ? (char)byte : '.');
+
     if (byte == '{') {
       rx_index_ = 0;
       rx_in_json_ = true;
@@ -411,6 +419,11 @@ void SnkMower::loop() {
 
   if (!pin_sent_ && boot_sent_ && power_ready_ && now > 2000) {
     send_pin();
+  }
+
+  if (now - last_poll_ > 100) {
+    last_poll_ = now;
+    send_poll();
   }
 
   if (now - last_keepalive_ > 200) {

@@ -21,7 +21,7 @@ esp32:
 
 logger:
   baud_rate: 0
-  level: INFO
+  level: VERBOSE
 
 wifi:
   ssid: !secret wifi_ssid
@@ -44,6 +44,12 @@ uart:
   tx_pin: GPIO15
   rx_pin: GPIO13
   baud_rate: 230400
+  rx_buffer_size: 512
+  debug:
+    direction: RX
+    dummy_receiver: false
+    after:
+      bytes: 256
 
 snk_mower:
   id: my_mower

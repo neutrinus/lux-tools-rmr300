@@ -74,6 +74,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void send_init();
   void send_pin();
   void send_keepalive();
+  void send_poll();
   void send_wifi_status();
   void send_esp_info();
   void send_error_ack();
@@ -120,6 +121,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool power_ready_{false};
 
   uint32_t last_keepalive_{0};
+  uint32_t last_poll_{0};
   uint32_t last_wifi_status_{0};
   uint32_t last_esp_info_{0};
   uint32_t last_esp_state_{0};
