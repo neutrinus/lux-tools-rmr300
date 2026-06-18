@@ -16,7 +16,6 @@ static const uint8_t CMD_STATUS_REQ = 0x0D;
 static const uint8_t CMD_STATUS_RSP = 0x0E;
 static const uint8_t CMD_MOW_START = 0x0F;
 static const uint8_t CMD_CHARGE_RET = 0x10;
-static const uint8_t CMD_DISPLAY_OFF = 0x11;
 static const uint8_t CMD_ERROR_INFO = 0x12;
 static const uint8_t CMD_BAT_INFO_REQ = 0x14;
 static const uint8_t CMD_BAT_INFO_RSP = 0x15;
@@ -54,63 +53,17 @@ static int voltage_to_percent(float v) {
   return 50;
 }
 
-static uint8_t char_to_segments_impl(char c) {
-  switch (c) {
-    case ' ': return 0b00000000;
-    case '-': return 0b01000000;
-    case '_': return 0b00001000;
-    case '0': return 0b00111111;
-    case '1': return 0b00000110;
-    case '2': return 0b01011011;
-    case '3': return 0b01001111;
-    case '4': return 0b01100110;
-    case '5': return 0b01101101;
-    case '6': return 0b01111101;
-    case '7': return 0b00000111;
-    case '8': return 0b01111111;
-    case '9': return 0b01101111;
-    case 'A': return 0b01110111;
-    case 'b': return 0b01111100;
-    case 'C': return 0b00111001;
-    case 'c': return 0b01011000;
-    case 'd': return 0b01011110;
-    case 'E': return 0b01111001;
-    case 'F': return 0b01110001;
-    case 'H': return 0b01110110;
-    case 'h': return 0b01110100;
-    case 'I': return 0b00110000;
-    case 'J': return 0b00011110;
-    case 'L': return 0b00111000;
-    case 'n': return 0b01010100;
-    case 'o': return 0b01011100;
-    case 'P': return 0b01110011;
-    case 'r': return 0b01010000;
-    case 'S': return 0b01101101;
-    case 't': return 0b01111000;
-    case 'U': return 0b00111110;
-    case 'u': return 0b00011100;
-    default: return 0;
-  }
-}
-
 // ── Bit-bang SPI: shift out 24 bits (3 bytes) ───────────────
 static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
                     uint8_t b0, uint8_t b1, uint8_t b2) {
   gpio_set_level(cs, 0);
-  for (int i = 7; i >= 0; i--) {
-    gpio_set_level(mosi, (b0 >> i) & 1);
-    gpio_set_level(clk, 1);
-    gpio_set_level(clk, 0);
-  }
-  for (int i = 7; i >= 0; i--) {
-    gpio_set_level(mosi, (b1 >> i) & 1);
-    gpio_set_level(clk, 1);
-    gpio_set_level(clk, 0);
-  }
-  for (int i = 7; i >= 0; i--) {
-    gpio_set_level(mosi, (b2 >> i) & 1);
-    gpio_set_level(clk, 1);
-    gpio_set_level(clk, 0);
+  uint8_t bytes[] = {b0, b1, b2};
+  for (int b = 0; b < 3; b++) {
+    for (int i = 7; i >= 0; i--) {
+      gpio_set_level(mosi, (bytes[b] >> i) & 1);
+      gpio_set_level(clk, 1);
+      gpio_set_level(clk, 0);
+    }
   }
   gpio_set_level(cs, 1);
 }
@@ -121,16 +74,6 @@ SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 // ── setup ────────────────────────────────────────────────────
 void SnkMower::setup() {
   ESP_LOGI(TAG, "SNK Mower starting (PIN: %s)", pin_.c_str());
-  pin_sent_ = false;
-  pin_ok_ = false;
-  pin_retries_ = 0;
-  expecting_response_ = false;
-  rx_state_ = -1;
-  current_state_ = MowerState::UNKNOWN;
-  current_digit_ = 0;
-  last_display_ms_ = 0;
-  charging_frame_ = 0;
-  last_charging_frame_ms_ = 0;
   last_activity_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
@@ -227,7 +170,42 @@ void SnkMower::set_charging_display(int percent) {
 }
 
 uint8_t SnkMower::char_to_segments_(char c) {
-  return char_to_segments_impl(c);
+  switch (c) {
+    case ' ': return 0b00000000;
+    case '-': return 0b01000000;
+    case '_': return 0b00001000;
+    case '0': return 0b00111111;
+    case '1': return 0b00000110;
+    case '2': return 0b01011011;
+    case '3': return 0b01001111;
+    case '4': return 0b01100110;
+    case '5': return 0b01101101;
+    case '6': return 0b01111101;
+    case '7': return 0b00000111;
+    case '8': return 0b01111111;
+    case '9': return 0b01101111;
+    case 'A': return 0b01110111;
+    case 'b': return 0b01111100;
+    case 'C': return 0b00111001;
+    case 'c': return 0b01011000;
+    case 'd': return 0b01011110;
+    case 'E': return 0b01111001;
+    case 'F': return 0b01110001;
+    case 'H': return 0b01110110;
+    case 'h': return 0b01110100;
+    case 'I': return 0b00110000;
+    case 'J': return 0b00011110;
+    case 'L': return 0b00111000;
+    case 'n': return 0b01010100;
+    case 'o': return 0b01011100;
+    case 'P': return 0b01110011;
+    case 'r': return 0b01010000;
+    case 'S': return 0b01101101;
+    case 't': return 0b01111000;
+    case 'U': return 0b00111110;
+    case 'u': return 0b00011100;
+    default: return 0;
+  }
 }
 
 void SnkMower::set_buzzer_pin(uint8_t pin) {
@@ -272,20 +250,21 @@ void SnkMower::send_pin() {
 void SnkMower::poll_status() { send_frame(CMD_STATUS_REQ, nullptr, 0); }
 void SnkMower::poll_battery() { send_frame(CMD_BAT_INFO_REQ, nullptr, 0); }
 
-void SnkMower::start_mowing() {
-  ESP_LOGI(TAG, "Command: start mowing");
+void SnkMower::send_action(uint8_t cmd) {
   last_activity_ms_ = millis();
   display_off_ = false;
   buzz(100);
-  send_frame(CMD_MOW_START, nullptr, 0);
+  send_frame(cmd, nullptr, 0);
+}
+
+void SnkMower::start_mowing() {
+  ESP_LOGI(TAG, "Command: start mowing");
+  send_action(CMD_MOW_START);
 }
 
 void SnkMower::return_to_dock() {
   ESP_LOGI(TAG, "Command: return to dock");
-  last_activity_ms_ = millis();
-  display_off_ = false;
-  buzz(100);
-  send_frame(CMD_CHARGE_RET, nullptr, 0);
+  send_action(CMD_CHARGE_RET);
 }
 
 // ── loop ─────────────────────────────────────────────────────
@@ -307,22 +286,20 @@ void SnkMower::loop() {
     }
     if (rx_state_ == 1) {
       rx_cmd_ = byte;
-      rx_len_ = 0;
       rx_index_ = 0;
       rx_state_ = 2;
       continue;
     }
     if (rx_state_ == 2) {
       rx_buf_[rx_index_++] = byte;
-      rx_len_ = rx_index_;
 
       uint8_t cs = rx_cmd_;
-      for (size_t i = 0; i < rx_len_ - 1; i++) cs ^= rx_buf_[i];
+      for (size_t i = 0; i < rx_index_ - 1; i++) cs ^= rx_buf_[i];
 
       if (cs == byte) {
-        handle_response(rx_cmd_, rx_buf_, rx_len_ - 1);
+        handle_response(rx_cmd_, rx_buf_, rx_index_ - 1);
         rx_state_ = -1;
-      } else if (rx_index_ >= 20) {
+      } else if (rx_index_ >= RX_BUF_SIZE) {
         ESP_LOGW(TAG, "RX frame too long, discarding");
         rx_state_ = -1;
       }
@@ -348,9 +325,8 @@ void SnkMower::loop() {
         publish_mower_state(MowerState::LOCKED);
       }
     } else {
-      static uint8_t phase = 0;
-      phase = (phase + 1) % 4;
-      if (phase % 2 == 0)
+      poll_phase_ = (poll_phase_ + 1) % 4;
+      if (poll_phase_ % 2 == 0)
         poll_status();
       else
         poll_battery();

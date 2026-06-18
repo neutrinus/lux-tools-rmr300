@@ -61,6 +61,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void handle_error_info(const uint8_t *data, size_t len);
 
   void publish_mower_state(MowerState state);
+  void send_action(uint8_t cmd);
 
   bool pin_sent_{false};
   bool pin_ok_{false};
@@ -69,12 +70,13 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool expecting_response_{false};
   uint32_t last_poll_{0};
   uint32_t last_request_ms_{0};
+  uint8_t poll_phase_{0};
   static constexpr uint32_t RESPONSE_TIMEOUT_MS = 500;
 
   int8_t rx_state_{-1};
   uint8_t rx_cmd_{0};
-  uint8_t rx_buf_[32];
-  size_t rx_len_{0};
+  static constexpr uint8_t RX_BUF_SIZE = 32;
+  uint8_t rx_buf_[RX_BUF_SIZE];
   size_t rx_index_{0};
 
   uint8_t buzzer_pin_{GPIO_NUM_NC};
