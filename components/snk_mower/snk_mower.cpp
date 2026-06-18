@@ -147,6 +147,14 @@ void SnkMower::setup() {
 
   setup_display();
   set_display_text("----");
+
+  send_boot();
+  delay(50);
+  send_init();
+  delay(50);
+  send_esp_info();
+  send_esp_state(0);
+  boot_sent_ = true;
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -446,16 +454,6 @@ void SnkMower::loop() {
         }
       }
     }
-  }
-
-  if (!boot_sent_ && now > 100) {
-    boot_sent_ = true;
-    send_boot();
-    delay(50);
-    send_init();
-    delay(50);
-    send_esp_info();
-    send_esp_state(0);
   }
 
   if (!pin_sent_ && boot_sent_ && power_ready_ && now > 2000) {
