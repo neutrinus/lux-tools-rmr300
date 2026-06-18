@@ -128,6 +128,9 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t last_esp_state_{0};
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
+  uint32_t last_boot_ms_{0};
+  bool info_sent_{false};
+  bool init_sent_{false};
 
   int state_{0};
   int error_code_{0};

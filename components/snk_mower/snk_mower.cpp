@@ -150,12 +150,12 @@ void SnkMower::setup() {
 
   ESP_LOGI(TAG, "Sending boot sequence...");
   send_boot();
-  delay(50);
-  send_init();
-  delay(50);
-  send_esp_info();
+  delay(10);
+  send_keepalive();
+  delay(10);
   send_esp_state(0);
   boot_sent_ = true;
+  last_boot_ms_ = millis();
   ESP_LOGI(TAG, "Boot sequence sent");
 
 }
@@ -323,7 +323,7 @@ void SnkMower::send_boot() {
 void SnkMower::send_init() {
   JsonDocument doc;
   doc["cmd"] = CMD_ESP_INIT;
-  doc["init"] = 2;
+  doc["init"] = 3;
   send_json(doc);
 }
 
@@ -461,6 +461,16 @@ void SnkMower::loop() {
 
   if (!pin_sent_ && boot_sent_ && power_ready_ && now > 2000) {
     send_pin();
+  }
+
+  if (boot_sent_ && !info_sent_ && now - last_boot_ms_ > 5000) {
+    info_sent_ = true;
+    send_esp_info();
+  }
+
+  if (boot_sent_ && !init_sent_ && now - last_boot_ms_ > 8000) {
+    init_sent_ = true;
+    send_init();
   }
 
   if (now > 2000 && now - last_poll_ > 100) {
