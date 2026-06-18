@@ -34,9 +34,7 @@ api:
     key: "NDgm+gGpAoan2fh1f71mGv9lMga8nOynabbt8gF3JRM="
 
 ota:
-
-web_server:
-  port: 80
+  - platform: esphome
 
 uart:
   id: mower_uart
