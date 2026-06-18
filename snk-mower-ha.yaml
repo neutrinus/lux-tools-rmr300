@@ -31,6 +31,13 @@ api:
 
 ota:
 
+uart:
+  id: mower_uart
+  tx_pin: GPIO15
+  rx_pin: GPIO13
+  baud_rate: 230400
+
+
 sensor:
   - platform: wifi_signal
     name: "${friendly_name} Wi-Fi Signal"
