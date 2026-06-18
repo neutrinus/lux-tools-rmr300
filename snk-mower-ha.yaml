@@ -55,10 +55,6 @@ snk_mower:
   id: my_mower
   uart_id: mower_uart
   pin: "9633"
-  display_clk: -1
-  display_mosi: -1
-  display_cs: -1
-
   battery_level:
     name: "${friendly_name} Battery Level"
   battery_voltage:
