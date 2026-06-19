@@ -24,6 +24,10 @@ original firmware with ESPHome.
 All share part numbers: mainboard `80102372-01`, display `80102373-01`.
 OEM: SNK (also SK-Robot for MQTT cloud).
 
+Interesting fact: despite the manufacturer not advertising or supporting it,
+every mower has fully functional WiFi and Bluetooth on the ESP32 — disabled
+in the original firmware but unlockable by flashing custom firmware.
+
 ---
 
 ## Why are you here?
