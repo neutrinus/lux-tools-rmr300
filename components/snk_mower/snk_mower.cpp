@@ -28,7 +28,8 @@ static const uint32_t CMD_SETTING_SUB    = 0x31000017;
 static const uint32_t CMD_PIN_RESULT     = 0x33000021;
 static const uint32_t CMD_PIN_RESULT2    = 0x33000022;
 static const uint32_t CMD_STATUS         = 0x330000A0;
-static const uint32_t CMD_DEVICE_INFO    = 0x330000A9;
+static const uint32_t CMD_DEVICE_INFO    = 0x330000A1;
+static const uint32_t CMD_MB_DEVICE_INFO = 0x330000A9;
 static const uint32_t CMD_HW_VERSIONS    = 0x330000A2;
 static const uint32_t CMD_SCHEDULE       = 0x330000A6;
 static const uint32_t CMD_RAIN_CFG_RSP   = 0x330000A7;
@@ -600,6 +601,8 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case CMD_ERROR_NOTIFY:     handle_error_notify(doc); break;
     case CMD_RTC:              handle_rtc(doc); break;
     case CMD_DEVICE_INFO:      handle_device_info(doc); break;
+    case CMD_MB_DEVICE_INFO:   ESP_LOGV(TAG, "MB device info: sw=%s hv=%d sv=%d",
+                                        doc["sw"] | "?", doc["hv"] | 0, doc["sv"] | 0); break;
     case CMD_HW_VERSIONS:      handle_hw_versions(doc); break;
     case CMD_BATTERY:          handle_battery_info(doc); break;
     case CMD_MAP_CFG:          handle_map_cfg(doc); break;
