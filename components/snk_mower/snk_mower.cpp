@@ -481,17 +481,22 @@ void SnkMower::loop() {
     read_byte(&byte);
     rx_count++;
 
-    if (byte == '{') {
+    if (!rx_in_json_ && byte == '{') {
       rx_index_ = 0;
+      rx_in_string_ = false;
       rx_in_json_ = true;
     }
 
     if (rx_in_json_) {
+      if (byte == '"' && (rx_index_ == 0 || rx_buf_[rx_index_-1] != '\\')) {
+        rx_in_string_ = !rx_in_string_;
+      }
+
       if (rx_index_ < BUF_SIZE - 1) {
         rx_buf_[rx_index_++] = (char)byte;
       }
 
-      if (byte == '}') {
+      if (!rx_in_string_ && byte == '}') {
         rx_buf_[rx_index_] = '\0';
         rx_in_json_ = false;
 
@@ -504,7 +509,7 @@ void SnkMower::loop() {
     }
   }
 
-  if (boot_sent_ && now - last_poll_ > 100) {
+  if (boot_sent_ && now - last_poll_ > 200) {
     last_poll_ = now;
     send_poll();
   }

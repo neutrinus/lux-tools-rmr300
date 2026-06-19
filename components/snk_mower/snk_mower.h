@@ -167,6 +167,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   char rx_buf_[BUF_SIZE];
   size_t rx_index_{0};
   bool rx_in_json_{false};
+  bool rx_in_string_{false};
   char tx_buf_[BUF_SIZE];
 
   void setup_display();
