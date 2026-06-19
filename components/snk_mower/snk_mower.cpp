@@ -738,7 +738,6 @@ void SnkMower::handle_pin_result(const JsonDocument &doc) {
     ESP_LOGI(TAG, "PIN accepted");
     pin_ok_ = true;
     pin_retries_ = 0;
-    buzz(80);
     publish_mower_state(MowerState::IDLE);
   } else {
     ESP_LOGW(TAG, "PIN rejected (attempt %d/5)", pin_retries_);
