@@ -77,10 +77,15 @@ static const int DIAG_SCAN_PINS[] = {
 };
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
-// LCD pin candidates — narrowed from #49: {18,33,32} showed something.
-// Testing all 6 permutations of these 3 pins (9s total).
-static const int LCD_CANDIDATES[] = {18, 33, 32};
-static const int NUM_LCD_CANDIDATES = sizeof(LCD_CANDIDATES) / sizeof(LCD_CANDIDATES[0]);
+// 6 permutations of {18,33,32}
+static const int LCD_COMBOS[6][3] = {
+    {18, 33, 32},  // #0
+    {18, 32, 33},  // #1
+    {33, 18, 32},  // #2
+    {33, 32, 18},  // #3
+    {32, 18, 33},  // #4
+    {32, 33, 18},  // #5
+};
 
 static const float VOLTAGE_LUT[101] = {
     15.0f, 15.05f, 15.1f, 15.15f, 15.2f, 15.25f, 15.3f, 15.35f, 15.4f, 15.5f,
@@ -139,10 +144,8 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_) {
-    ESP_LOGI(TAG, "=== LCD PIN FINDER (output-only) ===");
-    int combos = NUM_LCD_CANDIDATES * (NUM_LCD_CANDIDATES-1) * (NUM_LCD_CANDIDATES-2);
-    ESP_LOGI(TAG, "Testing %d candidates: %d combos of (CLK, CS, MOSI) x %.1fs (~%ds)",
-             NUM_LCD_CANDIDATES, combos, 1.5f, (int)(combos * 1.5f));
+    ESP_LOGI(TAG, "=== LCD PIN FINDER (6 permutations of {18,33,32}) ===");
+    ESP_LOGI(TAG, "Testing 6 combos of (CLK, CS, MOSI) x 4s (~24s)");
     lcd_scan_idx_ = 0;
     last_lcd_scan_ms_ = millis();
     return;
@@ -500,19 +503,12 @@ void SnkMower::loop() {
   }
 
   if (lcd_find_) {
-    if (now - last_lcd_scan_ms_ >= 1500) {
+    if (now - last_lcd_scan_ms_ >= 4000) {
       last_lcd_scan_ms_ = now;
-      int n = NUM_LCD_CANDIDATES;
-      int total = n * n * n;
-      while (lcd_scan_idx_ < total) {
-        int i = lcd_scan_idx_ / (n * n);
-        int j = (lcd_scan_idx_ / n) % n;
-        int k = lcd_scan_idx_ % n;
-        lcd_scan_idx_++;
-        if (i == j || i == k || j == k) continue;
-        int clk = LCD_CANDIDATES[i];
-        int cs  = LCD_CANDIDATES[j];
-        int mosi = LCD_CANDIDATES[k];
+      if (lcd_scan_idx_ < 6) {
+        int clk = LCD_COMBOS[lcd_scan_idx_][0];
+        int cs  = LCD_COMBOS[lcd_scan_idx_][1];
+        int mosi = LCD_COMBOS[lcd_scan_idx_][2];
         gpio_set_direction((gpio_num_t)clk, GPIO_MODE_OUTPUT);
         gpio_set_direction((gpio_num_t)cs, GPIO_MODE_OUTPUT);
         gpio_set_direction((gpio_num_t)mosi, GPIO_MODE_OUTPUT);
@@ -521,11 +517,15 @@ void SnkMower::loop() {
         gpio_set_level((gpio_num_t)mosi, 0);
         shift24((gpio_num_t)clk, (gpio_num_t)mosi, (gpio_num_t)cs,
                 0xFF, 0xFF, 0xFF);
-        int combo = lcd_scan_idx_;
-        ESP_LOGI(TAG, "LCD: #%d/%d — CLK=%d CS=%d MOSI=%d",
-                 combo, total, clk, cs, mosi);
-        break;
+        ESP_LOGI(TAG, "LCD[%d/6]: CLK=%d CS=%d MOSI=%d",
+                 lcd_scan_idx_ + 1, clk, cs, mosi);
+        lcd_scan_idx_++;
+      } else {
+        ESP_LOGI(TAG, "=== LCD scan complete (6 combos) ===");
       }
+    }
+    return;
+  }
       if (lcd_scan_idx_ >= total) {
         ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===", lcd_scan_idx_);
       }
