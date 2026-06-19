@@ -1,31 +1,6 @@
-# ESPHome configuration — SNK Mower (Lux Tools A-RMR-300-24 / Adano RM5)
-#
-# Hardware: Display board SNK_DISPLAY_CP_V11 with ESP32-WROOM-32UE
-#
-# Custom component: components/snk_mower/
-#
-# Wiring (confirmed on PCB 2026-06-19):
-#   UART TX → GPIO17 (R29 → J2.4)
-#   UART RX ← GPIO16 (R30 → J2.3)
-#   Display CLK → GPIO18 (SCLK → 74HC595 SH_CP)
-#   Display MOSI → GPIO23 (MOSI → 74HC595 DS) — candidate, may be 19/21
-#   Display CS → GPIO5  (CS → 74HC595 ST_CP)
-#   J2.7 → R34 → GPIO25 (HOME button on mainboard)
-#   J2.8 → R39 → GPIO32
-#   J2.9 → R31 → GPIO33 → U4 pin4
-#   J2.12 → R33 → GPIO27 → U4 pin3
-#   J2.10 → R27 → GPIO35 (ADC input-only)
-#   J2.11 → R26 → GPIO34 (ADC input-only)
-#   Rain sensor → GPIO36 (ADC)
-#   Buzzer      → TBD (GPIO12=NC, GPIO2=silent, testing GPIO27)
-
 substitutions:
-  name: snk-mower
-  friendly_name: SNK Mower
-  wifi_ssid: !secret wifi_ssid
-  wifi_password: !secret wifi_password
-  api_key: !secret api_key
-  ota_password: !secret ota_password
+  name: kosiarka
+  friendly_name: Kosiarka
 
 external_components:
   - source: github://neutrinus/lux-tools-rmr300@main:components
@@ -40,46 +15,49 @@ esp32:
   framework:
     type: esp-idf
     version: recommended
+    advanced:
+      minimum_chip_revision: "3.1"
+      sram1_as_iram: true
 
 logger:
-  baud_rate: 0  # disable UART0 logger (conflicts with J1 programming port)
-  level: INFO
+  baud_rate: 0
+  level: VERBOSE
+  task_log_buffer_size: 8192
 
 wifi:
-  ssid: ${wifi_ssid}
-  password: ${wifi_password}
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   ap:
-    ssid: "${friendly_name} Fallback Hotspot"
-    password: "12345678"
+    ssid: ${friendly_name} Fallback Hotspot
+    password: "Hxye5fmx2yDo"
 
 captive_portal:
 
 api:
   encryption:
-    key: ${api_key}
+    key: "NDgm+gGpAoan2fh1f71mGv9lMga8nOynabbt8gF3JRM="
 
 ota:
-  password: ${ota_password}
+  - platform: esphome
 
-# ── UART to mainboard (GPIO13 RX, GPIO15 TX, 230400 8N1 JSON) ─
 uart:
   id: mower_uart
-  tx_pin: GPIO15
-  rx_pin: GPIO13
+  tx_pin: GPIO17
+  rx_pin: GPIO16
   baud_rate: 230400
+  rx_buffer_size: 512
 
-# ── SNK Mower custom component ─────────────────────────────
 snk_mower:
+  id: my_mower
   uart_id: mower_uart
-  pin: "9633"                       # ← change to your PIN
-  display_clk: 18                   # SCLK → 74HC595 SH_CP
-  display_mosi: 23                  # MOSI → 74HC595 DS
-  display_cs: 5                     # CS/latch → 74HC595 ST_CP
-  buzzer_pin: 27                    # optional, 0-39, omit to disable
-  rain_pin: 36                      # rain sensor GPIO (ADC capable)
-  display_off_timeout: 5            # minutes of idle before display off (0=never)
+  pin: "9633"
+  display_clk: 18
+  display_mosi: 23
+  display_cs: 5
+  buzzer_pin: 27
+  rain_pin: 36
+  display_off_timeout: 5
 
-  # ── Numeric sensors ──
   battery_level:
     name: "${friendly_name} Battery Level"
   battery_voltage:
@@ -105,7 +83,6 @@ snk_mower:
   rain_delay:
     name: "${friendly_name} Rain Delay"
 
-  # ── Binary sensors ──
   is_mowing:
     name: "${friendly_name} Mowing"
   is_charging:
@@ -119,7 +96,6 @@ snk_mower:
   is_returning:
     name: "${friendly_name} Returning"
 
-  # ── Text sensors ──
   device_name:
     name: "${friendly_name} Device Name"
   model:
@@ -142,10 +118,11 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     filters:
-      - debounce: 50ms
+      - delayed_on: 50ms
+      - delayed_off: 50ms
     on_press:
       then:
-        - lambda: 'id(snk_mower)->start_mowing();'
+        - lambda: 'id(my_mower)->start_mowing();'
 
   - platform: gpio
     name: "${friendly_name} Home Button"
@@ -154,10 +131,11 @@ binary_sensor:
       mode: INPUT_PULLUP
       inverted: true
     filters:
-      - debounce: 50ms
+      - delayed_on: 50ms
+      - delayed_off: 50ms
     on_press:
       then:
-        - lambda: 'id(snk_mower)->return_to_dock();'
+        - lambda: 'id(my_mower)->return_to_dock();'
 
   - platform: gpio
     name: "${friendly_name} Rain Detected"
@@ -166,7 +144,8 @@ binary_sensor:
       mode: INPUT
     device_class: moisture
     filters:
-      - debounce: 200ms
+      - delayed_on: 200ms
+      - delayed_off: 200ms
 
 # ── HA buttons (virtual) ────────────────────────────────────
 button:
@@ -174,13 +153,13 @@ button:
     name: "${friendly_name} Start Mowing"
     icon: mdi:play
     on_press:
-      - lambda: 'id(snk_mower)->start_mowing();'
+      - lambda: 'id(my_mower)->start_mowing();'
 
   - platform: template
     name: "${friendly_name} Return to Dock"
     icon: mdi:home-import-outline
     on_press:
-      - lambda: 'id(snk_mower)->return_to_dock();'
+      - lambda: 'id(my_mower)->return_to_dock();'
 
 # ── Sensors ─────────────────────────────────────────────────
 sensor:
