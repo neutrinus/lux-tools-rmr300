@@ -1,1 +1,0 @@
-[{"address":"080089fc","code":"\nvoid FUN_080089fc(void)\n\n{\n  int iVar1;\n  \n  iVar1 = FUN_08008a8c();\n  if (iVar1 != 0) {\n    *(undefined4 *)(iVar1 + 0xc) = 6;\n  }\n  return;\n}\n\n","name":"FUN_080089fc","signature":"undefined FUN_080089fc()"}]

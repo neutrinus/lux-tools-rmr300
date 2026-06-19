@@ -171,8 +171,8 @@ The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard 
 
 | Pin / Function | ESP32 GPIO | ESP32 Pad | Circuit Path & Details |
 |----------------|:----------:|:---------:|------------------------|
-| **UART RX** (from MB) | **16** | Pad 17 | ESP32 Pad 17 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX. ✅ **potwierdzone** – mainboard odpowiada na POLL |
-| **UART TX** (to MB) | **17** | Pad 18 | ESP32 Pad 18 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX. ✅ **potwierdzone** – ESP wysyła, MB odpowiada |
+| **UART RX** (from MB) | **16** | Pad 17 | ESP32 Pad 17 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX. ✅ confirmed by PCB trace |
+| **UART TX** (to MB) | **17** | Pad 18 | ESP32 Pad 18 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX. ✅ confirmed by PCB trace |
 | **Display CS/Latch** | **5** | Pad 29 | VSPI CS: ESP32 Pad 29 → ST_CP (Pin 12) of U1/U3/U4 |
 | **Display SCLK** | **18** | Pad 30 | VSPI SCLK: ESP32 Pad 30 → SH_CP (Pin 11) of U1/U3/U4 |
 | **Display MOSI** | **23** | Pad 37 | VSPI MOSI: ESP32 Pad 37 → DS (Pin 14) of U1 |

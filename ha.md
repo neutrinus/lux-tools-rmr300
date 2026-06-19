@@ -13,7 +13,7 @@ These are educated guesses based on reverse engineering. Mark with ✅ once conf
 | 5 | ERROR_INFO (0x12) is 2 bytes, big-endian error code | ⚠️ Unconfirmed length | Adjust `handle_error_info()` |
 | 6 | Mainboard sends no unsolicited messages (polling-only model) | ⚠️ Unconfirmed | Add async handler in `loop()` |
 | 7 | Display pins: CLK=GPIO18, MOSI=GPIO23, CS=GPIO5 | ✅ PCB trace verified | Wrong pin order causes blank display |
-| 8 | UART baud rate 115200 8N1 | ✅ Cross-referenced ESP32+U16 | No communication |
+| 8 | UART baud rate **230400 8N1** (not 115200) | ✅ LA capture decode | Wrong baud → no communication |
 | 9 | 74HC595 cascade: chip1=segments, chip2=digits+colon, chip3=unused | ✅ PCB verified | Segments wrong / digits wrong |
 | 10 | 7-segment segments: active HIGH, digit select: active HIGH | ⚠️ Unconfirmed (likely inverted from 74HC595) | Display shows nothing or wrong digits |
 | 11 | Checking state derived from STATUS_RSP flag OR voltage >20V | ⚠️ Unconfirmed | `set_charging_display()` never called |
@@ -27,7 +27,7 @@ These are educated guesses based on reverse engineering. Mark with ✅ once conf
 │                                                             │
 │  snk_mower (custom component)                               │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │ UART (GPIO13/15, 115200 8N1, binary protocol)        │   │
+│  │ UART (GPIO16/17, 230400 8N1, JSON protocol)          │   │
 │  │                                                      │   │
 │  │  Periodic polling (every 2s):                        │   │
 │  │   ├── STATUS_REQ (0x0D)  → STATUS_RSP (0x0E)        │   │
@@ -297,83 +297,6 @@ PIN is configurable in YAML (`pin: "9633"`), validated for exactly 4 digits.
 ## Bluetooth Proxy
 
 ESP32-WROOM-32UE supports BT 4.2 BR/EDR + BLE. Enable via `bluetooth_proxy:` in YAML. Works simultaneously with WiFi and custom component. Shared IPEX antenna — BT range may be slightly shorter than dedicated BT-only ESP32.
-
----
-
-# Appendix: Reverse Engineering Results
-
-## Confirmed Facts (verified by LA capture or decompilation)
-
-### Hardware
-| # | Fact | Evidence |
-|:-:|------|----------|
-| 1 | ESP32 TX=GPIO17, RX=GPIO16 (UART2) | PCB trace verification on SNK_DISPLAY_CP_V11 |
-| 2 | U16 = GD32F303 (mainboard UART bridge MCU) | Chip marking, decap/decompile in progress |
-| 3 | U13 = main MCU on mainboard | Decompilation complete |
-| 4 | Display: CLK=GPIO18, MOSI=GPIO23, CS=GPIO5 | PCB trace verified |
-| 5 | 74HC595×3 cascade: chip1=segments, chip2=digits+colon, chip3=unused | PCB verified |
-| 6 | Display pins come from ESP32, not mainboard | PCB tracing (J2 connector) |
-| 7 | Battery: 5S1P_EVE_2000 (5S Li-Ion, 18V nominal) | Device info from LA capture |
-| 8 | PIN stored in U13 EEPROM, value `9633` | RAM dump confirmed |
-| 9 | Rain sensor: ADC on ESP32 pin (not mainboard UART) | PCB tracing |
-| 10 | Buttons K1 (START), K2 (HOME) go to ESP32 GPIO + mainboard | PCB tracing; K3/K4 direct to mainboard only |
-
-### Protocol
-| # | Fact | Evidence |
-|:-:|------|----------|
-| 1 | UART: **230400 8N1** (NOT 115200 binary) | Sigrok decode of 6 captures |
-| 2 | Signal: **standard polarity** (not inverted) | Sigrok decode — valid JSON without invert |
-| 3 | Protocol: **JSON** over UART, not binary | Every command is `{"cmd":<int>,"key":val,...}` |
-| 4 | 64 command IDs mapped, prefixes documented | `captures/README.md` |
-| 5 | ESP→MB commands: 0x10.., 0x22.., 0x30.., 0x40.. | Cross-referenced across 6 captures |
-| 6 | MB→ESP commands: 0x20.., 0x33.., 0x40.., 0x41.., 0x50.. | Cross-referenced across 6 captures |
-| 7 | U16 acts as bidirectional JSON bridge between ESP and U13 | UART topology confirmed |
-| 8 | PIN is sent by ESP as JSON `{"cmd":1090519045,"pwd":9633}` | Capture 02 |
-| 9 | Original ESP sends INFO + INIT immediately after boot (no delay) | Capture 01 — within ~100ms of each other |
-| 10 | MB sends `0x20000001 action=0` (power-on/wake) BEFORE ESP sends BOOT | Capture 01 index 0 vs index 122 |
-
-### Boot Sequence (from original firmware capture)
-```
-MB starts on its own (before any ESP message):
-  0x20000001 action=0          ← power-on wake
-  0x40000009 ×5                ← boot heartbeat
-  0x40000008 ×5                ← init in progress
-  0x50000021 bat=3             ← battery level
-  0x20000004 ×2                ← ready signal
-  0x330000A1                   ← device info (name, S/N, model, version)
-  0x330000A2                   ← hardware versions
-  0x330000B0                   ← map config
-  ...
-
-ESP then responds:
-  0x40000004                   ← boot notification (BOOT)
-  0x30000005                   ← keepalive
-  0x30000028 state=0           ← ESP state: starting
-  0x300000A1 ×N                ← polling / keepalive
-  0x30000021 wifi=0,str=0      ← WiFi status (disconnected)
-  0x30000022 bt=0,str=0        ← BT status (disconnected)
-  0x40000006 hv=60400,...      ← ESP info (HW/SW/MAC)
-  0x40000001 init=3            ← init complete
-
-After PIN verify:
-  MB sends 0x330000A0 state=0  ← IDLE
-  MB sends 0x41000002 lock=1   ← lock indicator (not PIN lock, just LED)
-  MB sends 0x330000A0 state=1  ← READY/UNLOCKED
-
-Steady state:
-  ESP sends 0x30000005 / 0x300000A1 (keepalive/poll) every ~100-200ms
-  MB sends 0x40000011 rtc=...  ← RTC heartbeat every ~1s
-```
-
-### Decompilation Results (original ESP32 firmware)
-| # | Finding | Impact |
-|:-:|---------|--------|
-| 1 | ESP32 schedule in NVS (`rw_timer.c`): `mon_st`, `mon_len`, etc. | Flash ESPHome → schedule lost, must use HA automations |
-| 2 | U13 has **no schedule logic** — KV store has no schedule keys | No way to query/restore schedule from mainboard |
-| 3 | U13 RTC exists (`rtc calibration` string) but isn't used for scheduling | Time setting commands exist but only used for display |
-| 4 | GD32 firmware has NO handler for `0x10008001` (POWER_ON) | This command doesn't exist — our original `CMD_MB_POWER_ON` was wrong |
-| 5 | Correct power-on is `0x20000001 action=0` | Renamed to `wake` command |
-| 6 | ESP32 firmware uses standard IDF UART driver (no custom bit-banging) | Compatible with ESPHome UART |
 
 ## Current Implementation State
 
