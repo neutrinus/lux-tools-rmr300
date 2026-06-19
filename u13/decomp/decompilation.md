@@ -149,7 +149,7 @@ Location: `/home/marek/tmp/kosiarka/ghidra_proj/Mower_Firmware.gpr`
 
 Status:
 - `u13/firmware/u13_flash.bin` — imported and analyzed (1672 functions)
-- `u16/firmware/u16_flash.bin` — not imported (simple UART bridge, no PIN logic)
+- `u16/firmware/u16_flash.bin` — not imported (secondary MCU, no PIN logic)
 
 ### 9. Recreating from scratch (on another computer)
 
