@@ -28,7 +28,7 @@ static const uint32_t CMD_SETTING_SUB    = 0x31000017;
 static const uint32_t CMD_PIN_RESULT     = 0x33000021;
 static const uint32_t CMD_PIN_RESULT2    = 0x33000022;
 static const uint32_t CMD_STATUS         = 0x330000A0;
-static const uint32_t CMD_DEVICE_INFO    = 0x330000A1;
+static const uint32_t CMD_DEVICE_INFO    = 0x330000A9;
 static const uint32_t CMD_HW_VERSIONS    = 0x330000A2;
 static const uint32_t CMD_SCHEDULE       = 0x330000A6;
 static const uint32_t CMD_RAIN_CFG_RSP   = 0x330000A7;
@@ -505,10 +505,14 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // Before DEVICE_INFO received: send POLL rapidly (~30ms), WIFI/BT periodically
+    // Before DEVICE_INFO received: POLL rapidly, KEEPALIVE occasionally, WIFI/BT periodically
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
+    }
+    if (now - last_keepalive_ > 1000) {
+      last_keepalive_ = now;
+      send_keepalive();
     }
     if (now - last_wifi_status_ > 5000) {
       last_wifi_status_ = now;
