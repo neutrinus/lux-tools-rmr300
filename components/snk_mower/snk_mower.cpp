@@ -77,9 +77,9 @@ static const int DIAG_SCAN_PINS[] = {
 };
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
-// LCD pin candidates (output-capable pins with traces to 74HC595 shift registers)
-// GPIO34/39 excluded — input-only on ESP32, can't drive outputs
-static const int LCD_CANDIDATES[] = {5, 18, 25, 32, 33};
+// LCD pin candidates — narrowed from #49: {18,33,32} showed something.
+// Testing all 6 permutations of these 3 pins (9s total).
+static const int LCD_CANDIDATES[] = {18, 33, 32};
 static const int NUM_LCD_CANDIDATES = sizeof(LCD_CANDIDATES) / sizeof(LCD_CANDIDATES[0]);
 
 static const float VOLTAGE_LUT[101] = {
