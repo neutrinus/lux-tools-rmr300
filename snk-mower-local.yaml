@@ -3,7 +3,9 @@ substitutions:
   friendly_name: Kosiarka
 
 external_components:
-  - source: github://neutrinus/lux-tools-rmr300@main:components
+  - source:
+      type: local
+      path: components
     components: [snk_mower]
 
 esphome:
