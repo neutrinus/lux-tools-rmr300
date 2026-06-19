@@ -284,7 +284,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO32 | 8 | R31 → TP27 → U4 pin4 |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
 | GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
-| GPIO27 | 12 | buzzer ✅ (resistor unknown — not R33) |
+| GPIO27 | 12 | buzzer ✅ — przelotka, znika w wewnętrznych warstwach (lokalnie na płytce) |
 | GPIO19 | 31 | C13 → znika (może MOSI LCD?) |
 | GPIO21 | 33 | C10 → znika (może MOSI LCD?) |
 | GPIO23 | 37 | Prawy górny róg (może MOSI LCD?) |
