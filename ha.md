@@ -103,10 +103,10 @@ ESP→MB:
 
 ### What's NOT yet working
 
-- Display MOSI: GPIO19/21/23 candidate
-- Start/Home buttons: J2 pins mapped but untested
+- Display MOSI: GPIO23 lub GPIO21 (GPIO19 wykluczony — to OK button)
+- Buttons: tylko OK na GPIO19 potwierdzony, reszta (START/HOME/ON) nieznana — może przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
+- Rain sensor: GPIO36 (ADC) lub inny — niepotwierdzony
 - Mowing start: not yet tested via HA
-- Rain sensor: not tested
 
 ## ESPHome Entities
 
@@ -126,9 +126,10 @@ ESP→MB:
 | `binary_sensor.mower_is_charging` | STATUS | On charger |
 | `binary_sensor.mower_is_docked` | STATUS | At station |
 | `binary_sensor.mower_has_error` | STATUS | Error or locked |
-| `binary_sensor.mower_rain_detected` | GPIO36 ADC | Rain sensor wet |
-| `binary_sensor.mower_start_button` | GPIO26 | Physical START pressed |
-| `binary_sensor.mower_home_button` | GPIO25 | Physical HOME pressed |
+| `binary_sensor.mower_rain_detected` | GPIO36? | Rain sensor — niepotwierdzone |
+| `binary_sensor.mower_start_button` | GPIO26? | ✗ nie działa — czeka na pin_diag |
+| `binary_sensor.mower_home_button` | GPIO25? | ✗ nie działa — czeka na pin_diag |
+| `binary_sensor.mower_ok_button` | **GPIO19** ✅ | Potwierdzony pin_diag |
 
 ### Text Sensor
 
@@ -285,9 +286,9 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
 | GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
 | GPIO27 | 12 | buzzer ✅ — przelotka, znika w wewnętrznych warstwach (lokalnie na płytce) |
-| GPIO19 | 31 | C13 → znika (może MOSI LCD?) |
-| GPIO21 | 33 | C10 → znika (może MOSI LCD?) |
-| GPIO23 | 37 | Prawy górny róg (może MOSI LCD?) |
+| GPIO19 | 31 | C13 → **OK button** ✅ (pin_diag: 1→0 przy naciśnięciu) |
+| GPIO21 | 33 | C10 → znika (może MOSI LCD lub inny guzik) |
+| GPIO23 | 37 | Prawy górny róg (może MOSI LCD lub inny guzik) |
 | GPIO2 | 19 | Przelotka → znika (spód modułu) |
 | GPIO22 | 36 | Nieznane |
 

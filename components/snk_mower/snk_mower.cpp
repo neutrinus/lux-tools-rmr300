@@ -149,6 +149,13 @@ void SnkMower::setup() {
   setup_display();
   set_display_text("----");
 
+  if (boot_delay_ms_ > 0) {
+    ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
+    boot_phase_ = BootPhase::PRE;
+    phase_start_ms_ = millis();
+    return;
+  }
+
   // Phase 1: initial boot announcement — matches original ESP→MB boot sequence
   ESP_LOGI(TAG, "Boot phase PRE: sending BOOT + KEEPALIVE + STATE + RAIN");
   send_boot();
@@ -163,7 +170,6 @@ void SnkMower::setup() {
   phase_start_ms_ = millis();
   last_boot_ms_ = phase_start_ms_;
   ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
-
 
 }
 
@@ -298,6 +304,10 @@ void SnkMower::set_rain_pin(gpio_num_t pin) {
 
 void SnkMower::set_pin_diag(bool enable) {
   pin_diag_ = enable;
+}
+
+void SnkMower::set_boot_delay(uint32_t seconds) {
+  boot_delay_ms_ = seconds * 1000;
 }
 
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
@@ -507,6 +517,23 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
+    if (boot_delay_ms_ > 0) {
+      if (now - phase_start_ms_ >= boot_delay_ms_) {
+        ESP_LOGI(TAG, "Boot delay expired — starting handshake");
+        send_boot();
+        delay(1);
+        send_keepalive();
+        delay(1);
+        send_esp_state(0);
+        delay(1);
+        send_rain_status(1);
+        boot_delay_ms_ = 0;
+        phase_start_ms_ = now;
+        last_boot_ms_ = now;
+      }
+      return;
+    }
+
     // Before DEVICE_INFO received: POLL rapidly, KEEPALIVE occasionally, WIFI/BT periodically
     if (now - last_poll_ > 30) {
       last_poll_ = now;
