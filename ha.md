@@ -116,9 +116,8 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display MOSI: GPIO23 lub GPIO21 (GPIO19 wykluczony — to OK button)
-- Buttons: tylko OK na GPIO19 potwierdzony, reszta (START/HOME/ON) nieznana — może przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
-- Rain sensor: **GPIO36 ✅** — reaguje na wilgoć (DIAG + binary_sensor trigger)
+- Display — żaden pin nie wyświetlił nic (ani CLK=18, CS=5, MOSI=23). Ścieżki do 74HC595 idą z GPIO25,33,32,34,39 — trzeba przetestować te piny
+- Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
 ## ESPHome Entities
@@ -285,37 +284,49 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
          └──────────┴──────────────┴──────┘
 ```
 
-**Znane połączenia (zweryfikowane wizualnie):**
+**Znane połączenia (zweryfikowane wizualnie i/lub empiricalnie):**
 
 | GPIO | Pin | Połączenie |
 |------|-----|-----------|
-| GPIO5 | 29 | Display CS → R28 → U6 (74HC595) |
-| GPIO17 | 28 | UART TX do mainboard |
-| GPIO16 | 27 | UART RX do mainboard |
-| GPIO18 | 30 | Display CLK (przelotka) |
-| GPIO25 | 10 | R34 → TP29 → przelotka (HOME/START?) |
-| GPIO33 | 9 | R33 → TP28 → U4 pin3 |
-| GPIO32 | 8 | R31 → TP27 → U4 pin4 |
-| GPIO36 | — | **Rain sensor** ✅ — reaguje na wilgoć (DIAG + binary_sensor) |
+| GPIO5 | 29 | Display CS? → R28 → U6 (74HC595) — **NIEpotwierdzone, display nie działał** |
+| GPIO17 | 28 | UART TX do mainboard ✅ |
+| GPIO16 | 27 | UART RX do mainboard ✅ |
+| GPIO18 | 30 | Display CLK? (przelotka) — **NIEpotwierdzone, display nie działał** |
+| GPIO25 | 10 | R34 → TP29 → przelotka (ścieżka do chipów wyświetlacza — może MOSI?) |
+| GPIO33 | 9 | R33 → TP28 → U4 pin3 (ścieżka do chipów wyświetlacza) |
+| GPIO32 | 8 | R31 → TP27 → U4 pin4 (ścieżka do chipów wyświetlacza) |
+| GPIO34 | 6 | R26 → J2 / chipy wyświetlacza |
+| GPIO39 (SENSOR_VN) | 5 | Ścieżka do chipów wyświetlacza |
+| GPIO36 (SENSOR_VP) | 4 | **Rain sensor J4** ✅ — reaguje na wilgoć (DIAG + binary_sensor) |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
-| GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
-| GPIO27 | 12 | buzzer ✅ — przelotka, znika w wewnętrznych warstwach (lokalnie na płytce) |
+| GPIO27 | 12 | **Buzzer** ✅ — DC active buzzer, przelotka w wewnętrznych warstwach |
 | GPIO19 | 31 | C13 → **OK button** ✅ (pin_diag: 1→0 przy naciśnięciu) |
-| GPIO21 | 33 | C10 → znika (może MOSI LCD lub inny guzik) |
-| GPIO23 | 37 | Prawy górny róg (może MOSI LCD lub inny guzik) |
+| GPIO21 | 33 | C10 → znika (nieznane) |
+| GPIO23 | 37 | Prawy górny róg — **NIE działa jako MOSI display** |
 | GPIO2 | 19 | Przelotka → znika (spód modułu) |
 | GPIO22 | 36 | Nieznane |
+
+**Uwaga:** HARDWARE.md podaje CLK=18, CS=5, MOSI=23 ale **display nigdy nie wyświetlił ani znaku** — te piny są niepotwierdzone. Faktyczne ścieżki do 74HC595 (U1/U3/U4) idą z grupy **GPIO25,33,32,34,SENSOR_VN(39)** — to tam trzeba szukać CLK/CS/MOSI.
 
 **Potwierdzone NC (nic niepodpięte):**
 | GPIO | Pin | Uwagi |
 |------|-----|-------|
 | GPIO4 | 26 | NC |
 | GPIO0 | 25 | NC (strapping, boot) |
-| GPIO12 | 14 | NC — **buzzer nie istnieje** (jest na GPIO27!) |
+| GPIO12 | 14 | NC (HARDWARE.md błędnie podawał buzzer) |
 | GPIO13 | 17 | NC (spód modułu) |
 | GPIO14 | 13 | NC |
 | GPIO15 | 20 | NC (spód modułu) |
-| GPIO26 | 11 | NC — **START button nie ma na display board** (jest na mainboard przez J2?) |
+| GPIO26 | 11 | NC (HARDWARE.md błędnie podawał START) |
+
+**Błędy w HARDWARE.md zweryfikowane empiricalnie:**
+| HARDWARE.md twierdzi | Faktycznie |
+|----------------------|------------|
+| OK=GPIO33 | OK=**GPIO19** ✅ |
+| Buzzer=GPIO12 | Buzzer=**GPIO27** ✅ |
+| ON=GPIO27 | GPIO27 to buzzer, ON nie na ESP |
+| START=GPIO26 | **NC** — START nie na display board |
+| MOSI=GPIO23 | **Nie działa** |
 
 Uwaga: ESP32-WROOM-32UE nie ma wyprowadzonych GPIO36/GPIO39/GPIO37/GPIO38 na zewnętrzne piny.
 
