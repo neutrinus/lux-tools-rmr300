@@ -116,7 +116,7 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display — żaden pin nie wyświetlił nic (ani CLK=18, CS=5, MOSI=23). Ścieżki do 74HC595 idą z GPIO25,33,32,34,39 — trzeba przetestować te piny
+- Display — **CLK=GPIO5, CS=GPIO34, MOSI=GPIO32** ✅ — zapalił się z lcd_find (#39/343)
 - Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
@@ -288,15 +288,15 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 
 | GPIO | Pin | Połączenie |
 |------|-----|-----------|
-| GPIO5 | 29 | Display CS? → R28 → U6 (74HC595) — **NIEpotwierdzone, display nie działał** |
+| GPIO5 | 29 | **Display CLK** ✅ → R28 → U6 (74HC595) |
 | GPIO17 | 28 | UART TX do mainboard ✅ |
 | GPIO16 | 27 | UART RX do mainboard ✅ |
-| GPIO18 | 30 | Display CLK? (przelotka) — **NIEpotwierdzone, display nie działał** |
-| GPIO25 | 10 | R34 → TP29 → przelotka (ścieżka do chipów wyświetlacza — może MOSI?) |
-| GPIO33 | 9 | R33 → TP28 → U4 pin3 (ścieżka do chipów wyświetlacza) |
-| GPIO32 | 8 | R31 → TP27 → U4 pin4 (ścieżka do chipów wyświetlacza) |
-| GPIO34 | 6 | R26 → J2 / chipy wyświetlacza |
-| GPIO39 (SENSOR_VN) | 5 | Ścieżka do chipów wyświetlacza |
+| GPIO18 | 30 | Przelotka NC (nie CLK) |
+| GPIO32 | 8 | **Display MOSI** ✅ → R31 → TP27 → U4 pin4 (74HC595 DS) |
+| GPIO34 | 6 | **Display CS** ✅ → R26 → chipy wyświetlacza |
+| GPIO33 | 9 | Nieznane (NC lub drugi 74HC595) |
+| GPIO25 | 10 | R34 → TP29 → przelotka (drugi 74HC595?) |
+| GPIO39 (SENSOR_VN) | 5 | Ścieżka do chipów wyświetlacza (NC?) |
 | GPIO36 (SENSOR_VP) | 4 | **Rain sensor J4** ✅ — reaguje na wilgoć (DIAG + binary_sensor) |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
 | GPIO27 | 12 | **Buzzer** ✅ — DC active buzzer, przelotka w wewnętrznych warstwach |
@@ -326,7 +326,9 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | Buzzer=GPIO12 | Buzzer=**GPIO27** ✅ |
 | ON=GPIO27 | GPIO27 to buzzer, ON nie na ESP |
 | START=GPIO26 | **NC** — START nie na display board |
-| MOSI=GPIO23 | **Nie działa** |
+| MOSI=GPIO23 | MOSI=**GPIO32** ✅ |
+| CLK=GPIO18 | CLK=**GPIO5** ✅ |
+| CS=GPIO5 | CS=**GPIO34** ✅ |
 
 Uwaga: ESP32-WROOM-32UE nie ma wyprowadzonych GPIO36/GPIO39/GPIO37/GPIO38 na zewnętrzne piny.
 
