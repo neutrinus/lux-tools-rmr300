@@ -7,11 +7,22 @@ sold under many brands across Europe. It covers everything you need: PIN recover
 firmware dumps, protocol analysis, and the current status of replacing the
 original firmware with ESPHome.
 
-> Already know the PIN? `9633` — works on all SNK clones.
+| Brand | Model(s) | Sold at / Region |
+|-------|----------|------------------|
+| **Lux Tools** | A-RMR-300-24, Oryx 300 Vision A-RMR-300-26 | OBI (PL/DE) |
+| **Scheppach** | BRMR300, BTRM300, RRMA300 | Bauhaus, Aldi, Blocket (DE/SE) |
+| **Brucke** | RM500, RM501, RM800 | Finland |
+| **Adano** | RM5 | Harald Nyborg, Schou (DK/SE) |
+| **Gomag** | Go-MR300 | DE |
+| **Grouw** | City 300² | Schou (Scandinavia) |
+| **Smart** | 365 500m² | Schou (Scandinavia) |
+| **Meec Tools** | 300 m² (art. 027415) | Jula (FI/SE) |
+| **Julan** | 300 m² | Jula (FI/SE) |
+| **Landxcape** | (referenced in firmware) | — |
+| **Sunseeker** | V1 300m² Vision AI | Puuilo (FI) |
 
-**Same mower, different names:** Lux Tools (OBI), Scheppach, Brucke, Adano, Gomag,
-Grouw, Smart, Meec Tools (Jula), Julan, Landxcape, Sunseeker.
-See [ALIASES.md](ALIASES.md) for full list with model numbers and regions.
+All share part numbers: mainboard `80102372-01`, display `80102373-01`.
+OEM: SNK (also SK-Robot for MQTT cloud).
 
 ---
 
