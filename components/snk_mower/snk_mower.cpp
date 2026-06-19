@@ -526,12 +526,6 @@ void SnkMower::loop() {
     }
     return;
   }
-      if (lcd_scan_idx_ >= total) {
-        ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===", lcd_scan_idx_);
-      }
-    }
-    return;
-  }
 
   int rx_count = 0;
   while (available() > 0 && rx_count < 256) {
