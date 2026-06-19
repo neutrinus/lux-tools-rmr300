@@ -148,27 +148,20 @@ void SnkMower::setup() {
   setup_display();
   set_display_text("----");
 
-  ESP_LOGI(TAG, "Sending immediate boot sequence handshake...");
-  send_boot();         // 1. BOOT (0x40000004)
-  delay(20);
-  send_keepalive();    // 2. KEEPALIVE (0x30000005)
-  delay(20);
-  send_esp_state(0);   // 3. STATE 0 (Starting)
-  delay(20);
-  send_wifi_status();  // 4. WIFI & BT STATUS (0x30000021 / 0x30000022)
-  delay(20);
-  send_esp_info();     // 5. INFO (0x40000006)
-  delay(20);
-  send_init();         // 6. INIT (0x40000001 init=3)
-  delay(20);
-  send_pin();          // 7. PIN SEND (0x41000005 pwd=xxxx)
+  // Phase 1: initial boot announcement — matches original ESP→MB boot sequence
+  ESP_LOGI(TAG, "Boot phase PRE: sending BOOT + KEEPALIVE + STATE + RAIN");
+  send_boot();
+  delay(15);
+  send_keepalive();
+  delay(15);
+  send_esp_state(0);
+  delay(15);
+  send_rain_status(1);
 
-  boot_sent_ = true;
-  info_sent_ = true;
-  init_sent_ = true;
-  pin_sent_ = true;
-  last_boot_ms_ = millis();
-  ESP_LOGI(TAG, "Boot handshake and PIN sequence sent successfully");
+  boot_phase_ = BootPhase::PRE;
+  phase_start_ms_ = millis();
+  last_boot_ms_ = phase_start_ms_;
+  ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
 
 }
 
@@ -509,35 +502,79 @@ void SnkMower::loop() {
     }
   }
 
-  if (boot_sent_ && now - last_poll_ > 200) {
-    last_poll_ = now;
-    send_poll();
+  // ── Boot phase state machine ──────────────────────────────────
+
+  if (boot_phase_ == BootPhase::PRE) {
+    // Before DEVICE_INFO received: send POLL rapidly (~30ms), WIFI/BT periodically
+    if (now - last_poll_ > 30) {
+      last_poll_ = now;
+      send_poll();
+    }
+    if (now - last_wifi_status_ > 5000) {
+      last_wifi_status_ = now;
+      send_wifi_status();
+    }
   }
 
-  if (boot_sent_ && now - last_keepalive_ > 200) {
-    last_keepalive_ = now;
-    send_keepalive();
+  if (boot_phase_ == BootPhase::SYNC) {
+    // Wait ~1s after first DEVICE_INFO before bursting ESP_INFO/INIT
+    // (original firmware waits for MB to finish its info phase)
+    uint32_t since_dev_info = now - device_info_arrived_ms_;
+    if (since_dev_info > 1000) {
+      uint32_t burst_elapsed = since_dev_info - 1000;
+      if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
+        send_esp_info();
+        info_burst_count_++;
+        ESP_LOGI(TAG, "Boot SYNC: ESP_INFO #%d", info_burst_count_);
+      }
+      if (info_burst_count_ >= 5 && init_burst_count_ < 6 && burst_elapsed > 250 + (uint32_t)init_burst_count_ * 40) {
+        send_init();
+        init_burst_count_++;
+        ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
+      }
+      if (init_burst_count_ >= 6) {
+        boot_phase_ = BootPhase::DONE;
+        phase_start_ms_ = now;
+        ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
+      }
+    }
+    // Keep sending POLLs during sync phase too
+    if (now - last_poll_ > 30) {
+      last_poll_ = now;
+      send_poll();
+    }
   }
 
-  if (boot_sent_ && now - last_wifi_status_ > 5000) {
-    last_wifi_status_ = now;
-    send_wifi_status();
+  if (boot_phase_ == BootPhase::DONE) {
+    // Normal operation: KEEPALIVE at ~1s interval (matches original)
+    if (now - last_keepalive_ > 1000) {
+      last_keepalive_ = now;
+      send_keepalive();
+    }
+    if (!pin_sent_) {
+      send_pin();
+      pin_sent_ = true;
+      ESP_LOGI(TAG, "PIN sent after boot handshake");
+    }
+    if (now - last_wifi_status_ > 5000) {
+      last_wifi_status_ = now;
+      send_wifi_status();
+    }
+    if (now - last_esp_info_ > 30000) {
+      last_esp_info_ = now;
+      send_esp_info();
+    }
+    if (now - last_esp_state_ > 10000) {
+      last_esp_state_ = now;
+      send_esp_state(state_);
+    }
+    if (now - last_rain_read_ > 60000) {
+      last_rain_read_ = now;
+      read_rain_sensor();
+    }
   }
 
-  if (boot_sent_ && now - last_esp_info_ > 30000) {
-    last_esp_info_ = now;
-    send_esp_info();
-  }
-
-  if (boot_sent_ && now - last_esp_state_ > 10000) {
-    last_esp_state_ = now;
-    send_esp_state(state_);
-  }
-
-  if (boot_sent_ && now - last_rain_read_ > 60000) {
-    last_rain_read_ = now;
-    read_rain_sensor();
-  }
+  // ── Display auto-off ──────────────────────────────────────────
 
   if (display_off_timeout_ms_ > 0 && !display_off_ &&
       current_state_ != MowerState::MOWING &&
@@ -584,7 +621,11 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case CMD_CUT_TIME_Q:       handle_cut_time_query(doc); break;
     case CMD_UNKNOWN_14:       ESP_LOGV(TAG, "Unknown 0x40000014"); break;
     default:
-      if ((cmd & 0xFFFFFF00) == CMD_SETTING_ACK_BASE && (cmd & 0xFF) >= 0x09 && (cmd & 0xFF) <= 0x27) {
+      if (cmd == 0x20000002) {
+        ESP_LOGW(TAG, "SUPERVISION: MB sent 0x20000002 — power may be cut soon");
+      } else if (cmd == 0x15000001) {
+        ESP_LOGW(TAG, "U16 FRAME ERROR: 0x15000001 — our frames may be malformed");
+      } else if ((cmd & 0xFFFFFF00) == CMD_SETTING_ACK_BASE && (cmd & 0xFF) >= 0x09 && (cmd & 0xFF) <= 0x27) {
         handle_setting_ack(doc, cmd);
       } else {
         ESP_LOGD(TAG, "RX: 0x%08lX", (unsigned long)cmd);
@@ -755,6 +796,22 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     if (doc.containsKey("bat_name") && battery_name_sensor_) {
       battery_name_sensor_->publish_state(doc["bat_name"] | "");
     }
+  }
+
+  // DEVICE_INFO from MB — prepare for SYNC burst
+  if (boot_phase_ == BootPhase::PRE) {
+    ESP_LOGI(TAG, "DEVICE_INFO received — will send ESP_INFO/INIT after brief delay");
+    boot_phase_ = BootPhase::SYNC;
+    phase_start_ms_ = millis();
+    device_info_arrived_ms_ = phase_start_ms_;
+    info_burst_count_ = 0;
+    init_burst_count_ = 0;
+  } else if (boot_phase_ == BootPhase::SYNC && init_burst_count_ > 0) {
+    // MB re-sent DEVICE_INFO — reset burst just in case
+    ESP_LOGD(TAG, "DEVICE_INFO repeated during SYNC — resetting burst timer");
+    device_info_arrived_ms_ = millis();
+    info_burst_count_ = 0;
+    init_burst_count_ = 0;
   }
 }
 

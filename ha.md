@@ -222,6 +222,74 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
                                 └──────────────┘
 ```
 
+## ESP32-WROOM-32UE Pinout (SNK_DISPLAY_CP_V11)
+
+```
+         ┌────────────────────────────────┐
+         │  ESP32-WROOM-32UE              │
+         │  (top view, USB-UART on top)   │
+         ├────────────────────────────────┤
+         │  1 GND       38 GND            │
+         │  2 3V3       37 GPIO23         │
+         │  3 EN        36 GPIO22         │
+         │  4 SENSOR_VP 35 U0TXD          │
+         │  5 SENSOR_VN 34 U0RXD          │
+         │  6 GPIO34    33 GPIO21         │
+         │  7 GPIO35    32 NC             │
+         │  8 GPIO32    31 GPIO19         │
+         │  9 GPIO33    30 GPIO18 ← CLK   │
+         │ 10 GPIO25    29 GPIO5  ← CS    │
+         │ 11 GPIO26    28 GPIO17 → TX    │
+         │ 12 GPIO27    27 GPIO16 → RX    │
+         │ 13 GPIO14    26 GPIO4          │
+         │ 14 GPIO12    25 GPIO0          │
+         ├──────────┬───┴──────────┬──────┤
+         │ 15 GND   │ 16-24 (bttm) │      │
+         │          │ 16 NC        │      │
+         │          │ 17 GPIO13    │      │
+         │          │ 18 GND       │      │
+         │          │ 19 GPIO02    │      │
+         │          │ 20 GPIO15    │      │
+         │          │ 21 NC        │      │
+         │          │ 22 NC        │      │
+         │          │ 23 NC        │      │
+         │          │ 24 NC        │      │
+         └──────────┴──────────────┴──────┘
+```
+
+**Znane połączenia (zweryfikowane wizualnie):**
+
+| GPIO | Pin | Połączenie |
+|------|-----|-----------|
+| GPIO5 | 29 | Display CS → R28 → U6 (74HC595) |
+| GPIO17 | 28 | UART TX do mainboard |
+| GPIO16 | 27 | UART RX do mainboard |
+| GPIO18 | 30 | Display CLK (przelotka) |
+| GPIO25 | 10 | R34 → J2 → mainboard (HOME?) |
+| GPIO33 | 9 | R31 → J2 → mainboard (OK?) |
+| GPIO32 | 8 | R39 → J2 → mainboard |
+| GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
+| GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
+| GPIO27 | 12 | Przelotka → J2 → mainboard |
+| GPIO19 | 31 | C13 → znika (może MOSI LCD?) |
+| GPIO21 | 33 | C10 → znika (może MOSI LCD?) |
+| GPIO23 | 37 | Prawy górny róg (może MOSI LCD?) |
+| GPIO2 | 19 | Przelotka → znika (spód modułu) |
+| GPIO22 | 36 | Nieznane |
+
+**Potwierdzone NC (nic niepodpięte):**
+| GPIO | Pin | Uwagi |
+|------|-----|-------|
+| GPIO4 | 26 | NC |
+| GPIO0 | 25 | NC (strapping, boot) |
+| GPIO12 | 14 | NC — **buzzer nie istnieje!** |
+| GPIO13 | 17 | NC (spód modułu) |
+| GPIO14 | 13 | NC |
+| GPIO15 | 20 | NC (spód modułu) |
+| GPIO26 | 11 | NC — **START button nie ma na display board** (jest na mainboard przez J2?) |
+
+Uwaga: ESP32-WROOM-32UE nie ma wyprowadzonych GPIO36/GPIO39/GPIO37/GPIO38 na zewnętrzne piny.
+
 ## Key files
 
 | File | Purpose |

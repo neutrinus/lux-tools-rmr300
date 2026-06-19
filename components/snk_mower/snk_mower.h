@@ -115,22 +115,30 @@ class SnkMower : public Component, public uart::UARTDevice {
   void publish_mower_state(MowerState state);
   void read_rain_sensor();
 
-  bool boot_sent_{false};
+  enum class BootPhase : uint8_t {
+    PRE,   // waiting for DEVICE_INFO from MB
+    SYNC,  // DEVICE_INFO received, sending ESP_INFO/INIT burst
+    DONE,  // handshake complete, normal keepalive operation
+  };
+
+  BootPhase boot_phase_{BootPhase::PRE};
+  uint32_t phase_start_ms_{0};
+  uint32_t device_info_arrived_ms_{0};
+  int info_burst_count_{0};
+  int init_burst_count_{0};
   bool pin_sent_{false};
   bool pin_ok_{false};
   int pin_retries_{0};
   bool power_ready_{false};
 
-  uint32_t last_keepalive_{0};
   uint32_t last_poll_{0};
+  uint32_t last_keepalive_{0};
   uint32_t last_wifi_status_{0};
   uint32_t last_esp_info_{0};
   uint32_t last_esp_state_{0};
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
   uint32_t last_boot_ms_{0};
-  bool info_sent_{false};
-  bool init_sent_{false};
 
   int state_{0};
   int error_code_{0};
