@@ -58,7 +58,8 @@ snk_mower:
   rain_pin: 36
   display_off_timeout: 5
   boot_delay: 10
-  pin_diag: true
+  pin_diag: false
+  lcd_find: true
 
   battery_level:
     name: "${friendly_name} Battery Level"

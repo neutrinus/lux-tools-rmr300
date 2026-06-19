@@ -77,6 +77,10 @@ static const int DIAG_SCAN_PINS[] = {
 };
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
+// LCD pin candidates (pins with traces to 74HC595 shift registers)
+static const int LCD_CANDIDATES[] = {5, 18, 25, 32, 33, 34, 39};
+static const int NUM_LCD_CANDIDATES = sizeof(LCD_CANDIDATES) / sizeof(LCD_CANDIDATES[0]);
+
 static const float VOLTAGE_LUT[101] = {
     15.0f, 15.05f, 15.1f, 15.15f, 15.2f, 15.25f, 15.3f, 15.35f, 15.4f, 15.5f,
     15.6f, 15.7f,  15.8f, 15.85f, 15.9f, 16.0f,  16.1f, 16.15f, 16.2f, 16.25f,
@@ -130,6 +134,17 @@ void SnkMower::setup() {
       ESP_LOGI(TAG, "  GPIO%02d: initial=%d", gpio, level);
     }
     ESP_LOGI(TAG, "=== DIAG: monitoring started ===");
+    return;
+  }
+
+  if (lcd_find_) {
+    ESP_LOGI(TAG, "=== LCD PIN FINDER MODE ===");
+    ESP_LOGI(TAG, "Testing %d candidates: %d combos of (CLK, CS, MOSI) x %.1fs",
+             NUM_LCD_CANDIDATES,
+             NUM_LCD_CANDIDATES * (NUM_LCD_CANDIDATES-1) * (NUM_LCD_CANDIDATES-2),
+             1.5f);
+    lcd_scan_idx_ = 0;
+    last_lcd_scan_ms_ = millis();
     return;
   }
 
@@ -310,6 +325,10 @@ void SnkMower::set_boot_delay(uint32_t seconds) {
   boot_delay_ms_ = seconds * 1000;
 }
 
+void SnkMower::set_lcd_find(bool enable) {
+  lcd_find_ = enable;
+}
+
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
   display_off_timeout_ms_ = minutes * 60000UL;
   ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
@@ -475,6 +494,39 @@ void SnkMower::loop() {
           ESP_LOGD(TAG, "DIAG: GPIO%02d: %d\u2192%d", gpio, diag_prev_[gpio], level);
           diag_prev_[gpio] = level;
         }
+      }
+    }
+    return;
+  }
+
+  if (lcd_find_) {
+    if (now - last_lcd_scan_ms_ >= 1500) {
+      last_lcd_scan_ms_ = now;
+      int n = NUM_LCD_CANDIDATES;
+      int total = n * n * n;
+      while (lcd_scan_idx_ < total) {
+        int i = lcd_scan_idx_ / (n * n);
+        int j = (lcd_scan_idx_ / n) % n;
+        int k = lcd_scan_idx_ % n;
+        lcd_scan_idx_++;
+        if (i == j || i == k || j == k) continue;
+        int clk = LCD_CANDIDATES[i];
+        int cs  = LCD_CANDIDATES[j];
+        int mosi = LCD_CANDIDATES[k];
+        gpio_set_direction((gpio_num_t)clk, GPIO_MODE_OUTPUT);
+        gpio_set_direction((gpio_num_t)cs, GPIO_MODE_OUTPUT);
+        gpio_set_direction((gpio_num_t)mosi, GPIO_MODE_OUTPUT);
+        gpio_set_level((gpio_num_t)clk, 0);
+        gpio_set_level((gpio_num_t)cs, 1);
+        gpio_set_level((gpio_num_t)mosi, 0);
+        shift24((gpio_num_t)clk, (gpio_num_t)mosi, (gpio_num_t)cs,
+                0xFF, 0x0F, 0xFF);
+        ESP_LOGI(TAG, "LCD: #%d/%d — CLK=%d CS=%d MOSI=%d",
+                 lcd_scan_idx_, total, clk, cs, mosi);
+        break;
+      }
+      if (lcd_scan_idx_ >= total) {
+        ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===", total);
       }
     }
     return;
