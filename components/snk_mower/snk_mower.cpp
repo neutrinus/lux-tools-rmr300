@@ -77,8 +77,9 @@ static const int DIAG_SCAN_PINS[] = {
 };
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
-// LCD pin candidates (pins with traces to 74HC595 shift registers)
-static const int LCD_CANDIDATES[] = {5, 18, 25, 32, 33, 34, 39};
+// LCD pin candidates (output-capable pins with traces to 74HC595 shift registers)
+// GPIO34/39 excluded — input-only on ESP32, can't drive outputs
+static const int LCD_CANDIDATES[] = {5, 18, 25, 32, 33};
 static const int NUM_LCD_CANDIDATES = sizeof(LCD_CANDIDATES) / sizeof(LCD_CANDIDATES[0]);
 
 static const float VOLTAGE_LUT[101] = {
@@ -138,11 +139,10 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_) {
-    ESP_LOGI(TAG, "=== LCD PIN FINDER MODE ===");
-    ESP_LOGI(TAG, "Testing %d candidates: %d combos of (CLK, CS, MOSI) x %.1fs",
-             NUM_LCD_CANDIDATES,
-             NUM_LCD_CANDIDATES * (NUM_LCD_CANDIDATES-1) * (NUM_LCD_CANDIDATES-2),
-             1.5f);
+    ESP_LOGI(TAG, "=== LCD PIN FINDER (output-only) ===");
+    int combos = NUM_LCD_CANDIDATES * (NUM_LCD_CANDIDATES-1) * (NUM_LCD_CANDIDATES-2);
+    ESP_LOGI(TAG, "Testing %d candidates: %d combos of (CLK, CS, MOSI) x %.1fs (~%ds)",
+             NUM_LCD_CANDIDATES, combos, 1.5f, (int)(combos * 1.5f));
     lcd_scan_idx_ = 0;
     last_lcd_scan_ms_ = millis();
     return;
@@ -520,13 +520,14 @@ void SnkMower::loop() {
         gpio_set_level((gpio_num_t)cs, 1);
         gpio_set_level((gpio_num_t)mosi, 0);
         shift24((gpio_num_t)clk, (gpio_num_t)mosi, (gpio_num_t)cs,
-                0xFF, 0x0F, 0xFF);
+                0xFF, 0xFF, 0xFF);
+        int combo = lcd_scan_idx_;
         ESP_LOGI(TAG, "LCD: #%d/%d — CLK=%d CS=%d MOSI=%d",
-                 lcd_scan_idx_, total, clk, cs, mosi);
+                 combo, total, clk, cs, mosi);
         break;
       }
       if (lcd_scan_idx_ >= total) {
-        ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===", total);
+        ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===", lcd_scan_idx_);
       }
     }
     return;

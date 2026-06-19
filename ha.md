@@ -116,7 +116,7 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display — **CLK=GPIO5, CS=GPIO34, MOSI=GPIO32** ✅ — zapalił się z lcd_find (#39/343)
+- Display — CLK=GPIO5, MOSI=GPIO32 ✅ (działają), ale **CS=GPIO34 ❌ input-only** — CS do znalezienia: {18,25,33}
 - Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
@@ -293,7 +293,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO16 | 27 | UART RX do mainboard ✅ |
 | GPIO18 | 30 | Przelotka NC (nie CLK) |
 | GPIO32 | 8 | **Display MOSI** ✅ → R31 → TP27 → U4 pin4 (74HC595 DS) |
-| GPIO34 | 6 | **Display CS** ✅ → R26 → chipy wyświetlacza |
+| GPIO34 | 6 | ❌ input-only — **nie może być CS** → R26 → chipy wyświetlacza |
 | GPIO33 | 9 | Nieznane (NC lub drugi 74HC595) |
 | GPIO25 | 10 | R34 → TP29 → przelotka (drugi 74HC595?) |
 | GPIO39 (SENSOR_VN) | 5 | Ścieżka do chipów wyświetlacza (NC?) |
@@ -328,7 +328,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | START=GPIO26 | **NC** — START nie na display board |
 | MOSI=GPIO23 | MOSI=**GPIO32** ✅ |
 | CLK=GPIO18 | CLK=**GPIO5** ✅ |
-| CS=GPIO5 | CS=**GPIO34** ✅ |
+| CS=GPIO5 | CS=??? (GPIO34 ❌ input-only) — do znalezienia |
 
 Uwaga: ESP32-WROOM-32UE nie ma wyprowadzonych GPIO36/GPIO39/GPIO37/GPIO38 na zewnętrzne piny.
 
