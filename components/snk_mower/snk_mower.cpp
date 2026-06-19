@@ -113,14 +113,19 @@ static int voltage_to_percent(float v) {
 static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
                     uint8_t b0, uint8_t b1, uint8_t b2) {
   gpio_set_level(cs, 0);
+  delayMicroseconds(2);
   uint8_t bytes[] = {b0, b1, b2};
   for (int b = 0; b < 3; b++) {
     for (int i = 7; i >= 0; i--) {
       gpio_set_level(mosi, (bytes[b] >> i) & 1);
+      delayMicroseconds(1);
       gpio_set_level(clk, 1);
+      delayMicroseconds(1);
       gpio_set_level(clk, 0);
+      delayMicroseconds(1);
     }
   }
+  delayMicroseconds(2);
   gpio_set_level(cs, 1);
 }
 
@@ -657,10 +662,12 @@ void SnkMower::loop() {
       current_state_ != MowerState::CHARGING &&
       current_state_ != MowerState::RETURNING &&
       current_state_ != MowerState::ERROR_STATE &&
-      current_state_ != MowerState::LOCKED &&
-      now - last_activity_ms_ > display_off_timeout_ms_) {
-    ESP_LOGD(TAG, "Display auto-off (idle %ums)", (unsigned)(now - last_activity_ms_));
-    display_off_ = true;
+      current_state_ != MowerState::LOCKED) {
+    uint32_t idle = millis() - last_activity_ms_;
+    if (idle > display_off_timeout_ms_ && idle < display_off_timeout_ms_ * 2) {
+      ESP_LOGD(TAG, "Display auto-off (idle %ums)", (unsigned)idle);
+      display_off_ = true;
+    }
   }
 
   refresh_display();
