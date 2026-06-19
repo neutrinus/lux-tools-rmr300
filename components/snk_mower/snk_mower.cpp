@@ -164,8 +164,7 @@ void SnkMower::setup() {
   last_boot_ms_ = phase_start_ms_;
   ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
 
-  // TEMP: buzz test — 1s on buzzer pin to verify GPIO
-  buzz(1000);
+
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {

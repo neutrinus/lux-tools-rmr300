@@ -73,7 +73,7 @@ snk_mower:
   display_clk: 18                   # SCLK → 74HC595 SH_CP
   display_mosi: 23                  # MOSI → 74HC595 DS
   display_cs: 5                     # CS/latch → 74HC595 ST_CP
-  buzzer_pin: 2                     # optional, 0-39, omit to disable
+  buzzer_pin: 27                    # optional, 0-39, omit to disable
   rain_pin: 36                      # rain sensor GPIO (ADC capable)
   display_off_timeout: 5            # minutes of idle before display off (0=never)
 

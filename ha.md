@@ -1,6 +1,17 @@
 # Home Assistant Integration — SNK Mower ESPHome
 
-## Status: WIP — experimental, boot sequence functional
+## Status: ✅ Boot handshake works — system stable 30+ s
+
+Boot sequence resolved 2026-06-19:
+
+| Phase | Trigger | ESP sends | MB sends |
+|-------|---------|-----------|----------|
+| PRE | 0ms | BOOT → KEEPALIVE → STATE → RAIN → POLL@30ms + KEEPALIVE@1s | — |
+| SYNC | `0x330000A1` (DEVICE_INFO) | ESP_INFO×5 + INIT×6 in ~465ms | DEVICE_INFO(name/SN), HW_VERSIONS |
+| DONE | INIT×6 sent | KEEPALIVE@1s + PIN once + periodic ESP_INFO@30s | HEARTBEAT, STATUS, RTC@1Hz, PIN_RESULT, LIGHT, MAP |
+
+Key insight: MB sends `0x330000A1` as a **request** for ESP identification.  
+When ESP has preemptively sent INFO, MB sends `0x330000A9` instead.
 
 ## Protocol (confirmed by LA capture + CRC verification)
 
@@ -73,26 +84,31 @@ ESP→MB:
 
 ### Current problems
 
-| Problem | Symptom | Likely cause |
-|---------|---------|-------------|
-| U16 rejects frames | `receive message error &{...}` with `cmd=0x15000001` | Frame format mismatch or garbage in RX buffer (len=40 vs expected ~21) |
-| MB kills power after ~7-8s | ESP loses power, reboots | MB supervision timer triggered by communication failure |
-| BOOT not visible in log | First TX in log is POLL, not BOOT | Setup() BOOT may be sent before log stream connected; or UART not ready at setup() time |
+| Problem | Symptom | Status |
+|---------|---------|--------|
+| U16 rejects frames | `0x15000001` | Rare; not seen in recent logs |
+| MB kills power after ~7-8s | ESP loses power | ✅ **Fixed** — boot handshake completes in ~2-3s |
+| Buzzer | No sound on GPIO2, GPIO12 | ❌ to be tested: GPIO27 next |
 
 ### What's confirmed
 
-- CRC algorithm: ✅ Dallas CRC-8 (matches original ESP captures for BOOT, KEEP, STATE, POLL, WIFI, BT)
-- Frame format: ✅ `&JSON{CRC}#` (matches capture)
-- UART baud: ✅ 230400 8N1 (LA capture decode + CRC match)
-- RX parser: ✅ receives and decodes JSON frames from MB (DEVICE_INFO, HW_VERSIONS, STATUS, etc.)
-- PIN: ✅ stored in U13 RAM, value `9633`, auto-sent on boot
-- Protocol: ✅ JSON, NOT binary 0xAA 0x55
+- CRC algorithm: ✅ Dallas CRC-8 (matches original ESP captures)
+- Frame format: ✅ `&JSON{CRC}#`
+- UART baud: ✅ 230400 8N1
+- RX parser: ✅ receives JSON frames from MB
+- PIN: ✅ stored in U13 RAM, value `9633`
+- Protocol: ✅ JSON
+- Boot handshake: ✅ PRE → SYNC → DONE completes successfully
+- System stability: ✅ 40+ seconds and counting (no power cut)
+- PIN accepted: ✅ MB confirms PIN
 
 ### What's NOT yet working
 
-- MB power-down after ~7-8s — must resolve communication error
-- U16 error `0x15000001` — not documented in any decompiled code (likely U16 internal, U16 firmware not analyzed in Ghidra)
-- Boot timing — ESP setup() runs ~300-500ms after power-on, MB may have already sent initial messages before our UART is ready
+- Buzzer: GPIO pin unknown (GPIO12=NC, GPIO2=silent)
+- Display MOSI: GPIO19/21/23 candidate
+- Start/Home buttons: J2 pins mapped but untested
+- Mowing start: not yet tested via HA
+- Rain sensor: not tested
 
 ## ESPHome Entities
 
@@ -265,12 +281,12 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO17 | 28 | UART TX do mainboard |
 | GPIO16 | 27 | UART RX do mainboard |
 | GPIO18 | 30 | Display CLK (przelotka) |
-| GPIO25 | 10 | R34 → J2 → mainboard (HOME?) |
-| GPIO33 | 9 | R31 → J2 → mainboard (OK?) |
+| GPIO25 | 10 | R34 → TP29 → przelotka (HOME/START?) |
+| GPIO33 | 9 | R31 → TP27 → U4 pin4 |
 | GPIO32 | 8 | R39 → J2 → mainboard |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
 | GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
-| GPIO27 | 12 | Przelotka → J2 → mainboard |
+| GPIO27 | 12 | R33 → TP28 → U4 pin3 |
 | GPIO19 | 31 | C13 → znika (może MOSI LCD?) |
 | GPIO21 | 33 | C10 → znika (może MOSI LCD?) |
 | GPIO23 | 37 | Prawy górny róg (może MOSI LCD?) |
