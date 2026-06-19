@@ -52,9 +52,9 @@ snk_mower:
   id: my_mower
   uart_id: mower_uart
   pin: "9633"
-  display_clk: 18
+  display_clk: 5
   display_mosi: 32
-  display_cs: 33
+  display_cs: 25
   buzzer_pin: 27
   rain_pin: 36
   display_off_timeout: 5
@@ -113,34 +113,8 @@ snk_mower:
   mower_state:
     name: "${friendly_name} State"
 
-# ── Physical buttons ────────────────────────────────────────
+# ── Physical buttons (none connected) ───────────────────────
 binary_sensor:
-  - platform: gpio
-    name: "${friendly_name} Start Button"
-    pin:
-      number: GPIO26
-      mode: INPUT_PULLUP
-      inverted: true
-    filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
-    on_press:
-      then:
-        - lambda: 'id(my_mower)->start_mowing();'
-
-  - platform: gpio
-    name: "${friendly_name} Home Button"
-    pin:
-      number: GPIO25
-      mode: INPUT_PULLUP
-      inverted: true
-    filters:
-      - delayed_on: 50ms
-      - delayed_off: 50ms
-    on_press:
-      then:
-        - lambda: 'id(my_mower)->return_to_dock();'
-
   - platform: gpio
     name: "${friendly_name} Rain Detected"
     pin:

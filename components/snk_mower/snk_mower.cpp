@@ -77,14 +77,15 @@ static const int DIAG_SCAN_PINS[] = {
 };
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
-// 6 permutations of {18,33,32}
+// 6 permutations of {5,25,32} — CLK=5, MOSI=32 potwierdzone FW+empirycznie,
+// CS=25 silny kandydat z analizy firmware (występuje z GPIO5 w func 0x401908b4)
 static const int LCD_COMBOS[6][3] = {
-    {18, 33, 32},  // #0
-    {18, 32, 33},  // #1
-    {33, 18, 32},  // #2
-    {33, 32, 18},  // #3
-    {32, 18, 33},  // #4
-    {32, 33, 18},  // #5
+    {5, 25, 32},  // #0
+    {5, 32, 25},  // #1
+    {25, 5, 32},  // #2
+    {25, 32, 5},  // #3
+    {32, 5, 25},  // #4
+    {32, 25, 5},  // #5
 };
 
 static const float VOLTAGE_LUT[101] = {
@@ -149,13 +150,17 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_) {
-    ESP_LOGI(TAG, "=== LCD PIN FINDER (6 permutations of {18,33,32}) ===");
+    ESP_LOGI(TAG, "=== LCD PIN FINDER (6 permutations of {5,25,32}) ===");
     ESP_LOGI(TAG, "Testing 6 combos of (CLK, CS, MOSI) x 4s (~24s)");
     lcd_scan_idx_ = 0;
     last_lcd_scan_ms_ = millis();
     return;
   }
 
+  finish_setup();
+}
+
+void SnkMower::finish_setup() {
   last_activity_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
@@ -179,7 +184,6 @@ void SnkMower::setup() {
     return;
   }
 
-  // Phase 1: initial boot announcement — matches original ESP→MB boot sequence
   ESP_LOGI(TAG, "Boot phase PRE: sending BOOT + KEEPALIVE + STATE + RAIN");
   send_boot();
   delay(15);
@@ -193,7 +197,6 @@ void SnkMower::setup() {
   phase_start_ms_ = millis();
   last_boot_ms_ = phase_start_ms_;
   ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
-
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -527,9 +530,11 @@ void SnkMower::loop() {
         lcd_scan_idx_++;
       } else {
         ESP_LOGI(TAG, "=== LCD scan complete (6 combos) ===");
+        lcd_find_ = false;
+        finish_setup();
       }
     }
-    return;
+    if (lcd_find_) return;
   }
 
   int rx_count = 0;
