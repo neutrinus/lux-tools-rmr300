@@ -89,6 +89,19 @@ ESP→MB:
 | U16 rejects frames | `0x15000001` | Rare; not seen in recent logs |
 | MB kills power after ~7-8s | ESP loses power | ✅ **Fixed** — boot handshake completes in ~2-3s |
 
+### MB Supervisor Timer (Watchdog)
+
+Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE), U13 odcina zasilanie płytki display. To zabija ESP podczas OTA (10-20s) — watchdog ubija ESP w trakcie flashowania.
+
+**Mechanizm:** watchdog zaczyna się dopiero po handshaku. Jeśli ESP nie wyśle BOOT, MB nie wie o ESP i nie nadzoruje zasilania.
+
+**Workaround OTA:**
+- `boot_delay: 10` — opóźnia handshake o 10s po resecie, dając czas na OTA zanim watchdog wystartuje
+- `safe_mode: disabled` — ESP musi wystartować normalnie, nie w safe mode, by handshake zadziałał (w safe mode nie ma komunikacji UART, watchdog ubija)
+- W oknie opóźnienia OTA może się połączyć i rozpocząć flashowanie bez ryzyka
+
+**Tryb pin_diag:** całkowicie pomija handshake → watchdog nie startuje → ESP bezpieczne nawet bez boot_delay. Przydatne do długich testów GPIO.
+
 ### What's confirmed
 
 - CRC algorithm: ✅ Dallas CRC-8 (matches original ESP captures)
