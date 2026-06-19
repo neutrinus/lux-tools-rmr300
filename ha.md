@@ -88,7 +88,6 @@ ESP→MB:
 |---------|---------|--------|
 | U16 rejects frames | `0x15000001` | Rare; not seen in recent logs |
 | MB kills power after ~7-8s | ESP loses power | ✅ **Fixed** — boot handshake completes in ~2-3s |
-| Buzzer | No sound on GPIO2, GPIO12 | ❌ to be tested: GPIO27 next |
 
 ### What's confirmed
 
@@ -104,7 +103,6 @@ ESP→MB:
 
 ### What's NOT yet working
 
-- Buzzer: GPIO pin unknown (GPIO12=NC, GPIO2=silent)
 - Display MOSI: GPIO19/21/23 candidate
 - Start/Home buttons: J2 pins mapped but untested
 - Mowing start: not yet tested via HA
@@ -286,7 +284,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO32 | 8 | R39 → J2 → mainboard |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
 | GPIO34 | 6 | R26 → J2 → mainboard (ADC, input-only) |
-| GPIO27 | 12 | R33 → TP28 → U4 pin3 |
+| GPIO27 | 12 | R33 → TP28 → U4 pin3 → buzzer ✅ |
 | GPIO19 | 31 | C13 → znika (może MOSI LCD?) |
 | GPIO21 | 33 | C10 → znika (może MOSI LCD?) |
 | GPIO23 | 37 | Prawy górny róg (może MOSI LCD?) |
@@ -298,7 +296,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 |------|-----|-------|
 | GPIO4 | 26 | NC |
 | GPIO0 | 25 | NC (strapping, boot) |
-| GPIO12 | 14 | NC — **buzzer nie istnieje!** |
+| GPIO12 | 14 | NC — **buzzer nie istnieje** (jest na GPIO27!) |
 | GPIO13 | 17 | NC (spód modułu) |
 | GPIO14 | 13 | NC |
 | GPIO15 | 20 | NC (spód modułu) |
