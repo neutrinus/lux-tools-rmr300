@@ -4,18 +4,20 @@
 #
 # Custom component: components/snk_mower/
 #
-# Wiring:
-#   UART TX → GPIO15 (to mainboard)
-#   UART RX ← GPIO13 (from mainboard)
-#   Display CLK → GPIO18 (SPI SCLK)
-#   Display MOSI → GPIO23 (SPI MOSI)
-#   Display CS → GPIO5  (SPI CS / 74HC595 latch)
-#   Button START → GPIO26
-#   Button HOME  → GPIO25
-#   Button OK    → GPIO33 (unused, still forked to mainboard)
-#   Button ON    → GPIO27 (unused, still forked to mainboard)
+# Wiring (confirmed on PCB 2026-06-19):
+#   UART TX → GPIO17 (R29 → J2.4)
+#   UART RX ← GPIO16 (R30 → J2.3)
+#   Display CLK → GPIO18 (SCLK → 74HC595 SH_CP)
+#   Display MOSI → GPIO23 (MOSI → 74HC595 DS) — candidate, may be 19/21
+#   Display CS → GPIO5  (CS → 74HC595 ST_CP)
+#   J2.7 → R34 → GPIO25 (HOME button on mainboard)
+#   J2.8 → R39 → GPIO32
+#   J2.9 → R31 → GPIO33 → U4 pin4
+#   J2.12 → R33 → GPIO27 → U4 pin3
+#   J2.10 → R27 → GPIO35 (ADC input-only)
+#   J2.11 → R26 → GPIO34 (ADC input-only)
 #   Rain sensor → GPIO36 (ADC)
-#   Buzzer      → GPIO12 (PWM, optional)
+#   Buzzer      → TBD (GPIO12=NC, GPIO2=silent, testing GPIO27)
 
 substitutions:
   name: snk-mower
