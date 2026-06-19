@@ -475,11 +475,11 @@ void SnkMower::loop() {
     return;
   }
 
-  while (available() > 0) {
+  int rx_count = 0;
+  while (available() > 0 && rx_count < 256) {
     uint8_t byte;
     read_byte(&byte);
-
-    ESP_LOGV(TAG, "RX byte: 0x%02X '%c'", byte, byte >= 32 ? (char)byte : '.');
+    rx_count++;
 
     if (byte == '{') {
       rx_index_ = 0;
