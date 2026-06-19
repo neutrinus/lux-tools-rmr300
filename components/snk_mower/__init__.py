@@ -184,10 +184,12 @@ async def to_code(config):
     ))
 
     if CONF_BUZZER_PIN in config:
-        cg.add(var.set_buzzer_pin(config[CONF_BUZZER_PIN]))
+        cg.add(var.set_buzzer_pin(cg.RawExpression(
+            f'(gpio_num_t){config[CONF_BUZZER_PIN]}')))
 
     if CONF_RAIN_PIN in config:
-        cg.add(var.set_rain_pin(config[CONF_RAIN_PIN]))
+        cg.add(var.set_rain_pin(cg.RawExpression(
+            f'(gpio_num_t){config[CONF_RAIN_PIN]}')))
 
     if config[CONF_PIN_DIAG]:
         cg.add(var.set_pin_diag(True))
