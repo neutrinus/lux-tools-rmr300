@@ -517,26 +517,22 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::SYNC) {
-    // Wait ~1s after first DEVICE_INFO before bursting ESP_INFO/INIT
-    // (original firmware waits for MB to finish its info phase)
-    uint32_t since_dev_info = now - device_info_arrived_ms_;
-    if (since_dev_info > 1000) {
-      uint32_t burst_elapsed = since_dev_info - 1000;
-      if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
-        send_esp_info();
-        info_burst_count_++;
-        ESP_LOGI(TAG, "Boot SYNC: ESP_INFO #%d", info_burst_count_);
-      }
-      if (info_burst_count_ >= 5 && init_burst_count_ < 6 && burst_elapsed > 250 + (uint32_t)init_burst_count_ * 40) {
-        send_init();
-        init_burst_count_++;
-        ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
-      }
-      if (init_burst_count_ >= 6) {
-        boot_phase_ = BootPhase::DONE;
-        phase_start_ms_ = now;
-        ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
-      }
+    // Send ESP_INFO/INIT burst immediately (MB sends DEVICE_INFO every ~30ms)
+    uint32_t burst_elapsed = now - device_info_arrived_ms_;
+    if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
+      send_esp_info();
+      info_burst_count_++;
+      ESP_LOGI(TAG, "Boot SYNC: ESP_INFO #%d", info_burst_count_);
+    }
+    if (info_burst_count_ >= 5 && init_burst_count_ < 6 && burst_elapsed > 250 + (uint32_t)init_burst_count_ * 40) {
+      send_init();
+      init_burst_count_++;
+      ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
+    }
+    if (init_burst_count_ >= 6) {
+      boot_phase_ = BootPhase::DONE;
+      phase_start_ms_ = now;
+      ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
     }
     // Keep sending POLLs during sync phase too
     if (now - last_poll_ > 30) {
@@ -798,18 +794,12 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     }
   }
 
-  // DEVICE_INFO from MB — prepare for SYNC burst
+  // DEVICE_INFO from MB — start SYNC burst on first receipt
   if (boot_phase_ == BootPhase::PRE) {
-    ESP_LOGI(TAG, "DEVICE_INFO received — will send ESP_INFO/INIT after brief delay");
+    ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
     boot_phase_ = BootPhase::SYNC;
     phase_start_ms_ = millis();
     device_info_arrived_ms_ = phase_start_ms_;
-    info_burst_count_ = 0;
-    init_burst_count_ = 0;
-  } else if (boot_phase_ == BootPhase::SYNC && init_burst_count_ > 0) {
-    // MB re-sent DEVICE_INFO — reset burst just in case
-    ESP_LOGD(TAG, "DEVICE_INFO repeated during SYNC — resetting burst timer");
-    device_info_arrived_ms_ = millis();
     info_burst_count_ = 0;
     init_burst_count_ = 0;
   }
