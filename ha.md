@@ -343,21 +343,23 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 |------|------|----------------------|-------|-------|
 | 2026-06-20 | lcd_find_rclk — GPIO5 i GPIO25 jako RCLK z falling edge | CLK=33, MOSI=18, CS=32 | **❌ Żaden nie zadziałał** | Display ciemny przez cały test. Po teście zaskoczył 8888. |
 | 2026-06-20 | lcd_find_rclk — transparent mode (CS=0 cały czas, bez latch pulse) | CLK=33, MOSI=18, CS=32 | **❌ Nie działa** | Transparent ALL_ON/ALL_OFF nie pokazały nic. |
-| 2026-06-20 | lcd_find_rclk — **pattern test 48 faz** (digit select + segment, CS=0→shift→CS=1) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | Żadna faza nie zapaliła wyświetlacza, mimo że dane miały prawidłowy digit select + segment pattern. |
+| 2026-06-20 | lcd_find_rclk — **glitch minimal test 5 faz** (CS=0, inline shift bez CS toggle) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | CS=0 nie włącza OE. `setup_display()` re-init też nie daje glitcha (bo CS=1 w new code). |
+| 2026-06-20 | lcd_find_rclk — **glitch test v2: shift24 z CS toggle + CS=0 po** | CLK=33, MOSI=18, CS=32 | **⏳ pending** | Test czy CS→1 rising edge działa jako RCLK latch, a potem CS→0 utrzymuje OE active |
 
 **Wnioski:**
-- Dane NIE latchują się do 74HC595 mimo togglingu CS (CS=32 jako RCLK)
-- Możliwe przyczyny:
-  1. **OE nie jest GND** — jest podłączone do nieznanego GPIO, który jest w stanie HIGH (disable)
-  2. **RCLK wymaga falling edge, a nie rising** (mało prawdopodobne)
-  3. **Zupełnie inny format danych** — nie 3×8 bit, nie w tej kolejności
-  4. **To nie 74HC595** — może TM1637, HT1621, MAX7219, albo custom ASIC
-- Jedyny raz gdy display pokazał `8888` to stan power-on po re-init GPIO (glitch)
+- **CS=32 to NIE OE** — CS=0 nie włącza wyświetlacza (ani tymczasowo, ani na stałe)
+- **setup_display() re-init nie daje glitcha** z nowym kodem (CS=1 po init)
+- Glitch z poprzedniej sesji wynikał z OLD setup_display() które ustawiało CS=0 (teraz CS=1)
+- **8888 po 0xFFFFFF** w lcd_scan = zadziałało CS=0→shift→CS=1 → CS=1 to latch rising edge, a potem wyjścia były w high-Z (CS=1=OE disable)? — więc 8888 było widoczne tylko podczas shift (CS=0) gdy OE było aktywne, a latch nastąpił przed powrotem do high-Z
+
+**Nowa hipoteza:**
+- CS=32 = **RCLK (latch)** — rising edge na końcu shift24 (CS=0→1) latchuje dane
+- CS=32 = **OE** też? Może OE na tym samym pinie co RCLK, przez inwerter/buffer? Albo OE jest na GND, a RCLK ma pull-up, więc normalnie CS=1 = RCLK idle, CS=0→1 = latch edge
+- **Problem: podczas shift (CS=0) OE aktywne, ale po latchu (CS=1) OE nieaktywne (high-Z) → wyświetlacz gaśnie**
+- Rozwiązanie: po shift24 zrobić CS=0 z powrotem (OE active + RCLK already latched)
 
 **Co dalej:**
-1. Sprawdzić czy OE nie jest na GPIO5 lub GPIO25 (wyciągnąć LOW przed shift24)
-2. Spróbować piny z Ghidry: CLK=5, MOSI=32, CS=25
-3. Spróbować bibliotekę TM1637/MAX7219/HT1621
+- Test: shift24(0xFFFFFF) → CS=0 z powrotem → czy 8888 utrzymuje się przez 5s?
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
