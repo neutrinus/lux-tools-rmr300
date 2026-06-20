@@ -55,26 +55,3 @@ snk_mower:
   rain_pin: 36
   boot_delay: 0
   lcd_sweep: true
-
-sensor:
-  - platform: adc
-    pin: GPIO34
-    name: "${friendly_name} ADC GPIO34"
-    update_interval: 50ms
-    raw: true
-    filters:
-      - delta: 30
-  - platform: adc
-    pin: GPIO35
-    name: "${friendly_name} ADC GPIO35"
-    update_interval: 50ms
-    raw: true
-    filters:
-      - delta: 30
-  - platform: adc
-    pin: GPIO39
-    name: "${friendly_name} ADC GPIO39"
-    update_interval: 50ms
-    raw: true
-    filters:
-      - delta: 30
