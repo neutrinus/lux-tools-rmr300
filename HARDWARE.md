@@ -193,6 +193,51 @@ Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze
 
 ---
 
+## Experiments: Button GPIO Detection
+
+We conducted a series of firmware tests to determine which physical buttons (K1–K4) are connected to the ESP32 and which pins they use.
+
+### Test 1: GPIO Scan (pin_diag)
+
+**Method:** Custom `pin_diag` mode in snk_mower component. Sets all 24 accessible GPIOs as inputs, polls every 100ms, logs any level change.
+
+**Pins scanned:** `{0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39}`
+
+**Result:**
+- **GPIO19** — changes state when OK (K3) is pressed ✅
+- All other GPIOs — no change when pressing any button (START, HOME, OK, ON)
+
+### Test 2: ADC Scan (resistor ladder hypothesis)
+
+**Hypothesis:** Buttons might be connected through a resistor ladder to a single ADC pin, where each button produces a different voltage level.
+
+**Method:** ESPHome ADC sensors on all ADC1 pins (GPIO32–36, 39) with `raw: true` and `update_interval: 50ms`, using `delta: 30` filter to report only significant changes.
+
+**Pins tested:**
+| GPIO | ADC Unit | Result |
+|------|----------|--------|
+| 32 | ADC1_CH4 | Noisy (~2400–2700 raw), no change with buttons |
+| 33 | ADC1_CH5 | Noisy (~1200–1400 raw), no change with buttons |
+| 34 | ADC1_CH6 | 0 (pulled to GND), no change with buttons |
+| 35 | ADC1_CH7 | ~980–1020 (noise only), no change with buttons |
+| 36 | ADC1_CH0 | Rain sensor (short when wet), no change with buttons |
+| 39 | ADC1_CH3 | 4095 (pulled to VCC), no change with buttons |
+
+**Conclusion:** No resistor ladder. ADC pins show only noise — no voltage step when any button is pressed.
+
+### Final Determination
+
+| Button | Ref | Connection | How ESP32 detects it |
+|--------|-----|------------|---------------------|
+| OK | K3 | **GPIO19** (confirmed) + J8 pin 7 → mainboard | Direct GPIO read |
+| START | K1 | J8 pin 6 → mainboard **only** | Via UART: `0x41000020` (START_ACK) then `0x41000003` (EXEC_ACTION) |
+| HOME | K2 | Unknown — not on ESP32 GPIO or ADC, no unique UART command | Via UART: `0x41000003` (EXEC_ACTION — same as START!) |
+| ON | K4 | J8 pin 2 → mainboard **only** | Not detectable by ESP32 |
+
+**Key insight:** The mainboard's secondary MCU (U16, GD32F303) reads START and HOME directly, executes the action, and notifies the ESP32 via UART. The ESP32 cannot initiate or block these actions — it only receives status messages after the fact. The OK button is the only physical button directly accessible to the ESP32.
+
+---
+
 ## SWD Debug Connections (RPi Pico)
 
 Flash [debugprobe](https://github.com/raspberrypi/debugprobe) UF2 on RPi Pico.
