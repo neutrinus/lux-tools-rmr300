@@ -157,6 +157,17 @@ void SnkMower::setup() {
     return;
   }
 
+  if (lcd_sweep_) {
+    ESP_LOGI(TAG, "=== LCD BIT SWEEP (CLK=%d MOSI=%d CS=%d) ===",
+             (int)display_clk_, (int)display_mosi_, (int)display_cs_);
+    ESP_LOGI(TAG, "Sweeping 24 bits individually, then all-on/off, byte tests");
+    setup_display();
+    sweep_bit_ = 0;
+    sweep_phase_ = 0;
+    last_sweep_ms_ = millis();
+    return;
+  }
+
   finish_setup();
 }
 
@@ -340,6 +351,10 @@ void SnkMower::set_lcd_find(bool enable) {
   lcd_find_ = enable;
 }
 
+void SnkMower::set_lcd_sweep(bool enable) {
+  lcd_sweep_ = enable;
+}
+
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
   display_off_timeout_ms_ = minutes * 60000UL;
   ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
@@ -505,6 +520,47 @@ void SnkMower::loop() {
           ESP_LOGD(TAG, "DIAG: GPIO%02d: %d\u2192%d", gpio, diag_prev_[gpio], level);
           diag_prev_[gpio] = level;
         }
+      }
+    }
+    return;
+  }
+
+  if (lcd_sweep_) {
+    if (now - last_sweep_ms_ >= 4) {
+      last_sweep_ms_ = now;
+      if (sweep_frames_ <= 0) {
+        sweep_phase_++;
+        if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
+          sweep_frames_ = 500;  // ~2s per bit
+        } else if (sweep_phase_ == 25 || sweep_phase_ == 26) {
+          sweep_frames_ = 750;  // ~3s all-on/off
+        } else if (sweep_phase_ >= 27 && sweep_phase_ <= 29) {
+          sweep_frames_ = 375;  // ~1.5s per byte
+        } else {
+          sweep_phase_ = 0;
+          sweep_frames_ = 1;
+        }
+      }
+      uint32_t pattern;
+      if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
+        pattern = 1 << (sweep_phase_ - 1);
+      } else if (sweep_phase_ == 25) {
+        pattern = 0xFFFFFF;
+      } else if (sweep_phase_ == 26) {
+        pattern = 0x000000;
+      } else if (sweep_phase_ == 27) {
+        pattern = 0xFF0000;
+      } else if (sweep_phase_ == 28) {
+        pattern = 0x00FF00;
+      } else if (sweep_phase_ == 29) {
+        pattern = 0x0000FF;
+      } else {
+        pattern = 0;
+      }
+      if (sweep_phase_ > 0) {
+        shift24(display_clk_, display_mosi_, display_cs_,
+                (pattern >> 16) & 0xFF, (pattern >> 8) & 0xFF, pattern & 0xFF);
+        sweep_frames_--;
       }
     }
     return;
