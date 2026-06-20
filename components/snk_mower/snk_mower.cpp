@@ -172,10 +172,13 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_rclk_) {
-    ESP_LOGI(TAG, "=== RCLK FINDER (CLK=%d MOSI=%d CS=%d as OE) ===",
+    ESP_LOGI(TAG, "=== LCD GLITCH MINIMAL TEST (CLK=%d MOSI=%d CS=%d) ===",
              (int)display_clk_, (int)display_mosi_, (int)display_cs_);
-    ESP_LOGI(TAG, "Testing RCLK candidates: GPIO5, GPIO25");
+    ESP_LOGI(TAG, "Phases 0-4, 5s each, ~25s total. Watch display!");
     setup_display();
+    gpio_set_level(display_cs_, 1);
+    gpio_set_level(display_clk_, 0);
+    gpio_set_level(display_mosi_, 0);
     rclk_test_phase_ = 0;
     last_sweep_ms_ = millis();
     return;
@@ -612,18 +615,17 @@ void SnkMower::loop() {
   }
 
   if (lcd_find_rclk_) {
-    if (now - last_sweep_ms_ >= 4000) {
+    if (now - last_sweep_ms_ >= 5000) {
       last_sweep_ms_ = now;
-      if (rclk_test_phase_ < 48) {
-        int dig = rclk_test_phase_ / 8;     // 0..5
-        int seg = rclk_test_phase_ % 8;     // 0..7
-        uint8_t b1 = (dig < 4) ? (1 << dig) : 0x0F;
-        uint8_t b2 = (seg == 0) ? 0x00 : (1 << (seg - 1));
-        if (dig == 4) b2 = 0xFF;
-        if (dig == 5) b2 = 0x00;
+      if (rclk_test_phase_ == 0) {
+        gpio_set_level(display_cs_, 1);
+        ESP_LOGI(TAG, "GLITCH phase=0: CS=1 (inactive), wait 5s — display should be dark");
+      } else if (rclk_test_phase_ == 1) {
         gpio_set_level(display_cs_, 0);
-        delayMicroseconds(2);
-        uint8_t bytes[] = {0x00, b1, b2};
+        ESP_LOGI(TAG, "GLITCH phase=1: CS=0 (OE active), wait 5s — does 8888 appear?");
+      } else if (rclk_test_phase_ == 2) {
+        gpio_set_level(display_cs_, 0);
+        uint8_t bytes[] = {0x00, 0x00, 0x00};
         for (int b = 0; b < 3; b++) {
           for (int i = 7; i >= 0; i--) {
             gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
@@ -635,25 +637,33 @@ void SnkMower::loop() {
           }
         }
         delayMicroseconds(2);
-        gpio_set_level(display_cs_, 1);
-        const char *dname;
-        switch (dig) {
-          case 0: dname = "D0-------"; break;
-          case 1: dname = "--D1-----"; break;
-          case 2: dname = "-----D2--"; break;
-          case 3: dname = "-------D3"; break;
-          case 4: dname = "ALL 8888 "; break;
-          default: dname = "ALL blank"; break;
+        ESP_LOGI(TAG, "GLITCH phase=2: CS=0, shift 0x000000, wait 5s");
+      } else if (rclk_test_phase_ == 3) {
+        gpio_set_level(display_cs_, 0);
+        uint8_t bytes[] = {0xFF, 0xFF, 0xFF};
+        for (int b = 0; b < 3; b++) {
+          for (int i = 7; i >= 0; i--) {
+            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 0);
+            delayMicroseconds(1);
+          }
         }
-        static const char *SEG[8] = {"empty","A","B","C","D","E","F","DP"};
-        ESP_LOGI(TAG, "PATTERN phase=%d: %s seg=%s (b1=0x%02X b2=0x%02X)",
-                 rclk_test_phase_, dname, SEG[seg], b1, b2);
-        rclk_test_phase_++;
+        delayMicroseconds(2);
+        ESP_LOGI(TAG, "GLITCH phase=3: CS=0, shift 0xFFFFFF, wait 5s");
+      } else if (rclk_test_phase_ == 4) {
+        ESP_LOGI(TAG, "GLITCH phase=4: calling setup_display() again — glitch test!");
+        setup_display();
+        gpio_set_level(display_cs_, 0);
+        ESP_LOGI(TAG, "GLITCH phase=4: done, CS=0, wait 5s — does 8888 appear?");
       } else {
         gpio_set_level(display_cs_, 1);
-        ESP_LOGI(TAG, "=== Display pattern test complete ===");
+        ESP_LOGI(TAG, "=== GLITCH test complete ===");
         lcd_find_rclk_ = false;
       }
+      rclk_test_phase_++;
     }
     return;
   }
