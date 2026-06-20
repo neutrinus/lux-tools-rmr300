@@ -172,12 +172,40 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_rclk_) {
-    ESP_LOGI(TAG, "=== LCD REPLICATE v3 (CLK=%d MOSI=%d CS=%d) ===",
+    ESP_LOGI(TAG, "=== LCD LISTEN MODE (CLK=%d MOSI=%d CS=%d) ===",
              (int)display_clk_, (int)display_mosi_, (int)display_cs_);
-    ESP_LOGI(TAG, "Replicating original shift24(FFFFFF) test");
-    setup_display();
-    rclk_test_phase_ = 0;
-    last_sweep_ms_ = millis();
+    ESP_LOGI(TAG, "Setting pins as INPUT, sampling every 10ms for 10s...");
+    gpio_set_direction(display_clk_, GPIO_MODE_INPUT);
+    gpio_set_direction(display_mosi_, GPIO_MODE_INPUT);
+    gpio_set_direction(display_cs_, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(display_clk_, GPIO_FLOATING);
+    gpio_set_pull_mode(display_mosi_, GPIO_FLOATING);
+    gpio_set_pull_mode(display_cs_, GPIO_FLOATING);
+    int prev_clk = gpio_get_level(display_clk_);
+    int prev_mosi = gpio_get_level(display_mosi_);
+    int prev_cs = gpio_get_level(display_cs_);
+    int transitions = 0;
+    int samples = 0;
+    int max_samples = 1000;
+    uint32_t start = millis();
+    while (samples < max_samples && millis() - start < 15000) {
+      int clk = gpio_get_level(display_clk_);
+      int mosi = gpio_get_level(display_mosi_);
+      int cs = gpio_get_level(display_cs_);
+      if (clk != prev_clk || mosi != prev_mosi || cs != prev_cs) {
+        transitions++;
+        ESP_LOGI(TAG, "PIN CHANGE: CLK=%d MOSI=%d CS=%d (t=%dms)",
+                 clk, mosi, cs, (int)(millis() - start));
+        prev_clk = clk; prev_mosi = mosi; prev_cs = cs;
+      }
+      samples++;
+      delay(10);
+    }
+    ESP_LOGI(TAG, "=== LISTEN DONE: %d samples, %d transitions in %dms ===",
+             samples, transitions, (int)(millis() - start));
+
+    ESP_LOGI(TAG, "=== LISTEN test complete ===");
+    lcd_find_rclk_ = false;
     return;
   }
 
@@ -612,43 +640,6 @@ void SnkMower::loop() {
   }
 
   if (lcd_find_rclk_) {
-    if (now - last_sweep_ms_ >= 5000) {
-      last_sweep_ms_ = now;
-      if (rclk_test_phase_ == 0) {
-        gpio_set_level(display_cs_, 1);
-        gpio_set_level(display_clk_, 0);
-        gpio_set_level(display_mosi_, 0);
-        ESP_LOGI(TAG, "REPL phase=0: idle CS=1, wait 5s — dark baseline");
-      } else if (rclk_test_phase_ == 1) {
-        shift24(display_clk_, display_mosi_, display_cs_, 0xFF, 0xFF, 0xFF);
-        ESP_LOGI(TAG, "REPL phase=1: shift24(FFFFFF) CS stays 1, wait 5s — 8888?");
-      } else if (rclk_test_phase_ == 2) {
-        shift24(display_clk_, display_mosi_, display_cs_, 0x00, 0x00, 0x00);
-        ESP_LOGI(TAG, "REPL phase=2: shift24(000000) CS stays 1, wait 5s — dark?");
-      } else if (rclk_test_phase_ == 3) {
-        for (int i = 0; i < 100; i++) {
-          shift24(display_clk_, display_mosi_, display_cs_, 0xFF, 0xFF, 0xFF);
-        }
-        ESP_LOGI(TAG, "REPL phase=3: 100x shift24(FFFFFF) rapid, wait 5s");
-      } else if (rclk_test_phase_ == 4) {
-        for (int i = 0; i < 100; i++) {
-          shift24(display_clk_, display_mosi_, display_cs_, 0x00, 0x00, 0x00);
-        }
-        ESP_LOGI(TAG, "REPL phase=4: 100x shift24(000000) rapid, wait 5s");
-      } else if (rclk_test_phase_ == 5) {
-        set_display_text("8888", false);
-        for (int i = 0; i < 500; i++) {
-          refresh_display();
-          delay(10);
-        }
-        ESP_LOGI(TAG, "REPL phase=5: refresh_display() loop 500x5s, text=8888");
-      } else {
-        gpio_set_level(display_cs_, 1);
-        ESP_LOGI(TAG, "=== REPL test complete ===");
-        lcd_find_rclk_ = false;
-      }
-      rclk_test_phase_++;
-    }
     return;
   }
 

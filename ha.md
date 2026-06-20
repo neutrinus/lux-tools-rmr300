@@ -344,19 +344,18 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | 2026-06-20 | lcd_find_rclk — GPIO5 i GPIO25 jako RCLK z falling edge | CLK=33, MOSI=18, CS=32 | **❌ Żaden nie zadziałał** | Display ciemny przez cały test. Po teście zaskoczył 8888. |
 | 2026-06-20 | lcd_find_rclk — transparent mode (CS=0 cały czas, bez latch pulse) | CLK=33, MOSI=18, CS=32 | **❌ Nie działa** | Transparent ALL_ON/ALL_OFF nie pokazały nic. |
 | 2026-06-20 | lcd_find_rclk — **glitch minimal test 5 faz** (CS=0, inline shift bez CS toggle) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | CS=0 nie włącza OE. `setup_display()` re-init też nie daje glitcha (bo CS=1 w new code). |
-| 2026-06-20 | lcd_find_rclk — **glitch v2: shift24(FFFFFF) then CS=0** | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny** | Nawet shift24 + CS=0 po nie zapaliło. |
-| 2026-06-20 | lcd_find_rclk — **glitch v2: shift24(000000) then CS=0** | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny** | |
+| 2026-06-20 | lcd_find_rclk — **replicate v3: shift24(FFFFFF) exact + rapid refresh** | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test. Crash w fazie 3-4** | Nawet DOKŁADNA replikacja oryginalnego testu (shift24 FFFFFF + CS=1) nie zapaliła LCD. Watchdog crash od 100× shift24. |
 
 **Wnioski:**
-- CS=32 to **NIE OE** (CS=0 nie włącza wyjść)
-- shift24 z CS=0→shift→CS=1 też nie działa (nawet gdy potem wracamy do CS=0)
-- **Jedyny test który kiedykolwiek zapalił LCD: oryginalny lcd_scan** — init pinów jako outputy + shift24(FFFFFF) z 4s przerwą
-- Być może kluczowa różnica: w lcd_scan piny NIE były wcześniej zainicjalizowane (gpio_set_direction pierwszy raz), a w naszych testach setup_display() init je ponownie
+- **Żaden test od oryginalnego lcd_scan nie zapalił LCD** — 8888 było najprawdopodobniej stanem power-on po resecie kontrolera
+- Nasze GPIO nie sterują wyświetlaczem, tylko przypadkowo zresetowały kontroler przy pierwszym teście
+- **Możliwe: U16/GD32 steruje wyświetlaczem przez te same piny, a ESP jest w trybie INPUT** (nasłuchuje)
+- Potrzebny test: słuchać na pinach CLK=33, MOSI=18, CS=32 jako INPUT i zobaczyć czy U16 coś wysyła
 
-**Nowe hipotezy:**
-1. **To nie 74HC595** — może TM1637/HT1621/MAX7219 z innym protokołem
-2. **Wyświetlacz wymaga ciągłego odświeżania** (multiplex) — pojedynczy shift to za mało
-3. **ORGINALNY lcd_scan pokazał 8888 ze stanu power-on po resecie kontrolera** — nasze GPIO glitch zresetowało kontroler wyświetlacza
+**Co dalej:**
+1. **Słuchanie pinów** — ustawić CLK, MOSI, CS jako INPUT i logować zmiany przez 10s
+2. Jeśli U16 wysyła dane → zdekodować protokół i dostosować nasze wysyłanie
+3. Jeśli cisza → wyświetlacz jest nieaktywny (może kontroler odłączony lub niezasilany)
 4. **Timing ma znaczenie** — oryginalny test miał inny timing (init + shift + 4s wait) niż nasze testy
 
 **Co dalej:**
