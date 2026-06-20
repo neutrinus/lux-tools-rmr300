@@ -294,8 +294,8 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO33 | 9 | **Display CLK** ✅ (empirycznie potwierdzone) |
 | GPIO32 | 8 | **Display CS** ✅ (empirycznie potwierdzone) |
 | GPIO18 | 30 | **Display MOSI** ✅ (empirycznie potwierdzone) |
-| GPIO5 | 29 | R28 → U6 (74HC595) — FW wskazuje CLK, ale nie działa na naszej płycie |
-| GPIO34 | 6 | ❌ input-only — R26 → chipy wyświetlacza |
+| GPIO5 | 29 | R28 → U6 (oznaczenia zatarte) — FW wskazuje CLK, ale nie działa na naszej płycie |
+| GPIO34 | 6 | ❌ input-only — R26 → chipy wyświetlacza (U1/U3/U4) |
 | GPIO25 | 10 | R34 → TP29 → przelotka — FW wskazuje CS, ale nie działa |
 | GPIO17 | 28 | UART TX do mainboard ✅ |
 | GPIO16 | 27 | UART RX do mainboard ✅ |
@@ -309,7 +309,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO2 | 19 | Przelotka → znika (spód modułu) |
 | GPIO22 | 36 | Nieznane |
 
-**Uwaga:** HARDWARE.md podaje CLK=18, CS=5, MOSI=23 ale **display nigdy nie wyświetlił ani znaku** — te piny są niepotwierdzone. Faktyczne ścieżki do 74HC595 (U1/U3/U4) idą z grupy **GPIO25,33,32,34,SENSOR_VN(39)** — to tam trzeba szukać CLK/CS/MOSI.
+**Uwaga:** HARDWARE.md podaje CLK=18, CS=5, MOSI=23 ale **display nigdy nie wyświetlił ani znaku** — te piny są niepotwierdzone. U1/U3/U4 mają **zatarte / laserowo zmazane oznaczenia** — nie wiadomo co to za układy. Hipoteza że to 74HC595 pochodzi z HARDWARE.md, ale nie ma pewności. Ścieżki od tych układów idą z grupy **GPIO25,33,32,34,SENSOR_VN(39)** — to tam trzeba szukać CLK/CS/MOSI.
 
 **Potwierdzone NC (nic niepodpięte):**
 | GPIO | Pin | Uwagi |
@@ -359,22 +359,24 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 
 | 2026-06-20 | shift24_nocs — CLK=33, MOSI=18, CS=32, CS=0, FFFFFF | 33, 18, 32 | **❌ Ciemno** | shift24_nocs() nie dotyka CS w ogóle. CS=0. Replika pierwszego lcd_find combo #4 — bez efektu. |
 | 2026-06-20 | shift24_nocs — CLK=5, MOSI=32 (prawidłowe piny), bez CS | 5, 32, NC | **❌ Ciemno** | CLK=5, MOSI=32 z 210 testów, shift24_nocs, CS nie używany. Nic. |
+| 2026-06-20 | **lcd_sweep — CLK=18, MOSI=32, CS=33 (test #81)** — 29 faz × 3-4s | 18, 32, 33 | **❌ Kompletnie ciemno** | Najbardziej wiarygodny test: 24 pojedyncze bity, ALL_ON, ALL_OFF, 3 testy bajtowe. Żaden nie zapalił ani segmentu. SWEEP logi potwierdzają że każda faza była wysyłana. |
 
-**Wnioski końcowe (2026-06-20):**
-- **CLK=5, MOSI=32** — prawidłowe piny danych (potwierdzone 210 scan)
-- **CS=34/39 input-only** — gpio_set_level fails silently. W 210 scan CS=34/39 "działały" bo CS nie był faktycznie toggle'owany, co przypadkiem pomogło
-- **shift24_nocs()** (bez CS toggle) też nie działa — problem leży gdzie indziej
-- **CLK=33, MOSI=18** też nie działa — 8888 z pierwszego testu był najprawdopodobniej przypadkowy (power-on glitch lub interference z main MCU)
-- **Hipoteza: protokół to NIE 74HC595** — mimo że na flexie są 3×74HC595, mogą one być sterowane przez main MCU (U16/U13), a ESP32 nie ma bezpośredniego dostępu do ich linii kontrolnych
-- **Alternatywa: MAX7219** — popularny driver 7-segment, ta sama 3-przewodowa magistrala, ale inny format danych (16-bitowe słowa z adresami rejestrów). Warto spróbować.
-- **Alternatywa: I²C** (HT16K33) — możliwe że 74HC595 są po stronie main MCU, a ESP32 komunikuje się przez I²C
-- **GPIO34/39 input-only** — nie da się na nich ustawić outputu. Wyjaśnia to wszystkie "false positive" wyniki z 210 scan.
+**Wnioski końcowe (2026-06-20) — po teście lcd_sweep:**
+
+- **CLK=18, MOSI=32, CS=33 (test #81 z 210 scan) też NIE działa** — "EE:EE" z oryginalnego testu było power-on glitch, tak jak "8888"
+- **NIGDY nie zapaliliśmy wyświetlacza** — żadna kombinacja pinów ani protokołów nie dała kontrolowanego, powtarzalnego rezultatu
+- **MAX7219 wykluczony** — ma 24 piny, nasze układy U1/U3/U4 są SOP-16
+- **Układy U1/U3/U4 mają zatarte oznaczenia — nie wiemy co to za chipy** — ani normalny shift24 (z CS), ani shift24_nocs, ani sweep bitowy nie dał reakcji
+- **Możliwe wyjaśnienia:**
+  1. **ESP32 NIE steruje wyświetlaczem** — U1/U3/U4 przy wyświetlaczu są sterowane przez main MCU (U16/U13) przez ścieżki na wewnętrznych warstwach PCB, nie przez ESP32. ESP32 może tylko podsłuchiwać albo w ogóle nie ma połączenia.
+  2. **Protokół nie jest SPI/bit-bang** — może I²C, lub równoległy (LCD_CAM I80 jak w oryginalnym FW), ale nie mamy odpowiednich pinów GPIO do I80.
+  3. **Piny są prawidłowe ale wyświetlacz wymaga inicjalizacji main MCU** — OE lub MR może być sterowany przez main MCU, i dopiero po jego inicjalizacji ESP32 może wysyłać dane.
+- **Konieczne: tryb nasłuchu GPIO** — ustawić podejrzane piny display jako input, logować zmiany podczas normalnego bootu (z main MCU). Jeśli main MCU steruje wyświetlaczem, zobaczymy aktywność na liniach.
 
 **Co dalej:**
-1. Wypróbować protokół MAX7219 (16-bitowe słowa, rejestry 0x1-0x8 dla digitów, 0x9 decode, 0xA brightness, 0xB scan limit, 0xC shutdown)
-2. Wypróbować I²C (HT16K33) na podejrzanych pinach
-3. Uruchomić tryb nasłuchu GPIO (pins as inputs, log changes) — sprawdzić czy main MCU steruje wyświetlaczem
-4. Jeśli wszystko zawiedzie — zaakceptować że ESP32 nie może sterować wyświetlaczem bezpośrednio
+1. Uruchomić **tryb nasłuchu GPIO** (pin_diag z odpowiednimi pinami) — sprawdzić czy main MCU komunikuje się z wyświetlaczem
+2. Jeśli na liniach display jest aktywność → reverse-engineerować protokół
+3. Jeśli cisza → wyświetlacz nie jest używany przez nikogo, lub ESP32 nie ma dostępu do linii
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
