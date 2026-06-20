@@ -619,24 +619,71 @@ void SnkMower::loop() {
         gpio_set_direction((gpio_num_t)rclk_test_pin_, GPIO_MODE_OUTPUT);
         gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
         uint32_t pat = all_on ? 0xFFFFFF : 0x000000;
+        // Keep OE active, shift data, leave OE active for 2s
         gpio_set_level(display_cs_, 0);
         delayMicroseconds(2);
-        shift24(display_clk_, display_mosi_, display_cs_,
-                (pat >> 16) & 0xFF, (pat >> 8) & 0xFF, pat & 0xFF);
-        gpio_set_level(display_cs_, 1);
+        uint8_t bytes[] = {(uint8_t)((pat >> 16) & 0xFF),
+                           (uint8_t)((pat >> 8) & 0xFF),
+                           (uint8_t)(pat & 0xFF)};
+        for (int b = 0; b < 3; b++) {
+          for (int i = 7; i >= 0; i--) {
+            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 0);
+            delayMicroseconds(1);
+          }
+        }
         delayMicroseconds(2);
-        gpio_set_level(display_cs_, 0);
-        delayMicroseconds(1);
+        // Pulse RCLK candidate LOW
         gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
         delayMicroseconds(2);
         gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
-        ESP_LOGI(TAG, "RCLK test: candidate=GPIO%d %s -> display should %s",
-                 rclk_test_pin_, all_on ? "ALL_ON" : "ALL_OFF",
-                 all_on ? "show 8888" : "go blank");
+        // Keep OE active — data visible for 4s
+        ESP_LOGI(TAG, "RCLK test: candidate=GPIO%d %s (OE=0, no CS toggle)",
+                 rclk_test_pin_, all_on ? "ALL_ON" : "ALL_OFF");
+        rclk_test_phase_++;
+      } else if (rclk_test_phase_ == 4) {
+        // Test transparent mode: CS=0 always, no RCLK pulse
+        gpio_set_level(display_cs_, 0);
+        delayMicroseconds(2);
+        uint8_t bytes[] = {0xFF, 0xFF, 0xFF};
+        for (int b = 0; b < 3; b++) {
+          for (int i = 7; i >= 0; i--) {
+            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 0);
+            delayMicroseconds(1);
+          }
+        }
+        delayMicroseconds(2);
+        ESP_LOGI(TAG, "RCLK test phase 4: transparent mode ALL_ON (no latch pulse, OE held low)");
+        rclk_test_phase_++;
+      } else if (rclk_test_phase_ == 5) {
+        gpio_set_level(display_cs_, 0);
+        delayMicroseconds(2);
+        uint8_t bytes[] = {0x00, 0x00, 0x00};
+        for (int b = 0; b < 3; b++) {
+          for (int i = 7; i >= 0; i--) {
+            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 1);
+            delayMicroseconds(1);
+            gpio_set_level(display_clk_, 0);
+            delayMicroseconds(1);
+          }
+        }
+        delayMicroseconds(2);
+        ESP_LOGI(TAG, "RCLK test phase 5: transparent mode ALL_OFF");
         rclk_test_phase_++;
       } else {
+        gpio_set_level(display_cs_, 1);
         ESP_LOGI(TAG, "=== RCLK test complete ===");
         lcd_find_rclk_ = false;
+        rclk_test_phase_ = 0;
       }
     }
     return;
