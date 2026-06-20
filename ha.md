@@ -335,16 +335,19 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 - **CLK=33, MOSI=18, CS=32** — jedyna kombinacja, która kiedykolwiek zapaliła wyświetlacz
 - FW analysis wskazuje CLK=5, MOSI=32, CS=25 — nie zgadza się z naszym PCB (może inna rewizja SNK_DISPLAY_CP)
 - CS=32 to **OE (output enable)** 74HC595, a nie RCLK (latch) — potwierdzone empirycznie:
-  - CS=0 = OE active → wyjścia włączone → display pokazuje power-on state (8888)
-  - CS=1 = OE inactive → high-Z → display nie świeci
-- RCLK to **nieznany pin** — jeden z {**GPIO5, GPIO25**} (oba I/O, ścieżki do 74HC595)
+  - CS=0 = OE active → wyjścia włączone
+  - CS=1 = OE inactive → high-Z
+- GPIO5 i GPIO25 **NIE są RCLK** (testowane z rising i falling edge)
+- RCLK prawdopodobnie na stałe do VCC (pull-up). Wtedy dane latchują się na każdym zboczu CLK lub po 24. zboczu.
 
 **Co dalej:**
-1. Przetestować `lcd_find_rclk: true` z YAML — testuje GPIO5 i GPIO25 jako RCLK:
-   - Dla każdego kandydata: shift ALL_ON → pulse RCLK HIGH → czekaj 4s → shift ALL_OFF → pulse RCLK HIGH → czekaj 4s
-   - Jeśli RCLK trafiony: display pokaże 8888 po ALL_ON i zgaśnie po ALL_OFF
-2. Jeśli żaden nie działa → RCLK może być zwierany do VCC przez pull-up, wtedy pulse LOW zamiast HIGH
-3. Ostateczność: RCLK jest na stałe HIGH, a dane latchują się na zboczu opadającym CLK (niestandardowe)
+1. **Hypoteza: RCLK = VCC, OE = CS.** Wtedy dane latchują się na każdym CLK (transparentny rejestr). Należy:
+   - Ustawić CLK=33, MOSI=18, CS=32
+   - CS trzymać na 0 (OE active) przez cały czas
+   - Shift24 BEZ CS togglingu — tylko 24 bity na CLK + MOSI
+   - Sprawdzić czy display reaguje
+2. Jeśli nie → **RCLK = SRCLK** (latch na 24. zboczu CLK). Spróbować niestandardowego timingu.
+3. Ostateczność: **inne IC** — może to nie 74HC595 tylko 74HC164 (brak latcha) albo MAX7219 (inny protokół).
 
 | 2026-06-20 | lcd_sweep — 24-bit sweep + byte tests | CLK=33, MOSI=18, CS=32 | **❌ Display cały czas 88:88** — ALL_OFF (0x000000) nie zmienił wyświetlacza | Dane nie są latchowane do 74HC595. CS prawdopodobnie podłączone do **OE (output enable)** a nie do RCLK. |
 | 2026-06-20 | lcd_sweep — inverted CS polarity (CS HIGH→shift→CS LOW) | CLK=33, MOSI=18, CS=32 | **❌ Display ani razu się nie zapalił** | Potwierdza: CS=32 to **OE active LOW**. CS=0 → wyjścia włączone (widać stan power-on = 8888). CS=1 → wyjścia wyłączone (high-Z), display zgaszony. RCLK to inny pin. |

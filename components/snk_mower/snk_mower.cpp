@@ -617,13 +617,19 @@ void SnkMower::loop() {
         bool all_on = (rclk_test_phase_ % 2) == 0;
         rclk_test_pin_ = candidates[cand];
         gpio_set_direction((gpio_num_t)rclk_test_pin_, GPIO_MODE_OUTPUT);
-        gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
+        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
         uint32_t pat = all_on ? 0xFFFFFF : 0x000000;
+        gpio_set_level(display_cs_, 0);
+        delayMicroseconds(2);
         shift24(display_clk_, display_mosi_, display_cs_,
                 (pat >> 16) & 0xFF, (pat >> 8) & 0xFF, pat & 0xFF);
-        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
+        gpio_set_level(display_cs_, 1);
         delayMicroseconds(2);
+        gpio_set_level(display_cs_, 0);
+        delayMicroseconds(1);
         gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
+        delayMicroseconds(2);
+        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
         ESP_LOGI(TAG, "RCLK test: candidate=GPIO%d %s -> display should %s",
                  rclk_test_pin_, all_on ? "ALL_ON" : "ALL_OFF",
                  all_on ? "show 8888" : "go blank");
