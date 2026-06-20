@@ -1,6 +1,6 @@
 # Home Assistant Integration — SNK Mower ESPHome
 
-## Status: ✅ Boot handshake works — system stable 30+ s
+## Status: ⚠️ Boot handshake works — display dark, protocol unknown
 
 Boot sequence resolved 2026-06-19:
 
@@ -116,7 +116,10 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display — never lit up empirically. See [Display test history](#display-test-history) below.
+- Display (LED 7-segment) — never reliably lit up. See [Display test history](#display-test-history) below.
+  - CLK=5, MOSI=32 confirmed as working data pins (210 scan) but no protocol works
+  - 74HC595 shift register protocol likely wrong — probably **MAX7219** (standard LED 7-segment driver, 3-wire), I²C or main MCU controls display
+  - GPIO34/39 are input-only (silent gpio_set_level failure)
 - Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
@@ -156,7 +159,7 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 | `button.mower_start_mowing` | 0x300000A6? | `button.press` |
 | `button.mower_return_to_dock` | 0x300000A6? | `button.press` |
 
-## Local 7-segment Display
+## Local 7-segment LED Display (NOT LCD)
 
 | State | Display | Behavior |
 |-------|---------|----------|
@@ -354,10 +357,24 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 - Mimo to, różne wartości CS dają różne wyniki — CS pin wpływa na wyświetlacz, ale nie bezpośrednio
 - **Wniosek: protokół może być 2-przewodowy (CLK + DATA), a CS jest niepodłączony; różne wyniki dla różnych CS wynikają z innego stanu pinów po poprzednich testach**
 
+| 2026-06-20 | shift24_nocs — CLK=33, MOSI=18, CS=32, CS=0, FFFFFF | 33, 18, 32 | **❌ Ciemno** | shift24_nocs() nie dotyka CS w ogóle. CS=0. Replika pierwszego lcd_find combo #4 — bez efektu. |
+| 2026-06-20 | shift24_nocs — CLK=5, MOSI=32 (prawidłowe piny), bez CS | 5, 32, NC | **❌ Ciemno** | CLK=5, MOSI=32 z 210 testów, shift24_nocs, CS nie używany. Nic. |
+
+**Wnioski końcowe (2026-06-20):**
+- **CLK=5, MOSI=32** — prawidłowe piny danych (potwierdzone 210 scan)
+- **CS=34/39 input-only** — gpio_set_level fails silently. W 210 scan CS=34/39 "działały" bo CS nie był faktycznie toggle'owany, co przypadkiem pomogło
+- **shift24_nocs()** (bez CS toggle) też nie działa — problem leży gdzie indziej
+- **CLK=33, MOSI=18** też nie działa — 8888 z pierwszego testu był najprawdopodobniej przypadkowy (power-on glitch lub interference z main MCU)
+- **Hipoteza: protokół to NIE 74HC595** — mimo że na flexie są 3×74HC595, mogą one być sterowane przez main MCU (U16/U13), a ESP32 nie ma bezpośredniego dostępu do ich linii kontrolnych
+- **Alternatywa: MAX7219** — popularny driver 7-segment, ta sama 3-przewodowa magistrala, ale inny format danych (16-bitowe słowa z adresami rejestrów). Warto spróbować.
+- **Alternatywa: I²C** (HT16K33) — możliwe że 74HC595 są po stronie main MCU, a ESP32 komunikuje się przez I²C
+- **GPIO34/39 input-only** — nie da się na nich ustawić outputu. Wyjaśnia to wszystkie "false positive" wyniki z 210 scan.
+
 **Co dalej:**
-1. Poczekać na resztę 210 testów — user notuje wszystkie combo które coś pokazują
-2. Gdy mamy listę działających CS → testować z CLK=5, MOSI=32, CS=(najlepszy kandydat)
-3. Jeśli CLK=5, MOSI=32 działa bez CS → protokół 2-przewodowy, spróbować sterować bez CS
+1. Wypróbować protokół MAX7219 (16-bitowe słowa, rejestry 0x1-0x8 dla digitów, 0x9 decode, 0xA brightness, 0xB scan limit, 0xC shutdown)
+2. Wypróbować I²C (HT16K33) na podejrzanych pinach
+3. Uruchomić tryb nasłuchu GPIO (pins as inputs, log changes) — sprawdzić czy main MCU steruje wyświetlaczem
+4. Jeśli wszystko zawiedzie — zaakceptować że ESP32 nie może sterować wyświetlaczem bezpośrednio
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**

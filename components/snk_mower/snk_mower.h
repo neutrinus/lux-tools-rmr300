@@ -70,6 +70,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_lcd_find(bool enable);
   void set_lcd_sweep(bool enable);
   void set_lcd_find_rclk(bool enable);
+  void set_lcd_test_max7219(bool enable);
 
  protected:
   std::string pin_;
@@ -174,6 +175,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool lcd_find_{false};
   bool lcd_sweep_{false};
   bool lcd_find_rclk_{false};
+  bool lcd_test_max7219_{false};
   uint32_t boot_delay_ms_{0};
   int lcd_scan_idx_{0};
   int lcd_scan_combo_[3]{0};

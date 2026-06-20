@@ -142,6 +142,23 @@ static void shift24_nocs(gpio_num_t clk, gpio_num_t mosi,
   delayMicroseconds(2);
 }
 
+static void max7219_write(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
+                           uint8_t reg, uint8_t data) {
+  gpio_set_level(cs, 0);
+  delayMicroseconds(2);
+  uint16_t word = ((uint16_t)reg << 8) | data;
+  for (int i = 15; i >= 0; i--) {
+    gpio_set_level(mosi, (word >> i) & 1);
+    delayMicroseconds(1);
+    gpio_set_level(clk, 1);
+    delayMicroseconds(1);
+    gpio_set_level(clk, 0);
+    delayMicroseconds(1);
+  }
+  delayMicroseconds(2);
+  gpio_set_level(cs, 1);
+}
+
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 void SnkMower::setup() {
@@ -183,7 +200,53 @@ void SnkMower::setup() {
     return;
   }
 
+  if (lcd_test_max7219_) {
+    ESP_LOGI(TAG, "=== MAX7219 test: CLK=%d MOSI=%d CS=%d ===",
+             display_clk_, display_mosi_, display_cs_);
+    setup_display();
+
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0C, 0x01);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x09, 0x00);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0B, 0x03);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0A, 0x0F);
+    delay(50);
+
+    ESP_LOGI(TAG, "=== MAX7219: display test (all segments on) ===");
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0F, 0x01);
+    delay(3000);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0F, 0x00);
+    delay(500);
+
+    ESP_LOGI(TAG, "=== MAX7219: 8888 ===");
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x01, 0x7F);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x02, 0x7F);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x03, 0x7F);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x04, 0x7F);
+    delay(3000);
+
+    ESP_LOGI(TAG, "=== MAX7219: 1234 ===");
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x01, 0x06);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x02, 0x5B);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x03, 0x4F);
+    max7219_write(display_clk_, display_mosi_, display_cs_, 0x04, 0x66);
+    delay(3000);
+
+    ESP_LOGI(TAG, "=== MAX7219 test done ===");
+    lcd_test_max7219_ = false;
+    return;
+  }
+
   if (lcd_find_rclk_) {
+    ESP_LOGI(TAG, "=== LCD: CLK=33 MOSI=18 CS=32, shift24_nocs, CS=0 ===");
+    setup_display();
+    gpio_set_level(display_cs_, 0);
+    shift24_nocs(display_clk_, display_mosi_, 0xFF, 0xFF, 0xFF);
+    shift24_nocs(display_clk_, display_mosi_, 0x00, 0x0F, 0xFF);
+    delay(5000);
+    shift24_nocs(display_clk_, display_mosi_, 0x00, 0x00, 0x00);
+    delay(2000);
+    ESP_LOGI(TAG, "=== Test complete ===");
+    lcd_find_rclk_ = false;
     return;
   }
 
@@ -380,6 +443,10 @@ void SnkMower::set_lcd_sweep(bool enable) {
 
 void SnkMower::set_lcd_find_rclk(bool enable) {
   lcd_find_rclk_ = enable;
+}
+
+void SnkMower::set_lcd_test_max7219(bool enable) {
+  lcd_test_max7219_ = enable;
 }
 
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
