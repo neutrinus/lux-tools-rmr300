@@ -172,9 +172,9 @@ void SnkMower::setup() {
   }
 
   if (lcd_find_rclk_) {
-    ESP_LOGI(TAG, "=== LCD GLITCH v2 (CLK=%d MOSI=%d CS=%d) ===",
+    ESP_LOGI(TAG, "=== LCD REPLICATE v3 (CLK=%d MOSI=%d CS=%d) ===",
              (int)display_clk_, (int)display_mosi_, (int)display_cs_);
-    ESP_LOGI(TAG, "Phases 0-4, 5s each. Tests shift24 + keep CS=0 after latch");
+    ESP_LOGI(TAG, "Replicating original shift24(FFFFFF) test");
     setup_display();
     rclk_test_phase_ = 0;
     last_sweep_ms_ = millis();
@@ -618,22 +618,33 @@ void SnkMower::loop() {
         gpio_set_level(display_cs_, 1);
         gpio_set_level(display_clk_, 0);
         gpio_set_level(display_mosi_, 0);
-        ESP_LOGI(TAG, "GLITCHv2 phase=0: CS=1 (inactive), wait 5s — dark");
+        ESP_LOGI(TAG, "REPL phase=0: idle CS=1, wait 5s — dark baseline");
       } else if (rclk_test_phase_ == 1) {
         shift24(display_clk_, display_mosi_, display_cs_, 0xFF, 0xFF, 0xFF);
-        gpio_set_level(display_cs_, 0);
-        ESP_LOGI(TAG, "GLITCHv2 phase=1: shift24(FFFFFF) then CS=0, wait 5s — 8888?");
+        ESP_LOGI(TAG, "REPL phase=1: shift24(FFFFFF) CS stays 1, wait 5s — 8888?");
       } else if (rclk_test_phase_ == 2) {
         shift24(display_clk_, display_mosi_, display_cs_, 0x00, 0x00, 0x00);
-        gpio_set_level(display_cs_, 0);
-        ESP_LOGI(TAG, "GLITCHv2 phase=2: shift24(000000) then CS=0, wait 5s — dark?");
+        ESP_LOGI(TAG, "REPL phase=2: shift24(000000) CS stays 1, wait 5s — dark?");
       } else if (rclk_test_phase_ == 3) {
-        shift24(display_clk_, display_mosi_, display_cs_, 0xFF, 0xFF, 0xFF);
-        gpio_set_level(display_cs_, 0);
-        ESP_LOGI(TAG, "GLITCHv2 phase=3: shift24(FFFFFF) then CS=0, wait 5s — 8888?");
+        for (int i = 0; i < 100; i++) {
+          shift24(display_clk_, display_mosi_, display_cs_, 0xFF, 0xFF, 0xFF);
+        }
+        ESP_LOGI(TAG, "REPL phase=3: 100x shift24(FFFFFF) rapid, wait 5s");
+      } else if (rclk_test_phase_ == 4) {
+        for (int i = 0; i < 100; i++) {
+          shift24(display_clk_, display_mosi_, display_cs_, 0x00, 0x00, 0x00);
+        }
+        ESP_LOGI(TAG, "REPL phase=4: 100x shift24(000000) rapid, wait 5s");
+      } else if (rclk_test_phase_ == 5) {
+        set_display_text("8888", false);
+        for (int i = 0; i < 500; i++) {
+          refresh_display();
+          delay(10);
+        }
+        ESP_LOGI(TAG, "REPL phase=5: refresh_display() loop 500x5s, text=8888");
       } else {
         gpio_set_level(display_cs_, 1);
-        ESP_LOGI(TAG, "=== GLITCHv2 test complete ===");
+        ESP_LOGI(TAG, "=== REPL test complete ===");
         lcd_find_rclk_ = false;
       }
       rclk_test_phase_++;
