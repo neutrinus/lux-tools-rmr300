@@ -373,30 +373,55 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
   3. **Piny są prawidłowe ale wyświetlacz wymaga inicjalizacji main MCU** — OE lub MR może być sterowany przez main MCU, i dopiero po jego inicjalizacji ESP32 może wysyłać dane.
 - **Konieczne: tryb nasłuchu GPIO** — ustawić podejrzane piny display jako input, logować zmiany podczas normalnego bootu (z main MCU). Jeśli main MCU steruje wyświetlaczem, zobaczymy aktywność na liniach.
 
+## KROK 0 — lcd_sweep na CLK=5, MOSI=32, CS=25, boot_delay=10
+
+| Data | Test | Piny (CLK, CS, MOSI) | Wynik | Uwagi |
+|------|------|----------------------|-------|-------|
+| 2026-06-20 | lcd_sweep — 29 faz (24 bit + ALL_ON + ALL_OFF + 3 byte) | 5, 25, 32 | **❌ Kompletnie ciemno** | CLK=5, MOSI=32 najsilniejsi kandydaci, CS=25 z FW decomp. Żadna z 29 faz nie zapaliła ani jednego segmentu. Potwierdza że (a) coupling-latch z 210-scan był artefaktem, a nie kontrolą, (b) CS=25 nie działa, (c) być może układy to nie 74HC595 lub OE/MR blokuje wyjścia. |
+
+**Wnioski po KROK 0:**
+- CLK=5, MOSI=32 — wciąż silni kandydaci (dają coupling w 210-scan), ale nie mamy kontroli
+- CS=25 — **obalony** empirycznie (testowany z poprawnym wzorcem 0xFF,0x0F,0xFF i toggle CS)
+- Potrzebne: (a) lcd_latch_scan z szerszym zbiorem CS {2,21,22,23,25,33}, (b) analiza disasm (gpio_matrix_out z LCD_CAM), (c) weryfikacja czy U1/U3/U4 to faktycznie 74HC595
+
 **Co dalej:**
-1. Uruchomić **tryb nasłuchu GPIO** (pin_diag z odpowiednimi pinami) — sprawdzić czy main MCU komunikuje się z wyświetlaczem
-2. Jeśli na liniach display jest aktywność → reverse-engineerować protokół
-3. Jeśli cisza → wyświetlacz nie jest używany przez nikogo, lub ESP32 nie ma dostępu do linii
+1. **Analiza disasm** — grep gpio_matrix_out z LCD_CAM (DATA0=100, WR=128, CS=130, RS=126) w esp32/firmware/disasm.s
+2. **lcd_latch_scan** — tryb skanujący CS {2,21,22,23,25,33} z CLK=5, MOSI=32 + 0xFF,0x0F,0xFF + fix sticky state + test OE/MR przez RTC pull na GPIO34/39
+3. **Identyfikacja chipów U1/U3/U4** — ustalić czy to 74HC595 (SOP-16, pin 16=VCC, pin 8=GND), czy coś innego (TM1638, MBI5168, I²C GPIO expander)
+4. **Tryb nasłuchu GPIO** (pin_diag) — ustawić podejrzane piny display jako input, logować zmiany podczas normalnego bootu
 
 
-**Błędy w HARDWARE.md zweryfikowane empiricalnie:**
-| HARDWARE.md twierdzi | Faktycznie |
-|----------------------|------------|
-| OK=GPIO33 | OK=**GPIO19** ✅ |
-| Buzzer=GPIO12 | Buzzer=**GPIO27** ✅ |
-| ON=GPIO27 | GPIO27 to buzzer, ON nie na ESP |
-| START=GPIO26 | **NC** — START nie na display board |
-| MOSI=GPIO23 | MOSI=**GPIO32** ✅ |
-| CLK=GPIO18 | CLK=**GPIO5** ✅ |
-| CS=GPIO5 | CS=??? (GPIO34 ❌ input-only) — do znalezienia |
+## PRZEŁOM I OSTATECZNE ROZSTRZYGNIĘCIE (2026-06-20)
 
-Uwaga: ESP32-WROOM-32UE nie ma wyprowadzonych GPIO36/GPIO39/GPIO37/GPIO38 na zewnętrzne piny.
+W wyniku precyzyjnego wizualnego śledzenia ścieżek na PCB wyświetlacza (zdjęcia `PXL_20260616_120305142 (2).jpg` oraz `PXL_20260620_182450200.jpg`) oraz analizy dekompilacji, **zagadka została w 100% rozwiązana**:
+
+| Parametr | Rola | Połączenie fizyczne na PCB |
+|----------|------|----------------------------|
+| **SCLK (Clock)** | **GPIO33** | ESP32 Pin 9 -> `R33` -> pod `U3` -> `SH_CP` (Pin 11) wszystkich `74HC595` |
+| **CS / Latch** | **GPIO32** | ESP32 Pin 8 -> `R31` -> pod `U3` -> `TP27` -> `ST_CP` (Pin 12) wszystkich `74HC595` |
+| **MOSI (Data)** | **GPIO25** | ESP32 Pin 10 -> `R34` -> `TP29` -> przelotka -> `DS` (Pin 14) pierwszego rejestru `U1` |
+| **Master Reset (MR)** | — | Pin 10 rejestrów `U1/U3/U4` -> pull-up przez `R3` do linii 3.3V (VCC) przy `C16`. Sprzętowo zablokowany reset (stale nieaktywny). |
+| **Output Enable (OE)** | — | Pin 13 rejestrów `U1/U3/U4` -> bezpośrednio do masy (GND). Wyjścia są stale aktywne. |
+
+### Dlaczego poprzednie testy oszukiwały?
+Podczas testu kombinacji `{33, 32, 18}` (`CLK=33`, `CS=32`, `MOSI=18`), pin `GPIO25` (prawdziwe dane) wisiał w powietrzu i z powodu braku pull-downa/szumów przesyłał ciągły stan wysoki (`1`). Zegar i latch działały prawidłowo, więc w rejestry wsuwały się same jedynki (`0xFFFFFF`), co przy poprawnym clock/latch rozświetlało cały wyświetlacz jako `8888` / `EE:EE`. Jednak próba wyświetlenia konkretnego tekstu (który sterował niewłaściwym pinem `GPIO18`) skutkowała dalszym sypaniem samych jedynków z wiszącego pinu `25`, uniemożliwiając świadome sterowanie.
+
+### Korekta błędów w HARDWARE.md:
+| HARDWARE.md twierdzi | Faktycznie | Status |
+|----------------------|------------|:------:|
+| OK=GPIO33 | OK=**GPIO19** | ✅ Potwierdzone |
+| Buzzer=GPIO12 | Buzzer=**GPIO27** | ✅ Potwierdzone |
+| ON=GPIO27 | GPIO27 to buzzer, ON nie na ESP | ✅ Potwierdzone |
+| START=GPIO26 | **NC** — START nie na display board | ✅ Potwierdzone |
+| MOSI=GPIO23 | MOSI=**GPIO25** | ✅ Potwierdzone |
+| CLK=GPIO18 | CLK=**GPIO33** | ✅ Potwierdzone |
+| CS=GPIO5 | CS=**GPIO32** | ✅ Potwierdzone |
 
 ## Key files
 
 | File | Purpose |
 |------|---------|
-| `components/snk_mower/snk_mower.cpp` | Main component: JSON encode/decode, UART framing, CRC, boot sequence |
+| `components/snk_mower/snk_mower.cpp` | Main component: JSON encode/decode, UART framing, CRC, boot sequence, display refresh with proper latching |
 | `components/snk_mower/snk_mower.h` | Header with command constants, class definition |
 | `captures/README.md` | All captured commands with hex/decimal IDs |
 | `decomp/` | U13 firmware decompilation (1672 functions) |

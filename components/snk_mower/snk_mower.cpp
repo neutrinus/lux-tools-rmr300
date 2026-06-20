@@ -337,11 +337,10 @@ void SnkMower::refresh_display() {
   uint8_t dig = 1 << current_digit_;
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  gpio_set_level(display_cs_, 0);
-  shift24_nocs(display_clk_, display_mosi_,
-               0x00,
-               display_colon_ | dig,
-               seg);
+  shift24(display_clk_, display_mosi_, display_cs_,
+          0x00,
+          display_colon_ | dig,
+          seg);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {

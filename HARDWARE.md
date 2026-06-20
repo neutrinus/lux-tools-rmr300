@@ -170,18 +170,31 @@ The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard 
 
 | Pin / Function | ESP32 GPIO | ESP32 Pad | Circuit Path & Details |
 |----------------|:----------:|:---------:|------------------------|
-| **UART RX** (from MB) | **16** | Pad 17 | ESP32 Pad 17 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX |
-| **UART TX** (to MB) | **17** | Pad 18 | ESP32 Pad 18 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX |
-| **Display CS/Latch** | **5** | Pad 29 | VSPI CS: ESP32 Pad 29 → ST_CP (Pin 12) of U1/U3/U4 |
-| **Display SCLK** | **18** | Pad 30 | VSPI SCLK: ESP32 Pad 30 → SH_CP (Pin 11) of U1/U3/U4 |
-| **Display MOSI** | **23** | Pad 37 | VSPI MOSI: ESP32 Pad 37 → DS (Pin 14) of U1 |
-| **Button K3** (`OK`) | **19** | Pad 8 | Potwierdzone testem — GPIO19 zmienia stan przy naciśnięciu OK |
-| **Buzzer BU1** | **12** | Pad 14 | Buzzer PWM: ESP32 Pad 14 → `R29` → transistor driver → BU1 |
+| **UART RX** (from MB) | **16** | Pad 27 | ESP32 Pad 27 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX |
+| **UART TX** (to MB) | **17** | Pad 28 | ESP32 Pad 28 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX |
+| **Display CS/Latch** | **32** | Pad 8 | ESP32 Pad 8 (GPIO32) → `R31` → pod `U3` → `TP27` → Pin 12 (`ST_CP`) rejestrów `U1/U3/U4` |
+| **Display SCLK** | **33** | Pad 9 | ESP32 Pad 9 (GPIO33) → `R33` → pod `U3/U4` → Pin 11 (`SH_CP`) rejestrów `U1/U3/U4` |
+| **Display MOSI** | **25** | Pad 10 | ESP32 Pad 10 (GPIO25) → `R34` → `TP29` → przelotka → Pin 14 (`DS`) rejestru `U1` |
+| **Button K3** (`OK`) | **19** | Pad 31 | Potwierdzone testem — GPIO19 zmienia stan przy naciśnięciu OK |
+| **Buzzer BU1** | **27** | Pad 12 | Buzzer PWM: ESP32 Pad 12 (GPIO27) → `R29` → transistor driver → BU1 |
 | **Rain Sensor J4** | **36** | Pad 4 | ADC Input (SENSOR_VP): J4 contact → input filtering → ESP32 Pad 4 |
 
 **Uwaga:** Przyciski ON (K4), START (K1) i HOME (K2) nie zostały zidentyfikowane na żadnym GPIO ESP32.
 Test polegający na skanowaniu wszystkich GPIO podczas naciskania każdego przycisku wykazał zmiany wyłącznie na GPIO19 (OK).
 Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze J8 i nie są podłączone do ESP32.
+
+### Tracing wizualny ścieżek wyświetlacza (Zweryfikowany na PCB):
+
+Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`) potwierdzono dokładne połączenia:
+1. **SCLK (Clock) - GPIO33 (Pad 9)**: Biegnie do `R33`, pod układ `U3`, do linii `SH_CP` (Pin 11) wszystkich układów `74HC595`.
+2. **CS/Latch - GPIO32 (Pad 8)**: Biegnie do `R31`, pod układ `U3`, przez punkt testowy `TP27` bezpośrednio na linię `ST_CP` (Pin 12) wszystkich układów `74HC595`.
+3. **MOSI (Data) - GPIO25 (Pad 10)**: Biegnie do `R34`, punktu testowego `TP29` i przez przelotkę na drugą stronę płyty bezpośrednio do linii `DS` (Pin 14) pierwszego układu `U1`.
+4. **Master Reset (MR - Pin 10)**: Z kondensatora `C16` (bocznikującego GND/3.3V) doprowadzona jest ścieżka przez rezystor `R3` na Pin 10 (`MR`) układu `U3` (i analogicznie dla reszty). MR jest sprzętowo podciągnięte do 3.3V, co wyłącza reset sprzętowy.
+5. **OE (Output Enable - Pin 13)**: Piny 13 układów `U1/U3/U4` są sprzętowo podłączone do masy (GND), dzięki czemu wyjścia są stale aktywne.
+
+Wszystkie układy `U1/U3/U4` są zorientowane poziomo:
+* Pin 8 (GND) to dolna skrajnie prawa nóżka.
+* Pin 16 (VCC) to górna skrajnie lewa nóżka (z kondensatorem filtrującym).
 
 ### Connectors
 
