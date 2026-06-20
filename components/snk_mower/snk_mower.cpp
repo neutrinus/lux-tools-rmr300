@@ -71,10 +71,12 @@ static const char *const STATE_DISPLAY[] = {
 };
 
 static const int DIAG_SCAN_PINS[] = {
-    2, 4, 5, 12, 13, 14, 15, 16, 17, 18,
+    0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18,
     19, 21, 22, 23, 25, 26, 27, 32, 33, 34,
     35, 36, 39
 };
+// Full list of GPIOs we test. Excluded: 1,3 (UART0), 6-11 (flash/PSRAM),
+// 20,24,28-31,37,38 (not broken out on ESP32-WROOM-32).
 static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
 
 // 6 permutations of {5,25,32} — CLK=5, MOSI=32 potwierdzone FW+empirycznie,
@@ -141,6 +143,7 @@ void SnkMower::setup() {
              NUM_DIAG_SCAN_PINS, DIAG_INTERVAL_MS);
     for (int i = 0; i < NUM_DIAG_SCAN_PINS; i++) {
       int gpio = DIAG_SCAN_PINS[i];
+      gpio_set_direction((gpio_num_t)gpio, GPIO_MODE_INPUT);
       int level = gpio_get_level((gpio_num_t)gpio);
       diag_prev_[gpio] = level;
       ESP_LOGI(TAG, "  GPIO%02d: initial=%d", gpio, level);
