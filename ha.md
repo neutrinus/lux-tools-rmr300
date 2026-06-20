@@ -334,12 +334,16 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 **Wnioski:**
 - **CLK=33, MOSI=18, CS=32** — jedyna kombinacja, która kiedykolwiek zapaliła wyświetlacz
 - FW analysis wskazuje CLK=5, MOSI=32, CS=25 — nie zgadza się z naszym PCB (może inna rewizja SNK_DISPLAY_CP)
-- Display wyświetlił "bzdurowate" wzory — protokół działa, ale dane są źle mapowane (bit order, byte order?)
-- CS=32 jest normalnym I/O (output-capable)
+- ALL_OFF (0x000000) nie zmienia wyświetlacza → **dane nie są latchowane** do 74HC595
+- Prawdopodobnie CS jest podpięte do **OE (output enable)** a nie do RCLK (latch)
 
 **Co dalej:**
-1. Ustawić w yaml `display_clk: 33, display_mosi: 18, display_cs: 32` i sprawdzić normalne odświeżanie
-2. Jeśli nadal bzdury — eksperymentować z bit orderem (LSB-first), byte orderem, albo timingiem shift24
+1. Przetestować **inverted CS polarity** — CS=HIGH podczas shift, CS=LOW po = falling edge latch (już w kodzie)
+2. Jeśli nadal nie działa → CS może być OE, a RCLK na stałe do VCC. Wtedy dane latchują się na 24. zboczu CLK (opadającym?).
+3. Ostateczność: oscyloskop na nóżkach 74HC595 (U1/U3/U4) — sprawdzić które piny GPIO idą do RCLK/OE/SRCLK
+
+| 2026-06-20 | lcd_sweep — 24-bit sweep + byte tests | CLK=33, MOSI=18, CS=32 | **❌ Display cały czas 88:88** — ALL_OFF (0x000000) nie zmienił wyświetlacza | Dane nie są latchowane do 74HC595. CS prawdopodobnie podłączone do **OE (output enable)** a nie do RCLK. |
+
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
 | HARDWARE.md twierdzi | Faktycznie |

@@ -113,7 +113,7 @@ static int voltage_to_percent(float v) {
 
 static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
                     uint8_t b0, uint8_t b1, uint8_t b2) {
-  gpio_set_level(cs, 0);
+  gpio_set_level(cs, 1);
   delayMicroseconds(2);
   uint8_t bytes[] = {b0, b1, b2};
   for (int b = 0; b < 3; b++) {
@@ -127,7 +127,7 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
     }
   }
   delayMicroseconds(2);
-  gpio_set_level(cs, 1);
+  gpio_set_level(cs, 0);
 }
 
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
@@ -226,7 +226,7 @@ void SnkMower::setup_display() {
   gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
   gpio_set_level(display_clk_, 0);
   gpio_set_level(display_mosi_, 0);
-  gpio_set_level(display_cs_, 1);
+  gpio_set_level(display_cs_, 0);
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 }
@@ -531,42 +531,59 @@ void SnkMower::loop() {
       if (sweep_frames_ <= 0) {
         sweep_phase_++;
         if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
-          sweep_frames_ = 375;  // ~3s per bit at 8ms
+          sweep_frames_ = 375;
         } else if (sweep_phase_ == 25 || sweep_phase_ == 26) {
-          sweep_frames_ = 500;  // ~4s all-on/off
+          sweep_frames_ = 500;
         } else if (sweep_phase_ >= 27 && sweep_phase_ <= 29) {
-          sweep_frames_ = 250;  // ~2s per byte
+          sweep_frames_ = 250;
         } else {
           sweep_phase_ = 0;
           sweep_frames_ = 1;
         }
+        const char *label;
+        uint32_t pattern;
+        if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
+          pattern = 1 << (sweep_phase_ - 1);
+          label = "bit";
+        } else if (sweep_phase_ == 25) {
+          pattern = 0xFFFFFF;
+          label = "ALL_ON";
+        } else if (sweep_phase_ == 26) {
+          pattern = 0x000000;
+          label = "ALL_OFF";
+        } else if (sweep_phase_ == 27) {
+          pattern = 0xFF0000;
+          label = "byte0";
+        } else if (sweep_phase_ == 28) {
+          pattern = 0x00FF00;
+          label = "byte1";
+        } else if (sweep_phase_ == 29) {
+          pattern = 0x0000FF;
+          label = "byte2";
+        } else {
+          pattern = 0;
+          label = "";
+        }
+        if (sweep_phase_ > 0) {
+          ESP_LOGI(TAG, "SWEEP phase=%d (%s) pattern=0x%06X",
+                   sweep_phase_, label, pattern);
+        }
       }
       uint32_t pattern;
-      const char *label = "";
       if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
         pattern = 1 << (sweep_phase_ - 1);
-        label = "bit";
       } else if (sweep_phase_ == 25) {
         pattern = 0xFFFFFF;
-        label = "ALL_ON";
       } else if (sweep_phase_ == 26) {
         pattern = 0x000000;
-        label = "ALL_OFF";
       } else if (sweep_phase_ == 27) {
         pattern = 0xFF0000;
-        label = "byte0";
       } else if (sweep_phase_ == 28) {
         pattern = 0x00FF00;
-        label = "byte1";
       } else if (sweep_phase_ == 29) {
         pattern = 0x0000FF;
-        label = "byte2";
       } else {
         pattern = 0;
-      }
-      if (sweep_frames_ == 1) {
-        ESP_LOGI(TAG, "SWEEP phase=%d (%s) pattern=0x%06X",
-                 sweep_phase_, label, pattern);
       }
       if (sweep_phase_ > 0) {
         shift24(display_clk_, display_mosi_, display_cs_,
