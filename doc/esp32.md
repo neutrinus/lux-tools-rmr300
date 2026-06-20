@@ -1,0 +1,42 @@
+# ESP32 Pins
+
+| Name | No. | Type | Function |
+|---|---|---|---|
+| GND | 1 | P | Ground |
+| 3V3 | 2 | P | Power supply |
+| EN | 3 | I | High: On\; enables the chip<br>Low: Off\; the chip shuts down<br>Note: Do not leave the pin floating. |
+| SENSOR_VP | 4 | I | GPIO36, ADC1_CH0, RTC_GPIO0 |
+| SENSOR_VN | 5 | I | GPIO39, ADC1_CH3, RTC_GPIO3 |
+| IO34 | 6 | I | GPIO34, ADC1_CH6, RTC_GPIO4 |
+| IO35 | 7 | I | GPIO35, ADC1_CH7, RTC_GPIO5 |
+| IO32 | 8 | I/O | GPIO32, XTAL_32K_P (32.768 kHz crystal oscillator input), ADC1_CH4, TOUCH9, RTC_GPIO9 |
+| IO33 | 9 | I/O | GPIO33, XTAL_32K_N (32.768 kHz crystal oscillator output), ADC1_CH5, TOUCH8, RTC_GPIO8 |
+| IO25 | 10 | I/O | GPIO25, DAC_1, ADC2_CH8, RTC_GPIO6, EMAC_RXD0 |
+| IO26 | 11 | I/O | GPIO26, DAC_2, ADC2_CH9, RTC_GPIO7, EMAC_RXD1 |
+| IO27 | 12 | I/O | GPIO27, ADC2_CH7, TOUCH7, RTC_GPIO17, EMAC_RX_DV |
+| IO14 | 13 | I/O | GPIO14, ADC2_CH6, TOUCH6, RTC_GPIO16, MTMS, HSPICLK, HS2_CLK, SD_CLK, EMAC_TXD2 |
+| IO12 | 14 | I/O | GPIO12, ADC2_CH5, TOUCH5, RTC_GPIO15, MTDI, HSPIQ, HS2_DATA2, SD_DATA2, EMAC_TXD3 |
+| GND | 15 | P | Ground |
+| IO13 | 16 | I/O | GPIO13, ADC2_CH4, TOUCH4, RTC_GPIO14, MTCK, HSPID, HS2_DATA3, SD_DATA3, EMAC_RX_ER |
+| NC | 17 | - | See note 2 |
+| NC | 18 | - | See note 2 |
+| NC | 19 | - | See note 2 |
+| NC | 20 | - | See note 2 |
+| NC | 21 | - | See note 2 |
+| NC | 22 | - | See note 2 |
+| IO15 | 23 | I/O | GPIO15, ADC2_CH3, TOUCH3, MTDO, HSPICS0, RTC_GPIO13, HS2_CMD, SD_CMD, EMAC_RXD3 |
+| IO2 | 24 | I/O | GPIO2, ADC2_CH2, TOUCH2, RTC_GPIO12, HSPIWP, HS2_DATA0, SD_DATA0 |
+| IO0 | 25 | I/O | GPIO0, ADC2_CH1, TOUCH1, RTC_GPIO11, CLK_OUT1, EMAC_TX_CLK |
+| IO4 | 26 | I/O | GPIO4, ADC2_CH0, TOUCH0, RTC_GPIO10, HSPIHD, HS2_DATA1, SD_DATA1, EMAC_TX_ER |
+| IO16 | 27 | I/O | GPIO16, HS1_DATA4, U2RXD, EMAC_CLK_OUT |
+| IO17 | 28 | I/O | GPIO17, HS1_DATA5, U2TXD, EMAC_CLK_OUT_180 |
+| IO5 | 29 | I/O | GPIO5, VSPICS0, HS1_DATA6, EMAC_RX_CLK |
+| IO18 | 30 | I/O | GPIO18, VSPICLK, HS1_DATA7 |
+| IO19 | 31 | I/O | GPIO19, VSPIQ, U0CTS, EMAC_TXD0 |
+| NC | 32 | - | - |
+| IO21 | 33 | I/O | GPIO21, VSPIHD, EMAC_TX_EN |
+| RXD0 | 34 | I/O | GPIO3, U0RXD, CLK_OUT2 |
+| TXD0 | 35 | I/O | GPIO1, U0TXD, CLK_OUT3, EMAC_RXD2 |
+| IO22 | 36 | I/O | GPIO22, VSPIWP, U0RTS, EMAC_TXD1 |
+| IO23 | 37 | I/O | GPIO23, VSPID, HS1_STROBE |
+| GND | 38 | P | Ground |

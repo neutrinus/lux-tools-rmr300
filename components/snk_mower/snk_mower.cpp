@@ -239,7 +239,7 @@ void SnkMower::setup_display() {
   gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
   gpio_set_level(display_clk_, 0);
   gpio_set_level(display_mosi_, 0);
-  gpio_set_level(display_cs_, 0);
+  gpio_set_level(display_cs_, 1);
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 }
@@ -614,20 +614,16 @@ void SnkMower::loop() {
   if (lcd_find_rclk_) {
     if (now - last_sweep_ms_ >= 4000) {
       last_sweep_ms_ = now;
-      if (rclk_test_phase_ < 4) {
-        int candidates[] = {5, 25};
-        int cand = rclk_test_phase_ / 2;
-        bool all_on = (rclk_test_phase_ % 2) == 0;
-        rclk_test_pin_ = candidates[cand];
-        gpio_set_direction((gpio_num_t)rclk_test_pin_, GPIO_MODE_OUTPUT);
-        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
-        uint32_t pat = all_on ? 0xFFFFFF : 0x000000;
-        // Keep OE active, shift data, leave OE active for 2s
+      if (rclk_test_phase_ < 48) {
+        int dig = rclk_test_phase_ / 8;     // 0..5
+        int seg = rclk_test_phase_ % 8;     // 0..7
+        uint8_t b1 = (dig < 4) ? (1 << dig) : 0x0F;
+        uint8_t b2 = (seg == 0) ? 0x00 : (1 << (seg - 1));
+        if (dig == 4) b2 = 0xFF;
+        if (dig == 5) b2 = 0x00;
         gpio_set_level(display_cs_, 0);
         delayMicroseconds(2);
-        uint8_t bytes[] = {(uint8_t)((pat >> 16) & 0xFF),
-                           (uint8_t)((pat >> 8) & 0xFF),
-                           (uint8_t)(pat & 0xFF)};
+        uint8_t bytes[] = {0x00, b1, b2};
         for (int b = 0; b < 3; b++) {
           for (int i = 7; i >= 0; i--) {
             gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
@@ -639,54 +635,24 @@ void SnkMower::loop() {
           }
         }
         delayMicroseconds(2);
-        // Pulse RCLK candidate LOW
-        gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
-        delayMicroseconds(2);
-        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
-        // Keep OE active — data visible for 4s
-        ESP_LOGI(TAG, "RCLK test: candidate=GPIO%d %s (OE=0, no CS toggle)",
-                 rclk_test_pin_, all_on ? "ALL_ON" : "ALL_OFF");
-        rclk_test_phase_++;
-      } else if (rclk_test_phase_ == 4) {
-        // Test transparent mode: CS=0 always, no RCLK pulse
-        gpio_set_level(display_cs_, 0);
-        delayMicroseconds(2);
-        uint8_t bytes[] = {0xFF, 0xFF, 0xFF};
-        for (int b = 0; b < 3; b++) {
-          for (int i = 7; i >= 0; i--) {
-            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
-            delayMicroseconds(1);
-            gpio_set_level(display_clk_, 1);
-            delayMicroseconds(1);
-            gpio_set_level(display_clk_, 0);
-            delayMicroseconds(1);
-          }
+        gpio_set_level(display_cs_, 1);
+        const char *dname;
+        switch (dig) {
+          case 0: dname = "D0-------"; break;
+          case 1: dname = "--D1-----"; break;
+          case 2: dname = "-----D2--"; break;
+          case 3: dname = "-------D3"; break;
+          case 4: dname = "ALL 8888 "; break;
+          default: dname = "ALL blank"; break;
         }
-        delayMicroseconds(2);
-        ESP_LOGI(TAG, "RCLK test phase 4: transparent mode ALL_ON (no latch pulse, OE held low)");
-        rclk_test_phase_++;
-      } else if (rclk_test_phase_ == 5) {
-        gpio_set_level(display_cs_, 0);
-        delayMicroseconds(2);
-        uint8_t bytes[] = {0x00, 0x00, 0x00};
-        for (int b = 0; b < 3; b++) {
-          for (int i = 7; i >= 0; i--) {
-            gpio_set_level(display_mosi_, (bytes[b] >> i) & 1);
-            delayMicroseconds(1);
-            gpio_set_level(display_clk_, 1);
-            delayMicroseconds(1);
-            gpio_set_level(display_clk_, 0);
-            delayMicroseconds(1);
-          }
-        }
-        delayMicroseconds(2);
-        ESP_LOGI(TAG, "RCLK test phase 5: transparent mode ALL_OFF");
+        static const char *SEG[8] = {"empty","A","B","C","D","E","F","DP"};
+        ESP_LOGI(TAG, "PATTERN phase=%d: %s seg=%s (b1=0x%02X b2=0x%02X)",
+                 rclk_test_phase_, dname, SEG[seg], b1, b2);
         rclk_test_phase_++;
       } else {
         gpio_set_level(display_cs_, 1);
-        ESP_LOGI(TAG, "=== RCLK test complete ===");
+        ESP_LOGI(TAG, "=== Display pattern test complete ===");
         lcd_find_rclk_ = false;
-        rclk_test_phase_ = 0;
       }
     }
     return;

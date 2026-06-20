@@ -5,7 +5,7 @@ substitutions:
 external_components:
   - source: github://neutrinus/lux-tools-rmr300@main:components
     components: [snk_mower]
-    refresh: 0s
+    refresh: 10s
 
 esphome:
   name: ${name}
@@ -61,7 +61,8 @@ snk_mower:
   boot_delay: 10
   pin_diag: false
   lcd_find: false
-  lcd_sweep: true
+  lcd_sweep: false
+  lcd_find_rclk: true
 
   battery_level:
     name: "${friendly_name} Battery Level"
