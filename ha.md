@@ -334,23 +334,30 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 **Wnioski:**
 - **CLK=33, MOSI=18, CS=32** — jedyna kombinacja, która kiedykolwiek zapaliła wyświetlacz
 - FW analysis wskazuje CLK=5, MOSI=32, CS=25 — nie zgadza się z naszym PCB (może inna rewizja SNK_DISPLAY_CP)
-- CS=32 to **OE (output enable)** 74HC595, a nie RCLK (latch) — potwierdzone empirycznie:
-  - CS=0 = OE active → wyjścia włączone
-  - CS=1 = OE inactive → high-Z
 - GPIO5 i GPIO25 **NIE są RCLK** (testowane z rising i falling edge)
-- RCLK prawdopodobnie na stałe do VCC (pull-up). Wtedy dane latchują się na każdym zboczu CLK lub po 24. zboczu.
+- Stan power-on wyjść 74HC595 to `8888` (wszystkie segmenty)
+- Po teście RCLK, `loop()` wszedł w boot phase state machine (boot_delay expired) → display zapalił `8888`
+- **Nowa hipoteza:** CS=32 to **RCLK** (latch), a OE jest na stałe do GND (always active). Poprzednie testy zawodziły bo single-bit patterns nie wybierały cyfry (b1=0x00).
+
+| Data | Test | Piny (CLK, MOSI, CS) | Wynik | Uwagi |
+|------|------|----------------------|-------|-------|
+| 2026-06-20 | lcd_find_rclk — GPIO5 i GPIO25 jako RCLK z falling edge | CLK=33, MOSI=18, CS=32 | **❌ Żaden nie zadziałał** | Display ciemny przez cały test. Po teście zaskoczył 8888. |
+| 2026-06-20 | lcd_find_rclk — transparent mode (CS=0 cały czas, bez latch pulse) | CLK=33, MOSI=18, CS=32 | **❌ Nie działa** | Transparent ALL_ON/ALL_OFF nie pokazały nic. |
+| 2026-06-20 | lcd_find_rclk — **pattern test 48 faz** (digit select + segment, CS=0→shift→CS=1) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | Żadna faza nie zapaliła wyświetlacza, mimo że dane miały prawidłowy digit select + segment pattern. |
+
+**Wnioski:**
+- Dane NIE latchują się do 74HC595 mimo togglingu CS (CS=32 jako RCLK)
+- Możliwe przyczyny:
+  1. **OE nie jest GND** — jest podłączone do nieznanego GPIO, który jest w stanie HIGH (disable)
+  2. **RCLK wymaga falling edge, a nie rising** (mało prawdopodobne)
+  3. **Zupełnie inny format danych** — nie 3×8 bit, nie w tej kolejności
+  4. **To nie 74HC595** — może TM1637, HT1621, MAX7219, albo custom ASIC
+- Jedyny raz gdy display pokazał `8888` to stan power-on po re-init GPIO (glitch)
 
 **Co dalej:**
-1. **Hypoteza: RCLK = VCC, OE = CS.** Wtedy dane latchują się na każdym CLK (transparentny rejestr). Należy:
-   - Ustawić CLK=33, MOSI=18, CS=32
-   - CS trzymać na 0 (OE active) przez cały czas
-   - Shift24 BEZ CS togglingu — tylko 24 bity na CLK + MOSI
-   - Sprawdzić czy display reaguje
-2. Jeśli nie → **RCLK = SRCLK** (latch na 24. zboczu CLK). Spróbować niestandardowego timingu.
-3. Ostateczność: **inne IC** — może to nie 74HC595 tylko 74HC164 (brak latcha) albo MAX7219 (inny protokół).
-
-| 2026-06-20 | lcd_sweep — 24-bit sweep + byte tests | CLK=33, MOSI=18, CS=32 | **❌ Display cały czas 88:88** — ALL_OFF (0x000000) nie zmienił wyświetlacza | Dane nie są latchowane do 74HC595. CS prawdopodobnie podłączone do **OE (output enable)** a nie do RCLK. |
-| 2026-06-20 | lcd_sweep — inverted CS polarity (CS HIGH→shift→CS LOW) | CLK=33, MOSI=18, CS=32 | **❌ Display ani razu się nie zapalił** | Potwierdza: CS=32 to **OE active LOW**. CS=0 → wyjścia włączone (widać stan power-on = 8888). CS=1 → wyjścia wyłączone (high-Z), display zgaszony. RCLK to inny pin. |
+1. Sprawdzić czy OE nie jest na GPIO5 lub GPIO25 (wyciągnąć LOW przed shift24)
+2. Spróbować piny z Ghidry: CLK=5, MOSI=32, CS=25
+3. Spróbować bibliotekę TM1637/MAX7219/HT1621
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
