@@ -126,6 +126,22 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
   gpio_set_level(cs, 1);
 }
 
+static void shift24_nocs(gpio_num_t clk, gpio_num_t mosi,
+                          uint8_t b0, uint8_t b1, uint8_t b2) {
+  uint8_t bytes[] = {b0, b1, b2};
+  for (int b = 0; b < 3; b++) {
+    for (int i = 7; i >= 0; i--) {
+      gpio_set_level(mosi, (bytes[b] >> i) & 1);
+      delayMicroseconds(1);
+      gpio_set_level(clk, 1);
+      delayMicroseconds(1);
+      gpio_set_level(clk, 0);
+      delayMicroseconds(1);
+    }
+  }
+  delayMicroseconds(2);
+}
+
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 void SnkMower::setup() {
@@ -170,6 +186,9 @@ void SnkMower::setup() {
   if (lcd_find_rclk_) {
     return;
   }
+
+  setup_display();
+  set_display_text("8888", true);
 
   finish_setup();
 }
@@ -229,7 +248,7 @@ void SnkMower::setup_display() {
   gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
   gpio_set_level(display_clk_, 0);
   gpio_set_level(display_mosi_, 0);
-  gpio_set_level(display_cs_, 1);
+  gpio_set_level(display_cs_, 0);  // OE active (LOW)
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 }
@@ -255,10 +274,11 @@ void SnkMower::refresh_display() {
   uint8_t dig = 1 << current_digit_;
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  shift24(display_clk_, display_mosi_, display_cs_,
-          0x00,
-          display_colon_ | dig,
-          seg);
+  gpio_set_level(display_cs_, 0);
+  shift24_nocs(display_clk_, display_mosi_,
+               0x00,
+               display_colon_ | dig,
+               seg);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
