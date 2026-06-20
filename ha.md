@@ -345,23 +345,19 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | 2026-06-20 | lcd_find_rclk — transparent mode (CS=0 cały czas, bez latch pulse) | CLK=33, MOSI=18, CS=32 | **❌ Nie działa** | Transparent ALL_ON/ALL_OFF nie pokazały nic. |
 | 2026-06-20 | lcd_find_rclk — **glitch minimal test 5 faz** (CS=0, inline shift bez CS toggle) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | CS=0 nie włącza OE. `setup_display()` re-init też nie daje glitcha (bo CS=1 w new code). |
 | 2026-06-20 | lcd_find_rclk — **replicate v3: shift24(FFFFFF) exact + rapid refresh** | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test. Crash w fazie 3-4** | Nawet DOKŁADNA replikacja oryginalnego testu (shift24 FFFFFF + CS=1) nie zapaliła LCD. Watchdog crash od 100× shift24. |
+| 2026-06-20 | lcd_find — **210 test restored** (0xFF,0x0F,0xFF, 1.5s/phase) | Wszystkie 7 kandydatów | **✅ CLK=5, MOSI=32 działają!** | #39: CLK=5 CS=34 MOSI=32 → lewa "8". #46: CLK=5 CS=39 MOSI=32 → "_8:8_". Wiele innych też reagowało. |
 
-**Wnioski:**
-- **Żaden test od oryginalnego lcd_scan nie zapalił LCD** — 8888 było najprawdopodobniej stanem power-on po resecie kontrolera
-- Nasze GPIO nie sterują wyświetlaczem, tylko przypadkowo zresetowały kontroler przy pierwszym teście
-- **Możliwe: U16/GD32 steruje wyświetlaczem przez te same piny, a ESP jest w trybie INPUT** (nasłuchuje)
-- Potrzebny test: słuchać na pinach CLK=33, MOSI=18, CS=32 jako INPUT i zobaczyć czy U16 coś wysyła
-
-**Co dalej:**
-1. **Słuchanie pinów** — ustawić CLK, MOSI, CS jako INPUT i logować zmiany przez 10s
-2. Jeśli U16 wysyła dane → zdekodować protokół i dostosować nasze wysyłanie
-3. Jeśli cisza → wyświetlacz jest nieaktywny (może kontroler odłączony lub niezasilany)
-4. **Timing ma znaczenie** — oryginalny test miał inny timing (init + shift + 4s wait) niż nasze testy
+**Przełom: CLK=5 i MOSI=32 potwierdzone!**
+- Oba działające combos mają CLK=5, MOSI=32 — to są prawidłowe piny
+- CS = 34 lub 39 (oba **input-only** na ESP32!) — podejrzane. Może CS nie jest potrzebny (2-wire protocol)?
+- GPIO34 i GPIO39 nie mogą być ustawione jako output — gpio_set_level na nich nie działa
+- Mimo to, różne wartości CS dają różne wyniki — CS pin wpływa na wyświetlacz, ale nie bezpośrednio
+- **Wniosek: protokół może być 2-przewodowy (CLK + DATA), a CS jest niepodłączony; różne wyniki dla różnych CS wynikają z innego stanu pinów po poprzednich testach**
 
 **Co dalej:**
-1. Zreplikować DOKŁADNIE oryginalny lcd_scan (przeczytać kod i powtórzyć)
-2. Spróbować ciągłego odświeżania (tight loop co 10ms)
-3. Spróbować innych protokołów (TM1637, MAX7219)
+1. Poczekać na resztę 210 testów — user notuje wszystkie combo które coś pokazują
+2. Gdy mamy listę działających CS → testować z CLK=5, MOSI=32, CS=(najlepszy kandydat)
+3. Jeśli CLK=5, MOSI=32 działa bez CS → protokół 2-przewodowy, spróbować sterować bez CS
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
