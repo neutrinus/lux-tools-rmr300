@@ -314,16 +314,39 @@ void SnkMower::setup_display() {
   gpio_set_level(display_cs_, 0);  // OE active (LOW)
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
+
+  if (display_timer_ == nullptr) {
+    esp_timer_create_args_t timer_args = {
+        .callback = &SnkMower::display_timer_callback,
+        .arg = this,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "display_timer",
+        .skip_unhandled_events = true
+    };
+    esp_err_t err = esp_timer_create(&timer_args, &display_timer_);
+    if (err == ESP_OK) {
+      esp_timer_start_periodic(display_timer_, DISPLAY_REFRESH_MS * 1000ULL);
+      ESP_LOGI(TAG, "Display hardware timer started (refresh %d ms)", (int)DISPLAY_REFRESH_MS);
+    } else {
+      ESP_LOGE(TAG, "Failed to create display hardware timer! err=%d", err);
+    }
+  }
+}
+
+void SnkMower::display_timer_callback(void *arg) {
+  auto *self = static_cast<SnkMower *>(arg);
+  self->refresh_display_impl();
 }
 
 void SnkMower::refresh_display() {
+  // Do nothing here — display is driven precisely by the background hardware timer!
+}
+
+void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
 
   uint32_t now = millis();
-  if (now - last_display_ms_ < DISPLAY_REFRESH_MS) return;
-  last_display_ms_ = now;
-
   uint8_t seg = display_segments_[current_digit_];
 
   if (current_state_ == MowerState::CHARGING && current_digit_ == 0) {

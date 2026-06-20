@@ -8,6 +8,7 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <driver/gpio.h>
 #include <ArduinoJson.h>
+#include <esp_timer.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -200,6 +201,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   void finish_setup();
   void setup_display();
   void refresh_display();
+  void refresh_display_impl();
+  static void display_timer_callback(void *arg);
   void set_display_text(const char *text, bool colon = false);
   void set_display_battery(int percent);
   void set_charging_display(int percent);
@@ -219,6 +222,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   gpio_num_t display_clk_{GPIO_NUM_NC};
   gpio_num_t display_mosi_{GPIO_NUM_NC};
   gpio_num_t display_cs_{GPIO_NUM_NC};
+  esp_timer_handle_t display_timer_{nullptr};
 
   uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
   uint8_t display_colon_{0};

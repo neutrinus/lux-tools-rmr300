@@ -429,6 +429,13 @@ Wyświetlacz jest multipleksowany, a wspólne katody/anody cyfr są kluczowane p
 Aby zapalić segment, na wyjściu rejestru `74HC595` musi pojawić się `1` (HIGH) dla segmentu ORAZ `1` (HIGH) dla aktywacji cyfry (która po inwersji daje niskie wspólne ujście prądu). 
 Podczas faz 1-24 (single-bit) nigdy nie występowały jednocześnie te dwa warunki (mieliśmy tylko jedną jedynkę w całej 24-bitowej ramce), dlatego wyświetlacz był ciemny. Faza `ALL_ON` podała jedynki wszędzie i zapaliła całość.
 
+## URUCHOMIENIE NORMALNEGO WYŚWIETLANIA (2026-06-20)
+
+Wgrano oprogramowanie w trybie normalnym (`lcd_sweep: false`):
+1. **Faza rozruchu:** Wyświetlacz zaczął prawidłowo mrugać dwoma myślnikami `----` (podczas PRE-handshake).
+2. **Faza po handshaku:** Wyświetlacz zaczął mrugać wartością `73` (poziom naładowania baterii pobrany z płyty głównej kosiarki!).
+3. **Zidentyfikowany problem:** Widoczne mruganie/migotanie z częstotliwością ok. 20-30Hz (wynika z cooperative multitaskingu ESPHome w `loop()`, opóźnianego przez VERBOSE logging i obsługę sieci).
+
 ## Key files
 
 | File | Purpose |
