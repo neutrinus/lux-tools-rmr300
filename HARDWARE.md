@@ -68,11 +68,8 @@ Three 3-phase brushless motors, controlled by MOSFET banks (bottom edge with hea
 | 6 | `Start` | Start button (K1) | Display → Mainboard (direct GPIO) |
 | 7 | `OK` | OK button (K3) | Display → Mainboard (direct GPIO) |
 
-**Key architectural insight:** The three buttons (ON, Start, OK) connect to:
-1. **Mainboard directly** (via ribbon cable pins 2, 6, 7) — so mainboard responds instantly to button presses without coordination
-2. **ESP32 locally** on the display board — OK confirmed on GPIO19; ON/START suspected but unconfirmed
-
-**Note:** Despite PCB trace analysis suggesting ON→GPIO27, START→GPIO26, HOME→GPIO25, only OK→GPIO19 has been empirically confirmed. The other three buttons may not connect to the ESP32 at all.
+**Key architectural insight:** Only the OK button is shared between ESP32 (GPIO19) and mainboard (J8 pin 7).
+ON (J8 pin 2) and START (J8 pin 6) connect to the mainboard but have **no confirmed** connection to the ESP32.
 
 The **bidirectional UART** on pins 3-4 is the only digital communication channel between the two boards.
 
@@ -171,26 +168,20 @@ Certifications:
 
 The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard UART as follows:
 
-✅ = confirmed empirically (firmware test)
-⬜ = inferred from PCB trace, unconfirmed
+| Pin / Function | ESP32 GPIO | ESP32 Pad | Circuit Path & Details |
+|----------------|:----------:|:---------:|------------------------|
+| **UART RX** (from MB) | **16** | Pad 17 | ESP32 Pad 17 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX |
+| **UART TX** (to MB) | **17** | Pad 18 | ESP32 Pad 18 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX |
+| **Display CS/Latch** | **5** | Pad 29 | VSPI CS: ESP32 Pad 29 → ST_CP (Pin 12) of U1/U3/U4 |
+| **Display SCLK** | **18** | Pad 30 | VSPI SCLK: ESP32 Pad 30 → SH_CP (Pin 11) of U1/U3/U4 |
+| **Display MOSI** | **23** | Pad 37 | VSPI MOSI: ESP32 Pad 37 → DS (Pin 14) of U1 |
+| **Button K3** (`OK`) | **19** | Pad 8 | Potwierdzone testem — GPIO19 zmienia stan przy naciśnięciu OK |
+| **Buzzer BU1** | **12** | Pad 14 | Buzzer PWM: ESP32 Pad 14 → `R29` → transistor driver → BU1 |
+| **Rain Sensor J4** | **36** | Pad 4 | ADC Input (SENSOR_VP): J4 contact → input filtering → ESP32 Pad 4 |
 
-| Pin / Function | ESP32 GPIO | ESP32 Pad | Circuit Path & Details | Status |
-|----------------|:----------:|:---------:|------------------------|:------:|
-| **UART RX** (from MB) | **16** | Pad 17 | ESP32 Pad 17 → `FB3` → `R35` → `TP16` → `TVS5` → J8 Pin → MB TX | ✅ |
-| **UART TX** (to MB) | **17** | Pad 18 | ESP32 Pad 18 → `FB2` → `R32` → `TP15` → `TVS2` → J8 Pin → MB RX | ✅ |
-| **Display CS/Latch** | **5** | Pad 29 | VSPI CS: ESP32 Pad 29 → ST_CP (Pin 12) of U1/U3/U4 | ✅ |
-| **Display SCLK** | **18** | Pad 30 | VSPI SCLK: ESP32 Pad 30 → SH_CP (Pin 11) of U1/U3/U4 | ✅ |
-| **Display MOSI** | **23** | Pad 37 | VSPI MOSI: ESP32 Pad 37 → DS (Pin 14) of U1 | ✅ |
-| **Button K3** (`OK`) | **19** | Pad 8 | GPIO19 zmienia stan przy naciśnięciu OK (potwierdzone testem) | ✅ |
-| **Button K4** (`ON`) | **27** | Pad 12 | Top-edge GPIO: Pad 12 → `R10` → J8 Pin 2 (`ON`) / K4 | ⬜ |
-| **Button K1** (`START`) | **26** | Pad 11 | Top-edge GPIO: Pad 11 → `R6` → J8 Pin 6 (`Start`) / K1 | ⬜ |
-| **Button K2** (`HOME`) | **25** | Pad 10 | Top-edge GPIO: Pad 10 → `R12` → local K2 switch | ⬜ |
-| **Buzzer BU1** | **12** | Pad 14 | Buzzer PWM: ESP32 Pad 14 → `R29` → transistor driver → BU1 | ✅ |
-| **Rain Sensor J4** | **36** | Pad 4 | ADC Input (SENSOR_VP): J4 contact → input filtering → ESP32 Pad 4 | ✅ |
-
-**Uwaga:** Przyciski ON (GPIO27), START (GPIO26) i HOME (GPIO25) nie zostały potwierdzone empirycznie.
-Skanowanie wszystkich GPIO podczas naciskania każdego przycisku nie wykazało żadnych zmian poza GPIO19 (OK).
-Te trzy przyciski mogą być podłączone wyłącznie do mainboard przez J8 (nie do ESP32), mimo że PCB trace sugeruje połączenie.
+**Uwaga:** Przyciski ON (K4), START (K1) i HOME (K2) nie zostały zidentyfikowane na żadnym GPIO ESP32.
+Test polegający na skanowaniu wszystkich GPIO podczas naciskania każdego przycisku wykazał zmiany wyłącznie na GPIO19 (OK).
+Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze J8 i nie są podłączone do ESP32.
 
 ### Connectors
 
