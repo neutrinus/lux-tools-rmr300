@@ -345,7 +345,7 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | 2026-06-20 | lcd_find_rclk — transparent mode (CS=0 cały czas, bez latch pulse) | CLK=33, MOSI=18, CS=32 | **❌ Nie działa** | Transparent ALL_ON/ALL_OFF nie pokazały nic. |
 | 2026-06-20 | lcd_find_rclk — **glitch minimal test 5 faz** (CS=0, inline shift bez CS toggle) | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test** | CS=0 nie włącza OE. `setup_display()` re-init też nie daje glitcha (bo CS=1 w new code). |
 | 2026-06-20 | lcd_find_rclk — **replicate v3: shift24(FFFFFF) exact + rapid refresh** | CLK=33, MOSI=18, CS=32 | **❌ Display ciemny przez cały test. Crash w fazie 3-4** | Nawet DOKŁADNA replikacja oryginalnego testu (shift24 FFFFFF + CS=1) nie zapaliła LCD. Watchdog crash od 100× shift24. |
-| 2026-06-20 | lcd_find — **210 test restored** (0xFF,0x0F,0xFF, 1.5s/phase) | Wszystkie 7 kandydatów | **✅ CLK=5, MOSI=32 działają!** | #39: CLK=5 CS=34 MOSI=32 → lewa "8". #46: CLK=5 CS=39 MOSI=32 → "_8:8_". Wiele innych też reagowało. |
+| 2026-06-20 | lcd_find — **210 test restored** (0xFF,0x0F,0xFF, 1.5s/phase) | Wszystkie 7 kandydatów | **✅ CLK=5, MOSI=32 działają!** | #39: CLK=5 CS=34 MOSI=32 → lewa "8". #46: CLK=5 CS=39 MOSI=32 → "_8:8_". #81: CLK=18 CS=33 MOSI=32 → "EE:EE". |
 
 **Przełom: CLK=5 i MOSI=32 potwierdzone!**
 - Oba działające combos mają CLK=5, MOSI=32 — to są prawidłowe piny
