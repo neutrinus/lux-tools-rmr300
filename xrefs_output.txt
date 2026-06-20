@@ -1,0 +1,116 @@
+openjdk version "21.0.6" 2025-01-21 LTS
+OpenJDK Runtime Environment Temurin-21.0.6+7 (build 21.0.6+7-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.6+7 (build 21.0.6+7-LTS, mixed mode)
+INFO  Using log config file: jar:file:/home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (631 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (1571 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /home/marek/.config/ghidra-cli/class_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessAnalyzer)  
+INFO  Opening project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessProject)  
+INFO  REPORT: Processing project file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: /ota_0.elf (HeadlessAnalyzer)  
+WARN  Decompiling 401868bc, pcode error at 4018694e: Unable to resolve constructor at 4018694e (DecompileCallback)  
+INFO  Packed database cache: /var/tmp/marek-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: generic_clib (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.398 secs
+    Apply Data Archives                        0.496 secs
+    Basic Constant Reference Analyzer          5.839 secs
+    Call Convention ID                         0.029 secs
+    Call-Fixup Installer                       0.031 secs
+    Create Address Tables                      0.325 secs
+    Create Function                            0.108 secs
+    Data Reference                             0.456 secs
+    Decompiler Switch Analysis                 2.769 secs
+    Demangler GNU                              0.012 secs
+    Disassemble Entry Points                   0.158 secs
+    ELF Scalar Operand References              1.042 secs
+    Embedded Media                             0.038 secs
+    External Entry References                  0.000 secs
+    External Symbol Resolver                   0.003 secs
+    Function ID                                0.016 secs
+    Function Start Search                      0.055 secs
+    Function Start Search After Code           0.038 secs
+    Function Start Search After Data           0.028 secs
+    Non-Returning Functions - Discovered       1.000 secs
+    Non-Returning Functions - Known            0.044 secs
+    Reference                                  0.545 secs
+    Shared Return Calls                        0.446 secs
+    Stack                                      1.816 secs
+    Subroutine References                      0.487 secs
+    Subroutine References - One Time           0.036 secs
+-----------------------------------------------------
+     Total Time   16 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: FindDisplayPins.class  (HeadlessAnalyzer)  
+INFO  SCRIPT: FindDisplayPins.class (HeadlessAnalyzer)  
+INFO  FindDisplayPins.class> === Cross-references to FUN_401908b4 (CONFIG peripheral) === (GhidraScript)  
+INFO  FindDisplayPins.class>   Target: FUN_401908b4 at 0x401908b4 size=0x1218 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x401914e7 in FUN_40191490 (GhidraScript)  
+INFO  FindDisplayPins.class> 
+=== Cross-references to FUN_401913e0 (SERIALIZE) === (GhidraScript)  
+INFO  FindDisplayPins.class>   Target: FUN_401913e0 at 0x401913e0 size=0x165 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x40191504 in FUN_40191490 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x40191834 in FUN_40191790 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x4019166a in FUN_401915cc (GhidraScript)  
+INFO  FindDisplayPins.class> 
+=== Cross-references to FUN_40190e38 (WRITE data) === (GhidraScript)  
+INFO  FindDisplayPins.class>   Target: FUN_40190e38 at 0x40190e38 size=0x221 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x40191482 in FUN_401913e0 (GhidraScript)  
+INFO  FindDisplayPins.class> 
+=== Cross-references to FUN_4019153c (INIT) === (GhidraScript)  
+INFO  FindDisplayPins.class>   Target: FUN_4019153c at 0x4019153c size=0x120 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x40194597 in FUN_4019447c (GhidraScript)  
+INFO  FindDisplayPins.class> 
+=== Cross-references to FUN_401915cc (CONFIG/GPIO setup) === (GhidraScript)  
+INFO  FindDisplayPins.class>   Target: FUN_401915cc at 0x401915cc size=0x433 (GhidraScript)  
+INFO  FindDisplayPins.class>   caller: 0x4019181f in FUN_40191790 (GhidraScript)  
+INFO  FindDisplayPins.class> 
+=== Lookup DAT references near 0x40190520 (0x3FF4E0C4 base) === (GhidraScript)  
+INFO  FindDisplayPins.class>   References to DAT@40190520: (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x401944bf in FUN_4019447c (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x4019063f in FUN_40190634 (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x401908c1 in FUN_401908b4 (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x401913ee in FUN_401913e0 (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x40191837 in FUN_40191790 (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x401915cf in FUN_401915cc (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x4019058b in FUN_4019052c (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x40194137 in FUN_40194110 (GhidraScript)  
+INFO  FindDisplayPins.class>     from 0x40194297 in FUN_40194294 (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Save succeeded for processed file: /ota_0.elf (HeadlessAnalyzer)  

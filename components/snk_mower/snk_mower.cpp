@@ -526,36 +526,47 @@ void SnkMower::loop() {
   }
 
   if (lcd_sweep_) {
-    if (now - last_sweep_ms_ >= 4) {
+    if (now - last_sweep_ms_ >= 8) {
       last_sweep_ms_ = now;
       if (sweep_frames_ <= 0) {
         sweep_phase_++;
         if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
-          sweep_frames_ = 500;  // ~2s per bit
+          sweep_frames_ = 375;  // ~3s per bit at 8ms
         } else if (sweep_phase_ == 25 || sweep_phase_ == 26) {
-          sweep_frames_ = 750;  // ~3s all-on/off
+          sweep_frames_ = 500;  // ~4s all-on/off
         } else if (sweep_phase_ >= 27 && sweep_phase_ <= 29) {
-          sweep_frames_ = 375;  // ~1.5s per byte
+          sweep_frames_ = 250;  // ~2s per byte
         } else {
           sweep_phase_ = 0;
           sweep_frames_ = 1;
         }
       }
       uint32_t pattern;
+      const char *label = "";
       if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
         pattern = 1 << (sweep_phase_ - 1);
+        label = "bit";
       } else if (sweep_phase_ == 25) {
         pattern = 0xFFFFFF;
+        label = "ALL_ON";
       } else if (sweep_phase_ == 26) {
         pattern = 0x000000;
+        label = "ALL_OFF";
       } else if (sweep_phase_ == 27) {
         pattern = 0xFF0000;
+        label = "byte0";
       } else if (sweep_phase_ == 28) {
         pattern = 0x00FF00;
+        label = "byte1";
       } else if (sweep_phase_ == 29) {
         pattern = 0x0000FF;
+        label = "byte2";
       } else {
         pattern = 0;
+      }
+      if (sweep_frames_ == 1) {
+        ESP_LOGI(TAG, "SWEEP phase=%d (%s) pattern=0x%06X",
+                 sweep_phase_, label, pattern);
       }
       if (sweep_phase_ > 0) {
         shift24(display_clk_, display_mosi_, display_cs_,

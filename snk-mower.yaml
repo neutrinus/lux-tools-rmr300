@@ -52,15 +52,16 @@ snk_mower:
   id: my_mower
   uart_id: mower_uart
   pin: "9633"
-  display_clk: 5
-  display_mosi: 32
-  display_cs: 25
+  display_clk: 33
+  display_mosi: 18
+  display_cs: 32
   buzzer_pin: 27
   rain_pin: 36
   display_off_timeout: 5
   boot_delay: 10
   pin_diag: false
-  lcd_find: true
+  lcd_find: false
+  lcd_sweep: true
 
   battery_level:
     name: "${friendly_name} Battery Level"

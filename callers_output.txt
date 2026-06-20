@@ -1,0 +1,436 @@
+openjdk version "21.0.6" 2025-01-21 LTS
+OpenJDK Runtime Environment Temurin-21.0.6+7 (build 21.0.6+7-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.6+7 (build 21.0.6+7-LTS, mixed mode)
+INFO  Using log config file: jar:file:/home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (718 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (1736 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /home/marek/.config/ghidra-cli/class_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessAnalyzer)  
+INFO  Opening project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessProject)  
+INFO  REPORT: Processing project file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileCallers.class  (HeadlessAnalyzer)  
+INFO  SCRIPT: DecompileCallers.class (HeadlessAnalyzer)  
+INFO  DecompileCallers.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> === Function at 0x40191490 === (GhidraScript)  
+INFO  DecompileCallers.class> ============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> Name: FUN_40191490 (GhidraScript)  
+INFO  DecompileCallers.class> 
+void FUN_40191490(void)
+
+{
+  uint uVar1;
+  uint *puVar2;
+  undefined4 uVar3;
+  uint *puVar4;
+  uint uVar5;
+  uint uVar6;
+  undefined1 auStack_70 [11];
+  undefined1 auStack_65 [11];
+  undefined1 local_5a [11];
+  undefined1 auStack_4f [11];
+  undefined1 auStack_44 [11];
+  undefined1 auStack_39 [11];
+  undefined1 auStack_2e [46];
+  
+  puVar2 = DAT_401906a8;
+  uVar5 = *DAT_401906a8;
+  if ((uVar5 & 0x10) == 0) {
+    FUN_401906ac();
+    uVar5 = *puVar2;
+  }
+  uVar3 = DAT_401913d8;
+  uVar1 = DAT_401888a4;
+  if ((uVar5 & DAT_401888a4) == 0) {
+    FUN_40190fb4(auStack_2e,auStack_39,auStack_44,DAT_401913d8,local_5a,auStack_4f,auStack_65,0xb,
+                 auStack_70);
+    FUN_401908b4(auStack_2e,auStack_39,auStack_44,uVar3,local_5a,auStack_4f,auStack_65,0xb,
+                 auStack_70);
+    *DAT_401913dc = local_5a[0];
+    memw();
+    FUN_401913e0(0xc);
+    puVar4 = DAT_40191488;
+    uVar5 = (*DAT_4018a104)(DAT_40191488);
+    uVar6 = *puVar2;
+    memw();
+    *puVar4 = uVar5 & 0xffff | DAT_4019148c;
+    *puVar2 = uVar6 | uVar1;
+  }
+  FUN_40194294();
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileCallers.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> === Function at 0x40191790 === (GhidraScript)  
+INFO  DecompileCallers.class> ============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> Name: FUN_40191790 (GhidraScript)  
+INFO  DecompileCallers.class> 
+uint FUN_40191790(char param_1,undefined1 param_2,short param_3)
+
+{
+  uint *puVar1;
+  undefined4 uVar2;
+  uint uVar3;
+  uint uVar4;
+  uint uVar5;
+  uint uVar6;
+  int iVar7;
+  
+  if ((*DAT_401906a8 & 0x10) == 0) {
+    uVar3 = (**(code **)(*DAT_40190150 + 0xf4))((int)param_1,param_2,(int)param_3);
+    return uVar3;
+  }
+  iVar7 = (int)param_1;
+  if ((iVar7 == 0) || (0xe < iVar7)) {
+    FUN_4018ab18(PTR_s___3ffc3e97_0xd_40191780);
+    uVar5 = 0xc;
+    uVar6 = 0xc;
+    uVar3 = DAT_4017e3ac;
+  }
+  else if (iVar7 == 0xe) {
+    uVar5 = 0x54;
+    uVar6 = 0x54;
+    uVar3 = DAT_4017e094;
+  }
+  else {
+    uVar3 = (iVar7 + -1) * 5 & 0xffff;
+    uVar5 = uVar3 + 0xc;
+    uVar6 = uVar5 & 0xffff;
+    uVar5 = uVar5 & 0xff;
+    uVar3 = uVar3 + DAT_4017e3ac & 0xffff;
+  }
+  uVar4 = (*DAT_4018a104)(DAT_40191784);
+  uVar2 = DAT_4019178c;
+  if ((uVar4 & DAT_40191788) >> 0x1d == 0) {
+    FUN_401915cc(uVar5,(int)param_3,param_2);
+    return uVar3;
+  }
+  do {
+    iVar7 = (*DAT_4018a104)(uVar2);
+  } while (iVar7 < 0);
+  FUN_401913e0(uVar5);
+  puVar1 = DAT_40190520;
+  uVar5 = (*DAT_4018a104)(DAT_40190520);
+  memw();
+  *puVar1 = (uVar6 & 0x7f) << 1 | uVar5 & 0xffffff00;
+  return uVar3;
+}
+
+ (GhidraScript)  
+INFO  DecompileCallers.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> === Function at 0x4019447c === (GhidraScript)  
+INFO  DecompileCallers.class> ============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> Name: FUN_4019447c (GhidraScript)  
+INFO  DecompileCallers.class> 
+int FUN_4019447c(int param_1,int param_2,byte param_3)
+
+{
+  bool bVar1;
+  int iVar2;
+  uint *puVar3;
+  char *pcVar4;
+  undefined1 *puVar5;
+  bool bVar6;
+  undefined1 uVar7;
+  uint uVar8;
+  int iVar9;
+  int *piVar10;
+  uint uVar11;
+  char cVar12;
+  uint uVar13;
+  
+  pcVar4 = DAT_4019152c;
+  memw();
+  if ((param_1 == 0) || (cVar12 = *DAT_4019152c, cVar12 == '\x01')) {
+    (*(code *)PTR_FUN_40194470)();
+    return 0;
+  }
+  *DAT_40191530 = 1;
+  memw();
+  if (cVar12 == '\0') {
+    FUN_40193e1c();
+    FUN_401943e0();
+  }
+  (*(code *)PTR_FUN_401915c0)();
+  puVar3 = DAT_40190520;
+  uVar8 = (*DAT_4018a104)(DAT_40190520);
+  memw();
+  *puVar3 = uVar8 & 0xfffffeff;
+  (*(code *)PTR_FUN_40194474)();
+  if (*pcVar4 == '\0') {
+    bVar1 = false;
+    if (param_3 < 2) {
+      iVar9 = FUN_401ae520(1,param_2,param_1);
+      if (iVar9 == 0) {
+        bVar6 = (bool)((param_3 ^ 1) & 1);
+        bVar1 = true;
+      }
+      else {
+        bVar6 = true;
+        param_3 = 2;
+      }
+    }
+    else {
+      bVar6 = true;
+      iVar9 = 0;
+    }
+    FUN_40193b80(param_1);
+    iVar2 = DAT_40190470;
+    if (*(char *)(DAT_40190470 + 0x33) == '\x01') {
+      *DAT_4019445c = 0x138;
+      memw();
+    }
+    else {
+      *DAT_4019445c = 0x120;
+      memw();
+    }
+    cVar12 = *pcVar4;
+    *PTR_DAT_40194460 = *(undefined1 *)(iVar2 + 0xe);
+    memw();
+    if ((bool)(bVar1 & cVar12 == '\0')) {
+      FUN_40194068(param_2);
+      cVar12 = *pcVar4;
+      bVar1 = true;
+    }
+    puVar3 = DAT_401906a8;
+    if (cVar12 == '\0') {
+      uVar13 = *DAT_401906a8;
+      uVar11 = uVar13 & DAT_40194464;
+      *DAT_401906a8 = uVar11;
+      uVar8 = DAT_40194458;
+      if ((param_3 != 0) && (uVar8 = 8, param_3 == 1)) {
+        if ((uVar13 & 0x10) != 0) {
+          FUN_401907b4(param_2 + 0xc);
+          goto LAB_40194597;
+        }
+        uVar8 = uVar11 | 8;
+      }
+      *puVar3 = uVar8;
+    }
+  }
+  else {
+    bVar1 = param_3 < 2;
+    iVar9 = 0;
+    bVar6 = param_3 != 1;
+  }
+LAB_40194597:
+  FUN_4019153c();
+  FUN_40193acc();
+  cVar12 = *pcVar4;
+  if ((cVar12 == '\0') && (bVar6 != false)) {
+    FUN_40194110(param_2);
+    FUN_401ae520(0,param_2,param_1);
+    cVar12 = *pcVar4;
+  }
+  piVar10 = DAT_40190150;
+  if (cVar12 == '\x01') {
+    (**(code **)(*DAT_40190150 + 0xa0))(0x65,4,0,99);
+    FUN_40191874((int)*(char *)((int)DAT_401906a8 + 0x51),10);
+    (*(code *)PTR_FUN_40193ac4)(0);
+  }
+  else {
+    if (bVar1) {
+      FUN_40191874((int)*(char *)((int)DAT_401906a8 + 0x51),10);
+    }
+    piVar10 = DAT_40190150;
+    if (*(char *)(DAT_40190470 + 0x4e) != '\0') {
+      FUN_40191960(0);
+    }
+  }
+  (**(code **)(*piVar10 + 0x98))(99,0);
+  if (*pcVar4 == '\0') {
+    uVar7 = (*(code *)PTR_SUB_40194478)();
+    *DAT_40194468 = uVar7;
+    memw();
+    *DAT_4019446c = uVar7;
+    memw();
+  }
+  puVar5 = DAT_40191530;
+  *pcVar4 = '\x01';
+  *puVar5 = 0;
+  memw();
+  (*(code *)PTR_FUN_401915c8)();
+  (*(code *)PTR_FUN_4017e060)();
+  return iVar9;
+}
+
+ (GhidraScript)  
+INFO  DecompileCallers.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> === Function at 0x40194110 === (GhidraScript)  
+INFO  DecompileCallers.class> ============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> Name: FUN_40194110 (GhidraScript)  
+INFO  DecompileCallers.class> 
+void FUN_40194110(int param_1)
+
+{
+  uint *puVar1;
+  uint *puVar2;
+  undefined1 uVar3;
+  int iVar4;
+  uint uVar5;
+  uint uVar6;
+  int iVar7;
+  uint uVar8;
+  char cVar9;
+  undefined1 *puVar10;
+  uint *puVar11;
+  undefined1 *puVar12;
+  int iVar13;
+  uint local_30;
+  
+  puVar11 = DAT_40190520;
+  cVar9 = *DAT_4019051c;
+  local_30 = 0xc;
+  iVar7 = 0x55;
+  if (cVar9 != '\0') {
+    iVar7 = 0xe;
+  }
+  iVar4 = 0;
+  while( true ) {
+    if (cVar9 == '\0') {
+      iVar13 = (iVar4 + 1) * 0xc;
+      uVar8 = iVar4 * 3 & 0xff;
+    }
+    else if (iVar4 < 0xd) {
+      iVar13 = (local_30 + 1) * 0xc;
+      uVar8 = local_30 * 3 & 0xff;
+    }
+    else {
+      uVar8 = 0xfc;
+      iVar13 = 0x3fc;
+    }
+    iVar4 = iVar4 + 1;
+    uVar5 = uVar8 + 3;
+    puVar12 = (undefined1 *)(param_1 + iVar13);
+    do {
+      uVar6 = (*DAT_4018a104)(puVar11);
+      memw();
+      *puVar11 = uVar6 & 0xffffff00 | uVar8;
+      uVar3 = (*DAT_4018a104)(DAT_40190524);
+      *puVar12 = uVar3;
+      puVar2 = DAT_4019410c;
+      memw();
+      uVar8 = uVar8 + 1 & 0xff;
+      puVar12 = puVar12 + 4;
+    } while (uVar8 != (uVar5 & 0xff));
+    local_30 = local_30 + 5 & 0xff;
+    if (iVar4 == iVar7) break;
+    cVar9 = *DAT_4019051c;
+  }
+  puVar12 = (undefined1 *)(param_1 + 0x40c);
+  puVar11 = DAT_401906a8;
+  do {
+    *puVar12 = (char)*puVar11;
+    puVar1 = DAT_401906a8;
+    memw();
+    puVar11 = puVar11 + 1;
+    puVar12 = puVar12 + 4;
+  } while (puVar11 != puVar2);
+  puVar12 = (undefined1 *)(param_1 + 0x4d0);
+  puVar11 = DAT_40192a90;
+  do {
+    uVar8 = 0;
+    iVar7 = 4;
+    puVar10 = puVar12;
+    do {
+      uVar5 = uVar8 & 0x1f;
+      uVar8 = uVar8 + 8;
+      *puVar10 = (char)(*puVar11 >> uVar5);
+      puVar2 = DAT_40192a90;
+      memw();
+      puVar10 = puVar10 + 1;
+      iVar7 = iVar7 + -1;
+    } while (iVar7 != 0);
+    puVar11 = puVar11 + 1;
+    puVar12 = puVar12 + 4;
+  } while (puVar11 != puVar1);
+  puVar12 = (undefined1 *)(param_1 + 0x554);
+  puVar11 = DAT_40192a8c;
+  do {
+    uVar8 = 0;
+    iVar7 = 4;
+    puVar10 = puVar12;
+    do {
+      uVar5 = uVar8 & 0x1f;
+      uVar8 = uVar8 + 8;
+      *puVar10 = (char)(*puVar11 >> uVar5);
+      memw();
+      puVar10 = puVar10 + 1;
+      iVar7 = iVar7 + -1;
+    } while (iVar7 != 0);
+    puVar11 = puVar11 + 1;
+    puVar12 = puVar12 + 4;
+  } while (puVar11 != puVar2);
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileCallers.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> === Function at 0x40194294 === (GhidraScript)  
+INFO  DecompileCallers.class> ============================================================ (GhidraScript)  
+INFO  DecompileCallers.class> Name: FUN_40194294 (GhidraScript)  
+INFO  DecompileCallers.class> 
+void FUN_40194294(void)
+
+{
+  uint *puVar1;
+  uint uVar2;
+  
+  puVar1 = DAT_40190520;
+  uVar2 = (*DAT_4018a104)(DAT_40190520);
+  memw();
+  *puVar1 = uVar2 & DAT_40187cc0 | DAT_40188e68;
+  uVar2 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar2 & DAT_401857e4 | DAT_4016e7cc;
+  uVar2 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar2 | DAT_40188f00;
+  uVar2 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar2 | DAT_4017523c;
+  uVar2 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar2 & DAT_4018a99c;
+  return;
+}
+
+ (GhidraScript)  
+INFO  REPORT: Save succeeded for processed file: /ota_0.elf (HeadlessAnalyzer)  

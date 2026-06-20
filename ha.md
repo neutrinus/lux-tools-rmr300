@@ -116,7 +116,7 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display — CLK=GPIO5, MOSI=GPIO32 ✅ (działają), ale **CS=GPIO34 ❌ input-only** — CS do znalezienia: {18,25,33}
+- Display — never lit up empirically. See [Display test history](#display-test-history) below.
 - Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
@@ -288,14 +288,14 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 
 | GPIO | Pin | Połączenie |
 |------|-----|-----------|
-| GPIO5 | 29 | **Display CLK** ✅ → R28 → U6 (74HC595) |
+| GPIO33 | 9 | **Display CLK** ✅ (empirycznie potwierdzone) |
+| GPIO32 | 8 | **Display CS** ✅ (empirycznie potwierdzone) |
+| GPIO18 | 30 | **Display MOSI** ✅ (empirycznie potwierdzone) |
+| GPIO5 | 29 | R28 → U6 (74HC595) — FW wskazuje CLK, ale nie działa na naszej płycie |
+| GPIO34 | 6 | ❌ input-only — R26 → chipy wyświetlacza |
+| GPIO25 | 10 | R34 → TP29 → przelotka — FW wskazuje CS, ale nie działa |
 | GPIO17 | 28 | UART TX do mainboard ✅ |
 | GPIO16 | 27 | UART RX do mainboard ✅ |
-| GPIO18 | 30 | Przelotka NC (nie CLK) |
-| GPIO32 | 8 | **Display MOSI** ✅ → R31 → TP27 → U4 pin4 (74HC595 DS) |
-| GPIO34 | 6 | ❌ input-only — **nie może być CS** → R26 → chipy wyświetlacza |
-| GPIO33 | 9 | Nieznane (NC lub drugi 74HC595) |
-| GPIO25 | 10 | R34 → TP29 → przelotka (drugi 74HC595?) |
 | GPIO39 (SENSOR_VN) | 5 | Ścieżka do chipów wyświetlacza (NC?) |
 | GPIO36 (SENSOR_VP) | 4 | **Rain sensor J4** ✅ — reaguje na wilgoć (DIAG + binary_sensor) |
 | GPIO35 | 7 | R27 → J2 → mainboard (ADC, input-only) |
@@ -318,6 +318,28 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 | GPIO14 | 13 | NC |
 | GPIO15 | 20 | NC (spód modułu) |
 | GPIO26 | 11 | NC (HARDWARE.md błędnie podawał START) |
+
+## Display test history
+
+| Data | Test | Piny (CLK, CS, MOSI) | Wynik | Uwagi |
+|------|------|----------------------|-------|-------|
+| 2026-06-19 | lcd_find — 7 kandydatów × 3 role = 210 permutacji | Wszystkie kombinacje {5,18,25,32,33,34,39} | CLK=5, CS=**34**, MOSI=32 (#39/343) — **false positive** | GPIO34 input-only, nie może być CS. Display mógł błysnąć przez coupling. |
+| 2026-06-19 | lcd_find zwężony do {18,25,33} dla CS, CLK=5, MOSI=32 | 60 permutacji | Żadna kombinacja nie zapaliła wyświetlacza | GPIO25 testowane jako CS — brak reakcji. |
+| 2026-06-19 | lcd_find — 6 permutacji {18,33,32} | {33, 32, 18} **(combo #4) = CLK=33, CS=32, MOSI=18** | **✅ Wyświetlacz zapalił się (bzdura)** | Jedyne empiricalne potwierdzenie. CLK=33, MOSI=18 — odwrotność FW (CLK=5, MOSI=32). Być może inna rewizja PCB. |
+| 2026-06-19 | lcd_find — 6 permutacji {5,25,32} (z FW decompilacji) | 6 permutacji {5,25,32} | **Brak reakcji** | FW wskazuje CLK=5, MOSI=32, CS=25 — nie działa. |
+| 2026-06-19 | Normal tryb po lcd_find: CLK=5, MOSI=32, CS=25 | 5, 32, 25 | **Brak reakcji** | `Display initialized (CLK=5, MOSI=32, CS=25)` — display refresh w loop, cisza. |
+
+**Empirycznie potwierdzona kombinacja: CLK=GPIO33, CS=GPIO32, MOSI=GPIO18**
+
+**Wnioski:**
+- **CLK=33, MOSI=18, CS=32** — jedyna kombinacja, która kiedykolwiek zapaliła wyświetlacz
+- FW analysis wskazuje CLK=5, MOSI=32, CS=25 — nie zgadza się z naszym PCB (może inna rewizja SNK_DISPLAY_CP)
+- Display wyświetlił "bzdurowate" wzory — protokół działa, ale dane są źle mapowane (bit order, byte order?)
+- CS=32 jest normalnym I/O (output-capable)
+
+**Co dalej:**
+1. Ustawić w yaml `display_clk: 33, display_mosi: 18, display_cs: 32` i sprawdzić normalne odświeżanie
+2. Jeśli nadal bzdury — eksperymentować z bit orderem (LSB-first), byte orderem, albo timingiem shift24
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
 | HARDWARE.md twierdzi | Faktycznie |

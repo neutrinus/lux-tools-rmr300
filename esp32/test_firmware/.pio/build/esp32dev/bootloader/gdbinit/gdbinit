@@ -1,0 +1,2 @@
+source /home/marek/tmp/kosiarka/esp32/test_firmware/.pio/build/esp32dev/bootloader/gdbinit/symbols
+source /home/marek/tmp/kosiarka/esp32/test_firmware/.pio/build/esp32dev/bootloader/gdbinit/connect

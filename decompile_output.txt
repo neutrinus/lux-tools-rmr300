@@ -1,0 +1,1318 @@
+openjdk version "21.0.6" 2025-01-21 LTS
+OpenJDK Runtime Environment Temurin-21.0.6+7 (build 21.0.6+7-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.6+7 (build 21.0.6+7-LTS, mixed mode)
+INFO  Using log config file: jar:file:/home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Framework/Generic/lib/Generic.jar!/generic.log4j.xml (LoggingInitialization)  
+INFO  Using log file: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/application.log (LoggingInitialization)  
+INFO  Loading user preferences: /home/marek/.config/ghidra/ghidra_12.1.2_PUBLIC/preferences (Preferences)  
+INFO  Searching for classes... (ClassSearcher)  
+INFO  Class search complete (647 ms) (ClassSearcher)  
+INFO  Initializing SSL Context (DefaultSSLContextInitializer)  
+INFO  Initializing Random Number Generator... (SecureRandomFactory)  
+INFO  Random Number Generator initialization complete: NativePRNGNonBlocking (SecureRandomFactory)  
+INFO  Trust manager disabled, cacerts have not been set (DefaultTrustManagerFactory)  
+INFO  Headless startup complete (1595 ms) (AnalyzeHeadless)  
+INFO  Class searcher loaded 59 extension points (20 false positives) (ClassSearcher)  
+INFO  HEADLESS Script Paths:
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
+    /home/marek/.config/ghidra-cli/class_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/Base/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /home/marek/tmp/kosiarka/sw/ghidra_extracted/ghidra_12.1.2_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts (HeadlessAnalyzer)  
+INFO  HEADLESS: execution starts (HeadlessAnalyzer)  
+INFO  Opening existing project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessAnalyzer)  
+INFO  Opening project: /home/marek/tmp/kosiarka/ghidra_proj/ESP32_Firmware (HeadlessProject)  
+INFO  REPORT: Processing project file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  ANALYZING all memory and code: /ota_0.elf (HeadlessAnalyzer)  
+WARN  Decompiling 401868bc, pcode error at 4018694e: Unable to resolve constructor at 4018694e (DecompileCallback)  
+INFO  Packed database cache: /var/tmp/marek-ghidra/packed-db-cache (PackedDatabaseCache)  
+INFO  Applied data type archive: generic_clib (ApplyDataArchiveAnalyzer)  
+INFO  -----------------------------------------------------
+    ASCII Strings                              0.312 secs
+    Apply Data Archives                        0.496 secs
+    Basic Constant Reference Analyzer          5.790 secs
+    Call Convention ID                         0.031 secs
+    Call-Fixup Installer                       0.027 secs
+    Create Address Tables                      0.215 secs
+    Create Function                            0.119 secs
+    Data Reference                             0.497 secs
+    Decompiler Switch Analysis                 2.789 secs
+    Demangler GNU                              0.013 secs
+    Disassemble Entry Points                   0.156 secs
+    ELF Scalar Operand References              1.083 secs
+    Embedded Media                             0.039 secs
+    External Entry References                  0.000 secs
+    External Symbol Resolver                   0.002 secs
+    Function ID                                0.017 secs
+    Function Start Search                      0.056 secs
+    Function Start Search After Code           0.035 secs
+    Function Start Search After Data           0.027 secs
+    Non-Returning Functions - Discovered       0.927 secs
+    Non-Returning Functions - Known            0.038 secs
+    Reference                                  0.575 secs
+    Shared Return Calls                        0.477 secs
+    Stack                                      2.031 secs
+    Subroutine References                      0.467 secs
+    Subroutine References - One Time           0.036 secs
+-----------------------------------------------------
+     Total Time   16 secs
+-----------------------------------------------------
+ (AutoAnalysisManager)  
+INFO  REPORT: Analysis succeeded for file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Execute script: DecompileDisplay.class  (HeadlessAnalyzer)  
+INFO  SCRIPT: DecompileDisplay.class (HeadlessAnalyzer)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Program: ota_0.elf (GhidraScript)  
+INFO  DecompileDisplay.class> Language: Xtensa:LE:32:default (GhidraScript)  
+INFO  DecompileDisplay.class> Functions: 6091 (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x401908b4 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_401908b4 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[401908b4, 40190922] [40190924, 40190931] [40190934, 40190965] [40190968, 40190a03] [40190a41, 40190a4c] [40190a80, 40190a87] [40190aac, 40190b61] [40190b64, 40190c18] [40190c1b, 40190cb9] [40190cbc, 40190cf5] [40190cf8, 40190d31] [40190d34, 40190d39] [40190d3d, 40190d8e] [40190d90, 40190d95] [40190d98, 40190d9d] [40190da0, 40190da5] [40190da9, 40190e23]] (GhidraScript)  
+WARN  Decompiling 401908b4, pcode error at 40190a92: Unable to resolve constructor at 40190a92 (DecompileCallback)  
+WARN  Decompiling 401908b4, pcode error at 40190a8c: Unable to resolve constructor at 40190a8c (DecompileCallback)  
+WARN  Decompiling 401908b4, pcode error at 4017c24c: Unable to resolve constructor at 4017c24c (DecompileCallback)  
+WARN  Decompiling 401908b4, pcode error at 40190a3b: Failed to resolve varnode <sr>, index=169 (DecompileCallback)  
+WARN  Decompiling 401908b4, pcode error at 01000100: Could not follow disassembly flow into non-existing memory at 01000100 (DecompileCallback)  
+INFO  DecompileDisplay.class> 
+/* WARNING: Control flow encountered bad instruction data */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void FUN_401908b4(byte *param_1,undefined4 param_2,undefined4 param_3,undefined4 param_4,
+                 undefined4 param_5,undefined4 param_6,undefined4 param_7,byte param_8,char *param_9
+                 )
+
+{
+  byte bVar1;
+  int unaff_retaddr;
+  uint *puVar2;
+  uint uVar3;
+  uint uVar4;
+  uint *puVar5;
+  byte *pbVar6;
+  uint uVar7;
+  byte *pbVar8;
+  byte *pbVar9;
+  undefined1 *puVar10;
+  int iVar11;
+  uint uVar12;
+  byte *pbVar13;
+  uint *puVar14;
+  uint uVar15;
+  uint in_a15;
+  uint local_40;
+  int iStack_3c;
+  undefined4 uStack_38;
+  undefined4 uStack_34;
+  undefined4 uStack_30;
+  undefined4 uStack_2c;
+  undefined4 uStack_28;
+  
+  puVar14 = DAT_40190520;
+  puVar2 = &local_40;
+  local_40 = (uint)param_8;
+  uVar7 = local_40 & 0x1f;
+  uStack_38 = param_4;
+  uStack_34 = param_6;
+  uStack_30 = param_2;
+  uStack_2c = param_3;
+  uStack_28 = param_5;
+  uVar3 = (*DAT_4018a104)(DAT_40190520);
+  memw();
+  *puVar14 = uVar7 << 10 | uVar3 & DAT_40190848;
+  if (local_40 == 0) {
+    memw();
+    *DAT_401908b0 = 0;
+    return;
+  }
+  uVar3 = 0;
+  iVar11 = 0;
+  do {
+    if (*param_9 == '\x01') {
+      iVar11 = iVar11 + (1 << 0x20 - (0x20 - (uVar3 & 0x1f)));
+    }
+    uVar3 = uVar3 + 1;
+    param_9 = param_9 + 1;
+  } while ((uVar3 & 0xff) < local_40);
+  iStack_3c = (local_40 - 1 & 0xff) + 1;
+  puVar10 = (undefined1 *)0xf;
+  uVar7 = 0xffffffff;
+  memw();
+  *DAT_401908b0 = iVar11;
+  uVar3 = 0;
+LAB_40190924:
+  puVar14 = DAT_40190850;
+  uVar4 = (uVar3 & 0xff) >> 3;
+  if (uVar4 == 0) {
+    uVar4 = (*DAT_4018a104)(DAT_4019084c);
+    uVar4 = (uVar7 ^ (int)puVar10 << 0x20 - (0x20 - (uVar3 << 2 & 0x1f))) & uVar4;
+    memw();
+    *DAT_4019084c = uVar4 | (*param_1 & 0xf) << 0x20 - (0x20 - (uVar3 << 2 & 0x1f));
+  }
+  else if (uVar4 == 1) {
+    uVar4 = (*DAT_4018a104)(DAT_40190850);
+    uVar4 = (uVar7 ^ (int)puVar10 << 0x20 - ((uVar3 & 7) * -4 + 0x20)) & uVar4;
+    memw();
+    *puVar14 = uVar4 | (*param_1 & 0xf) << 0x20 - ((uVar3 & 7) * -4 + 0x20);
+  }
+  else {
+    uVar4 = (*DAT_4018a104)(DAT_40190854);
+    uVar4 = (uVar7 ^ (int)puVar10 << 0x20 - ((uVar3 & 7) * -4 + 0x20)) & uVar4;
+    memw();
+    *DAT_40190854 = uVar4 | (*param_1 & 0xf) << 0x20 - ((uVar3 & 7) * -4 + 0x20);
+  }
+LAB_401909ce:
+  uVar3 = uVar3 + 1;
+  param_1 = param_1 + 1;
+  if (*(uint *)((int)puVar2 + 4) == uVar3) {
+    puVar10 = *(undefined1 **)((int)puVar2 + 0x10);
+    uVar3 = 0;
+    uVar7 = 0;
+    param_1 = *(byte **)((int)puVar2 + 0x14);
+    do {
+      puVar14 = _UNK_40190868;
+      puVar5 = (uint *)(uVar7 >> 1);
+      if (puVar5 < (uint *)0x9) {
+switchD_40190a01_caseD_401909fc:
+        puVar5 = *(uint **)(PTR_switchdataD_3ffc3f04_40190858 + (int)puVar5 * 4);
+        switch(puVar5) {
+        case (uint *)0x1000100:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+          halt_baddata();
+        case (uint *)0x401909fc:
+          goto switchD_40190a01_caseD_401909fc;
+        case (uint *)0x40190a3b:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+          halt_baddata();
+        case (uint *)0x40190a41:
+          goto switchD_40190a01_caseD_40190a41;
+        case (uint *)0x40190a4c:
+          puVar2 = *(uint **)unaff_retaddr;
+          uVar4 = (*DAT_4018a104)(_UNK_40190868);
+          uVar4 = (uint)CONCAT11(*param_1,*puVar10) << 0x20 - ((uVar7 & 1) * -0x10 + 0x20) |
+                  (DAT_401812b0 << 0x20 - ((uVar7 & 1) * -0x10 + 0x20) ^ 0xffffffffU) & uVar4;
+          puVar5 = puVar14;
+        case (uint *)0x40190a80:
+          memw();
+          *puVar5 = uVar4;
+          break;
+        case (uint *)0x40190a8c:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+          halt_baddata();
+        case (uint *)0x40190a92:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+          halt_baddata();
+        }
+      }
+      else {
+        uVar4 = (*DAT_4018a104)(DAT_40190880);
+        uVar4 = (uint)CONCAT11(*param_1,*puVar10) << 0x20 - ((uVar7 & 1) * -0x10 + 0x20) |
+                (DAT_401812b0 << 0x20 - ((uVar7 & 1) * -0x10 + 0x20) ^ 0xffffffffU) & uVar4;
+        memw();
+        *DAT_40190880 = uVar4;
+      }
+      uVar3 = uVar3 + 1;
+      uVar7 = uVar3 & 0xff;
+      param_1 = param_1 + 1;
+      puVar10 = puVar10 + 1;
+      uVar15 = *puVar2;
+      if (uVar15 <= uVar7) {
+        uVar3 = 0;
+        pbVar6 = (byte *)puVar2[3];
+        uVar7 = 0;
+        pbVar8 = (byte *)puVar2[2];
+        do {
+          uVar4 = (*DAT_4018a104)(DAT_40190884);
+          puVar14 = DAT_40190888;
+          uVar12 = 1 << 0x20 - (0x20 - (uVar3 & 0x1f)) ^ 0xffffffff;
+          memw();
+          *DAT_40190884 = (*pbVar6 >> 4 & 1) << 0x20 - (0x20 - (uVar3 & 0x1f)) | uVar4 & uVar12;
+          uVar4 = (*DAT_4018a104)(puVar14);
+          memw();
+          *DAT_40190888 = (*pbVar8 >> 4 & 1) << 0x20 - (0x20 - (uVar3 & 0x1f)) | uVar12 & uVar4;
+          puVar14 = DAT_4019089c;
+          if (uVar7 >> 3 == 0) {
+            uVar12 = uVar3 << 2;
+            uVar7 = (*DAT_4018a104)(DAT_4019088c);
+            puVar14 = DAT_40190890;
+            uVar4 = 0xf << 0x20 - (0x20 - (uVar12 & 0x1f)) ^ 0xffffffff;
+            memw();
+            *DAT_4019088c = (*pbVar6 & 0xf) << 0x20 - (0x20 - (uVar12 & 0x1f)) | uVar7 & uVar4;
+            uVar7 = (*DAT_4018a104)(puVar14);
+            memw();
+            *DAT_40190890 = (*pbVar8 & 0xf) << 0x20 - (0x20 - (uVar12 & 0x1f)) | uVar4 & uVar7;
+          }
+          else if (uVar7 >> 3 == 1) {
+            uVar4 = (*DAT_4018a104)(DAT_40190894);
+            puVar14 = DAT_40190898;
+            uVar7 = uVar7 & 7;
+            uVar12 = 0xf << 0x20 - (uVar7 * -4 + 0x20) ^ 0xffffffff;
+            memw();
+            *DAT_40190894 = (*pbVar6 & 0xf) << 0x20 - (uVar7 * -4 + 0x20) | uVar4 & uVar12;
+            uVar4 = (*DAT_4018a104)(puVar14);
+            memw();
+            *DAT_40190898 = (*pbVar8 & 0xf) << 0x20 - (uVar7 * -4 + 0x20) | uVar12 & uVar4;
+          }
+          else {
+            uVar7 = uVar7 & 7;
+            uVar4 = (*DAT_4018a104)(DAT_4019089c);
+            memw();
+            *puVar14 = (0xf << 0x20 - (uVar7 * -4 + 0x20) ^ 0xffffffffU) & uVar4 |
+                       (*pbVar6 & 0xf) << 0x20 - (uVar7 * -4 + 0x20);
+            uVar4 = (*DAT_4018a104)(puVar14);
+            uVar7 = uVar7 * 4 + 0x10;
+            memw();
+            *puVar14 = (0xf << 0x20 - (0x20 - (uVar7 & 0x1f)) ^ 0xffffffffU) & uVar4 |
+                       (*pbVar8 & 0xf) << 0x20 - (0x20 - (uVar7 & 0x1f));
+          }
+          uVar3 = uVar3 + 1;
+          uVar7 = uVar3 & 0xff;
+          pbVar6 = pbVar6 + 1;
+          pbVar8 = pbVar8 + 1;
+        } while (uVar7 < uVar15);
+        pbVar9 = (byte *)puVar2[3];
+        uVar3 = 0;
+        pbVar8 = (byte *)puVar2[2];
+        pbVar13 = (byte *)puVar2[6];
+        pbVar6 = (byte *)puVar2[0x10];
+        do {
+          bVar1 = *pbVar9 >> 2;
+          if (bVar1 == 1) {
+            uVar7 = (*DAT_4018a104)(DAT_401908a4);
+            memw();
+            *DAT_401908a4 =
+                 (0xff << 0x20 - ((*pbVar9 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar7 |
+                 (uint)*pbVar6 << 0x20 - ((*pbVar9 & 3) * -8 + 0x20);
+          }
+          else if (bVar1 == 0) {
+            uVar7 = (*DAT_4018a104)(DAT_401908a0);
+            memw();
+            *DAT_401908a0 =
+                 (0xff << 0x20 - ((*pbVar9 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar7 |
+                 (uint)*pbVar6 << 0x20 - ((*pbVar9 & 3) * -8 + 0x20);
+          }
+          else {
+            puVar14 = DAT_401908a8;
+            if ((bVar1 == 2) || (puVar14 = DAT_401908ac, bVar1 == 3)) {
+              uVar7 = (*DAT_4018a104)(puVar14);
+              memw();
+              *puVar14 = (0xff << 0x20 - ((*pbVar9 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar7 |
+                         (uint)*pbVar6 << 0x20 - ((*pbVar9 & 3) * -8 + 0x20);
+            }
+          }
+          bVar1 = *pbVar8 >> 2;
+          puVar14 = DAT_401908a4;
+          if ((((bVar1 == 1) || (puVar14 = DAT_401908a0, bVar1 == 0)) ||
+              (puVar14 = DAT_401908a8, bVar1 == 2)) || (puVar14 = DAT_401908ac, bVar1 == 3)) {
+            uVar7 = (*DAT_4018a104)(puVar14);
+            memw();
+            *puVar14 = (0xff << 0x20 - ((*pbVar8 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar7 |
+                       (uint)*pbVar13 << 0x20 - ((*pbVar8 & 3) * -8 + 0x20);
+          }
+          uVar3 = uVar3 + 1 & 0xff;
+          pbVar9 = pbVar9 + 1;
+          pbVar8 = pbVar8 + 1;
+          pbVar13 = pbVar13 + 1;
+          pbVar6 = pbVar6 + 1;
+        } while (uVar3 < *puVar2);
+        return;
+      }
+    } while( true );
+  }
+  goto LAB_40190924;
+switchD_40190a01_caseD_40190a41:
+  unaff_retaddr = unaff_retaddr >> 0x10;
+  if ((in_a15 & 0x1000000) == 0) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+    halt_baddata();
+  }
+  goto LAB_401909ce;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x401915cc === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_401915cc (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[401915cc, 401916f1] [401916f4, 4019177e]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+void FUN_401915cc(uint param_1,short param_2,undefined1 param_3)
+
+{
+  uint *puVar1;
+  char *pcVar2;
+  char cVar3;
+  uint uVar4;
+  int iVar5;
+  char cVar6;
+  char cVar7;
+  undefined1 auStack_40 [16];
+  uint uStack_30;
+  uint uStack_2c;
+  undefined4 uStack_28;
+  
+  puVar1 = DAT_40190520;
+  *DAT_401915b4 = 1;
+  memw();
+  uVar4 = (*DAT_4018a104)(puVar1);
+  uStack_30 = uVar4 >> 0x10 & 0xf;
+  uVar4 = (*DAT_4018a104)(puVar1);
+  uStack_2c = uVar4 >> 0x14 & 0xf;
+  (*(code *)PTR_FUN_401915c0)();
+  uVar4 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar4 & 0xfffffeff;
+  uStack_28 = 0xfffffeff;
+  uVar4 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar4 & DAT_401915b8 | DAT_40189ac0;
+  uVar4 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar4 & DAT_40187cc0;
+  uVar4 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = uVar4 & DAT_401857e4;
+  FUN_4019052c((int)param_2,param_3);
+  FUN_401913e0(param_1 & 0xff);
+  uVar4 = (*DAT_4018a104)(puVar1);
+  memw();
+  *puVar1 = (param_1 & 0x7f) << 1 | uVar4 & 0xffffff00;
+  cVar6 = '\f';
+  cVar7 = '\0';
+  do {
+    uVar4 = (*DAT_4018a104)(puVar1);
+    memw();
+    *puVar1 = uVar4 | 0x100;
+    (*DAT_401839e0)(2);
+    do {
+      iVar5 = (*DAT_4018a104)(puVar1);
+      if (iVar5 < 0) break;
+      uVar4 = (*DAT_4018a104)(puVar1);
+    } while ((uVar4 & 0x100) != 0);
+    uVar4 = (*DAT_4018a104)(puVar1);
+    memw();
+    *puVar1 = uVar4 & 0xfffffeff;
+    (*DAT_401839e0)(0x28);
+    cVar3 = (*(code *)PTR_FUN_401915c4)(param_1 & 0xff,auStack_40,1);
+    if ((((cVar3 == '\0') || ((cVar3 == '\x01' && (cVar7 == -1)))) ||
+        ((cVar3 == -1 && (cVar7 == '\x01')))) || (cVar6 = cVar6 + -1, cVar7 = cVar3, cVar6 == '\0'))
+    {
+      *DAT_401915b4 = 0;
+      memw();
+      uVar4 = (*DAT_4018a104)(puVar1);
+      memw();
+      *puVar1 = uVar4 & DAT_40187cc0 | uStack_30 << 0x10;
+      uVar4 = (*DAT_4018a104)(puVar1);
+      memw();
+      *puVar1 = uVar4 & DAT_401857e4 | uStack_2c << 0x14;
+      uVar4 = (*DAT_4018a104)(puVar1);
+      pcVar2 = DAT_401915bc;
+      memw();
+      *puVar1 = uVar4 & DAT_401915b8;
+      if (*pcVar2 == '\0') {
+        (*(code *)PTR_FUN_401915c8)();
+      }
+      return;
+    }
+  } while( true );
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x40190fb4 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_40190fb4 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[40190a98, 40190a9f] [40190fb4, 40191038] [4019107c, 40191386] [40191388, 401913ae] [401913b0, 401913d6]] (GhidraScript)  
+WARN  Decompiling 40190fb4, pcode error at 40190ae3: Unable to resolve constructor at 40190ae3 (DecompileCallback)  
+WARN  Decompiling 40190fb4: Unable to read bytes at ram:41d00000 (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 40191302: Unable to resolve constructor at 40191302 (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 40190a92: Unable to resolve constructor at 40190a92 (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 40190a8c: Unable to resolve constructor at 40190a8c (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 4017c24c: Unable to resolve constructor at 4017c24c (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 40190a3b: Failed to resolve varnode <sr>, index=169 (DecompileCallback)  
+WARN  Decompiling 40190fb4, pcode error at 01000100: Could not follow disassembly flow into non-existing memory at 01000100 (DecompileCallback)  
+INFO  DecompileDisplay.class> 
+/* WARNING: Instruction at (ram,0x40190acb) overlaps instruction at (ram,0x40190ac9)
+    */
+/* WARNING: Control flow encountered bad instruction data */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void FUN_40190fb4(uint *param_1,uint *param_2,undefined1 *param_3,undefined1 *param_4,byte *param_5,
+                 undefined4 param_6,undefined4 param_7,byte param_8)
+
+{
+  uint *puVar1;
+  int unaff_retaddr;
+  uint *puVar2;
+  uint uVar3;
+  byte *pbVar4;
+  byte *pbVar5;
+  byte *pbVar6;
+  uint uVar7;
+  byte *pbVar8;
+  undefined1 *puVar9;
+  uint uVar10;
+  byte bVar11;
+  undefined1 uVar12;
+  uint *puVar13;
+  undefined1 *puVar14;
+  undefined1 *puVar15;
+  undefined *puVar16;
+  int iVar17;
+  int iVar18;
+  int iVar19;
+  uint uVar20;
+  undefined4 local_30;
+  uint uStack_2c;
+  int *piStack_28;
+  
+  puVar2 = &local_30;
+  uVar20 = 1;
+  iVar17 = 7;
+  piStack_28 = DAT_40190150;
+  puVar9 = (undefined1 *)(uint)param_8;
+  local_30 = param_6;
+  (**(code **)(*DAT_40190150 + 0xa8))(0x62,1,0,7);
+  uVar3 = (**(code **)(*piStack_28 + 0x98))(0x62,1,0);
+  puVar15 = (undefined1 *)0x0;
+  if (puVar9 == (undefined1 *)0x0) {
+    return;
+  }
+  puVar13 = (uint *)0x0;
+  uStack_2c = uVar3 & 0x9f | 0x20;
+LAB_4019100c:
+  puVar15[*(int *)((int)puVar2 + 0x38)] = (char)puVar13;
+  memw();
+  puVar14 = puVar15;
+  puVar16 = PTR_switchdataD_3ffc3f28_40190fb0;
+  if (puVar15 < (undefined1 *)0xb) {
+switchD_40191036_caseD_40191031:
+    do {
+      switch(*(undefined4 *)(puVar16 + (int)puVar14 * 4)) {
+      case 0x40190a98:
+switchD_40191036_caseD_40190a98:
+        param_2 = DAT_40190874;
+        if (uVar20 != 0) {
+          *(undefined1 **)(unaff_retaddr + -0x40) = param_3;
+          cust1();
+                    /* WARNING: Bad instruction - Truncating control flow here */
+          halt_baddata();
+        }
+switchD_40190a01_caseD_40190a4c:
+        uVar3 = (*DAT_4018a104)(param_2);
+        puVar13 = (uint *)((uint)CONCAT11(*param_5,*param_4) <<
+                          0x20 - (((uint)param_3 & 1) * -0x10 + 0x20));
+        uVar3 = (uint)puVar13 |
+                (DAT_401812b0 << 0x20 - (((uint)param_3 & 1) * -0x10 + 0x20) ^ 0xffffffffU) & uVar3;
+switchD_40190a01_caseD_40190a80:
+        memw();
+        *param_2 = uVar3;
+        do {
+          puVar9 = puVar9 + 1;
+          param_3 = (undefined1 *)((uint)puVar9 & 0xff);
+          param_5 = param_5 + 1;
+          param_4 = param_4 + 1;
+          puVar14 = (undefined1 *)*puVar2;
+          if (puVar14 <= param_3) {
+            uVar3 = 0;
+            pbVar4 = (byte *)puVar2[3];
+            puVar15 = (undefined1 *)0x0;
+            pbVar5 = (byte *)puVar2[2];
+            do {
+              uVar20 = (*DAT_4018a104)(DAT_40190884);
+              puVar13 = DAT_40190888;
+              uVar7 = 1 << 0x20 - (0x20 - (uVar3 & 0x1f)) ^ 0xffffffff;
+              memw();
+              *DAT_40190884 = (*pbVar4 >> 4 & 1) << 0x20 - (0x20 - (uVar3 & 0x1f)) | uVar20 & uVar7;
+              uVar20 = (*DAT_4018a104)(puVar13);
+              memw();
+              *DAT_40190888 = (*pbVar5 >> 4 & 1) << 0x20 - (0x20 - (uVar3 & 0x1f)) | uVar7 & uVar20;
+              puVar13 = DAT_4019089c;
+              if ((uint)puVar15 >> 3 == 0) {
+                uVar10 = uVar3 << 2;
+                uVar20 = (*DAT_4018a104)(DAT_4019088c);
+                puVar13 = DAT_40190890;
+                uVar7 = 0xf << 0x20 - (0x20 - (uVar10 & 0x1f)) ^ 0xffffffff;
+                memw();
+                *DAT_4019088c = (*pbVar4 & 0xf) << 0x20 - (0x20 - (uVar10 & 0x1f)) | uVar20 & uVar7;
+                uVar20 = (*DAT_4018a104)(puVar13);
+                memw();
+                *DAT_40190890 = (*pbVar5 & 0xf) << 0x20 - (0x20 - (uVar10 & 0x1f)) | uVar7 & uVar20;
+              }
+              else if ((uint)puVar15 >> 3 == 1) {
+                uVar20 = (*DAT_4018a104)(DAT_40190894);
+                puVar13 = DAT_40190898;
+                uVar10 = (uint)puVar15 & 7;
+                uVar7 = 0xf << 0x20 - (uVar10 * -4 + 0x20) ^ 0xffffffff;
+                memw();
+                *DAT_40190894 = (*pbVar4 & 0xf) << 0x20 - (uVar10 * -4 + 0x20) | uVar20 & uVar7;
+                uVar20 = (*DAT_4018a104)(puVar13);
+                memw();
+                *DAT_40190898 = (*pbVar5 & 0xf) << 0x20 - (uVar10 * -4 + 0x20) | uVar7 & uVar20;
+              }
+              else {
+                uVar7 = (uint)puVar15 & 7;
+                uVar20 = (*DAT_4018a104)(DAT_4019089c);
+                memw();
+                *puVar13 = (0xf << 0x20 - (uVar7 * -4 + 0x20) ^ 0xffffffffU) & uVar20 |
+                           (*pbVar4 & 0xf) << 0x20 - (uVar7 * -4 + 0x20);
+                uVar20 = (*DAT_4018a104)(puVar13);
+                uVar7 = uVar7 * 4 + 0x10;
+                memw();
+                *puVar13 = (0xf << 0x20 - (0x20 - (uVar7 & 0x1f)) ^ 0xffffffffU) & uVar20 |
+                           (*pbVar5 & 0xf) << 0x20 - (0x20 - (uVar7 & 0x1f));
+              }
+              uVar3 = uVar3 + 1;
+              puVar15 = (undefined1 *)(uVar3 & 0xff);
+              pbVar4 = pbVar4 + 1;
+              pbVar5 = pbVar5 + 1;
+            } while (puVar15 < puVar14);
+            pbVar6 = (byte *)puVar2[3];
+            uVar3 = 0;
+            pbVar5 = (byte *)puVar2[2];
+            pbVar8 = (byte *)puVar2[6];
+            pbVar4 = (byte *)puVar2[0x10];
+            do {
+              bVar11 = *pbVar6 >> 2;
+              if (bVar11 == 1) {
+                uVar20 = (*DAT_4018a104)(DAT_401908a4);
+                memw();
+                *DAT_401908a4 =
+                     (0xff << 0x20 - ((*pbVar6 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar20 |
+                     (uint)*pbVar4 << 0x20 - ((*pbVar6 & 3) * -8 + 0x20);
+              }
+              else if (bVar11 == 0) {
+                uVar20 = (*DAT_4018a104)(DAT_401908a0);
+                memw();
+                *DAT_401908a0 =
+                     (0xff << 0x20 - ((*pbVar6 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar20 |
+                     (uint)*pbVar4 << 0x20 - ((*pbVar6 & 3) * -8 + 0x20);
+              }
+              else {
+                puVar13 = DAT_401908a8;
+                if ((bVar11 == 2) || (puVar13 = DAT_401908ac, bVar11 == 3)) {
+                  uVar20 = (*DAT_4018a104)(puVar13);
+                  memw();
+                  *puVar13 = (0xff << 0x20 - ((*pbVar6 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar20 |
+                             (uint)*pbVar4 << 0x20 - ((*pbVar6 & 3) * -8 + 0x20);
+                }
+              }
+              bVar11 = *pbVar5 >> 2;
+              puVar13 = DAT_401908a4;
+              if ((((bVar11 == 1) || (puVar13 = DAT_401908a0, bVar11 == 0)) ||
+                  (puVar13 = DAT_401908a8, bVar11 == 2)) || (puVar13 = DAT_401908ac, bVar11 == 3)) {
+                uVar20 = (*DAT_4018a104)(puVar13);
+                memw();
+                *puVar13 = (0xff << 0x20 - ((*pbVar5 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar20 |
+                           (uint)*pbVar8 << 0x20 - ((*pbVar5 & 3) * -8 + 0x20);
+              }
+              uVar3 = uVar3 + 1 & 0xff;
+              pbVar6 = pbVar6 + 1;
+              pbVar5 = pbVar5 + 1;
+              pbVar8 = pbVar8 + 1;
+              pbVar4 = pbVar4 + 1;
+            } while (uVar3 < *puVar2);
+            return;
+          }
+          while (param_2 = (uint *)((uint)param_3 >> 1), param_2 <= param_1) {
+switchD_40190a01_caseD_401909fc:
+            param_2 = *(uint **)(PTR_switchdataD_3ffc3f04_40190858 + (int)param_2 * 4);
+            puVar15 = PTR_switchdataD_3ffc3f04_40190858;
+                    /* WARNING (jumptable): Sanity check requires truncation of jumptable */
+            switch(param_2) {
+            case (uint *)0x1000100:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+              halt_baddata();
+            case (uint *)0x401909fc:
+              goto switchD_40190a01_caseD_401909fc;
+            case (uint *)0x40190a3b:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+              halt_baddata();
+            case (uint *)0x40190a41:
+              unaff_retaddr = unaff_retaddr >> 0x10;
+              if ((uVar20 & 0x1000000) == 0) {
+                    /* WARNING: Bad instruction - Truncating control flow here */
+                halt_baddata();
+              }
+              while( true ) {
+                puVar1 = DAT_40190850;
+                puVar9 = puVar9 + 1;
+                param_5 = param_5 + 1;
+                puVar14 = (undefined1 *)puVar2[1];
+                if (puVar14 == puVar9) break;
+                uVar3 = ((uint)puVar9 & 0xff) >> 3;
+                if (uVar3 == 0) {
+                  uVar3 = (*DAT_4018a104)(DAT_4019084c);
+                  puVar13 = (uint *)((int)puVar9 * 4);
+                  uVar3 = ((uint)param_3 ^ (int)param_4 << 0x20 - (0x20 - ((uint)puVar13 & 0x1f))) &
+                          uVar3;
+                  memw();
+                  *DAT_4019084c = uVar3 | (*param_5 & 0xf) << 0x20 - (0x20 - ((uint)puVar13 & 0x1f))
+                  ;
+                }
+                else if (uVar3 == 1) {
+                  uVar3 = (*DAT_4018a104)(DAT_40190850);
+                  puVar13 = (uint *)(*param_5 & 0xf);
+                  uVar3 = ((uint)param_3 ^ (int)param_4 << 0x20 - (((uint)puVar9 & 7) * -4 + 0x20))
+                          & uVar3;
+                  memw();
+                  *puVar1 = uVar3 | (int)puVar13 << 0x20 - (((uint)puVar9 & 7) * -4 + 0x20);
+                }
+                else {
+                  uVar3 = (*DAT_4018a104)(DAT_40190854);
+                  puVar13 = DAT_40190854;
+                  uVar3 = ((uint)param_3 ^ (int)param_4 << 0x20 - (((uint)puVar9 & 7) * -4 + 0x20))
+                          & uVar3;
+                  memw();
+                  *DAT_40190854 =
+                       uVar3 | (*param_5 & 0xf) << 0x20 - (((uint)puVar9 & 7) * -4 + 0x20);
+                }
+              }
+              param_4 = (undefined1 *)puVar2[4];
+              puVar9 = (undefined1 *)0x0;
+              param_3 = (undefined1 *)0x0;
+              param_1 = (uint *)0x8;
+              param_5 = (byte *)puVar2[5];
+              break;
+            case (uint *)0x40190a80:
+              goto switchD_40190a01_caseD_40190a80;
+            case (uint *)0x40190a86:
+              puVar2 = *(uint **)unaff_retaddr;
+              param_2 = _UNK_40190868;
+              goto switchD_40190a01_caseD_40190a4c;
+            case (uint *)0x40190a8c:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+              halt_baddata();
+            case (uint *)0x40190a92:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+              halt_baddata();
+            case (uint *)0x40190a98:
+              goto switchD_40191036_caseD_40190a98;
+            case (uint *)0x40190a9e:
+              goto switchD_40191036_caseD_40190a9e;
+            case (uint *)0x40191031:
+              goto switchD_40191036_caseD_40191031;
+            case (uint *)0x4019107c:
+              goto switchD_40191036_caseD_4019107c;
+            case (uint *)0x401910c6:
+              goto switchD_40191036_caseD_401910c6;
+            case (uint *)0x4019110c:
+              goto switchD_40191036_caseD_4019110c;
+            case (uint *)0x40191157:
+              goto switchD_40191036_caseD_40191157;
+            case (uint *)0x4019119b:
+              goto switchD_40191036_caseD_4019119b;
+            case (uint *)0x401911df:
+              goto switchD_40191036_caseD_401911df;
+            case (uint *)0x40191223:
+              goto switchD_40191036_caseD_40191223;
+            case (uint *)0x4019126a:
+              goto switchD_40191036_caseD_4019126a;
+            case (uint *)0x401912c3:
+              goto code_r0x401912c3;
+            case (uint *)0x40191302:
+                    /* WARNING: Bad instruction - Truncating control flow here */
+              halt_baddata();
+            }
+          }
+          uVar3 = (*DAT_4018a104)(DAT_40190880);
+          puVar13 = DAT_40190880;
+          uVar3 = (uint)CONCAT11(*param_5,*param_4) << 0x20 - (((uint)param_3 & 1) * -0x10 + 0x20) |
+                  (DAT_401812b0 << 0x20 - (((uint)param_3 & 1) * -0x10 + 0x20) ^ 0xffffffffU) &
+                  uVar3;
+          memw();
+          *DAT_40190880 = uVar3;
+        } while( true );
+      case 0x40190a9e:
+        goto switchD_40191036_caseD_40190a9e;
+      case 0x4019107c:
+        goto switchD_40191036_caseD_4019107c;
+      case 0x401910c6:
+        goto switchD_40191036_caseD_401910c6;
+      case 0x4019110c:
+        goto switchD_40191036_caseD_4019110c;
+      case 0x40191157:
+        goto switchD_40191036_caseD_40191157;
+      case 0x4019119b:
+        goto switchD_40191036_caseD_4019119b;
+      case 0x401911df:
+        goto switchD_40191036_caseD_401911df;
+      case 0x40191223:
+        goto switchD_40191036_caseD_40191223;
+      case 0x4019126a:
+        goto switchD_40191036_caseD_4019126a;
+      }
+    } while( true );
+  }
+  goto LAB_40191348;
+switchD_40191036_caseD_4019107c:
+  if (puVar9 < (undefined1 *)0x2) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 1) = bVar11;
+  memw();
+  iVar17 = *puVar2;
+  *(undefined1 *)((int)param_1 + 1) = 1;
+  *(undefined1 *)((int)param_2 + 1) = 0x62;
+  memw();
+  iVar18 = puVar2[0xc];
+  puVar2[3] = (uint)(param_3 + 1);
+  *(undefined1 *)puVar2[3] = 1;
+  param_4[1] = 0x10;
+  param_5[1] = bVar11;
+  *(undefined1 *)(iVar17 + 1) = 0x10;
+  *(byte *)(iVar18 + 1) = bVar11;
+  memw();
+switchD_40191036_caseD_401910c6:
+  if (puVar9 < (undefined1 *)0x3) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 2) = bVar11;
+  memw();
+  iVar18 = *puVar2;
+  *(undefined1 *)((int)param_1 + 2) = 1;
+  *(undefined1 *)((int)param_2 + 2) = 0x62;
+  param_3[2] = 2;
+  param_4[2] = 0x11;
+  memw();
+  iVar17 = puVar2[0xc];
+  param_5[2] = bVar11;
+  *(undefined1 *)(iVar18 + 2) = 0x11;
+  *(byte *)(iVar17 + 2) = bVar11;
+  memw();
+switchD_40191036_caseD_4019110c:
+  if (puVar9 < (undefined1 *)0x4) {
+    return;
+  }
+  uVar12 = SUB41(puVar13,0);
+  *(undefined1 *)(puVar2[0xe] + 3) = uVar12;
+  memw();
+  *(undefined1 *)((int)param_1 + 3) = uVar12;
+  *(undefined1 *)((int)param_2 + 3) = 99;
+  memw();
+  iVar18 = *puVar2;
+  param_3[3] = uVar12;
+  param_4[3] = uVar12;
+  memw();
+  iVar17 = puVar2[0xc];
+  param_5[3] = 7;
+  *(undefined1 *)(iVar18 + 3) = uVar12;
+  *(undefined1 *)(iVar17 + 3) = 7;
+  memw();
+switchD_40191036_caseD_40191157:
+  if (puVar9 < &DAT_00000005) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 4) = bVar11;
+  memw();
+  iVar18 = *puVar2;
+  *(byte *)(param_1 + 1) = bVar11;
+  *(undefined1 *)(param_2 + 1) = 99;
+  param_3[4] = 3;
+  param_4[4] = 0x16;
+  memw();
+  iVar17 = puVar2[0xc];
+  param_5[4] = bVar11;
+  *(undefined1 *)(iVar18 + 4) = 0x16;
+  *(byte *)(iVar17 + 4) = bVar11;
+  memw();
+switchD_40191036_caseD_4019119b:
+  if (puVar9 < (undefined1 *)0x6) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 5) = bVar11;
+  memw();
+  iVar18 = *puVar2;
+  *(byte *)((int)param_1 + 5) = bVar11;
+  *(undefined1 *)((int)param_2 + 5) = 99;
+  param_3[5] = 5;
+  param_4[5] = 0x14;
+  memw();
+  iVar17 = puVar2[0xc];
+  param_5[5] = bVar11;
+  *(undefined1 *)(iVar18 + 5) = 0x14;
+  *(byte *)(iVar17 + 5) = bVar11;
+  memw();
+switchD_40191036_caseD_401911df:
+  if (puVar9 < (undefined1 *)0x7) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 6) = bVar11;
+  memw();
+  iVar18 = *puVar2;
+  *(byte *)((int)param_1 + 6) = bVar11;
+  *(undefined1 *)((int)param_2 + 6) = 99;
+  param_3[6] = 4;
+  param_4[6] = 0x15;
+  memw();
+  iVar17 = puVar2[0xc];
+  param_5[6] = bVar11;
+  *(undefined1 *)(iVar18 + 6) = 0x15;
+  *(byte *)(iVar17 + 6) = bVar11;
+  memw();
+switchD_40191036_caseD_40191223:
+  if (puVar9 < (undefined1 *)0x8) {
+    return;
+  }
+  uVar12 = SUB41(puVar13,0);
+  *(undefined1 *)(puVar2[0xe] + 7) = uVar12;
+  memw();
+  *(undefined1 *)((int)param_1 + 7) = uVar12;
+  *(undefined1 *)((int)param_2 + 7) = 99;
+  param_3[7] = uVar12;
+  puVar2[3] = (uint)(param_4 + 7);
+  iVar17 = puVar2[0xc];
+  iVar18 = *puVar2;
+  *(undefined1 *)puVar2[3] = 1;
+  param_5[7] = 0x17;
+  *(undefined1 *)(iVar18 + 7) = 1;
+  *(undefined1 *)(iVar17 + 7) = 0x17;
+  memw();
+  puVar15 = (undefined1 *)0x8;
+switchD_40191036_caseD_4019126a:
+  if (puVar9 <= puVar15) {
+    return;
+  }
+  *(char *)(puVar2[0xe] + 8) = (char)puVar13;
+  memw();
+  iVar18 = *puVar2;
+  *(undefined1 *)((int)param_1 + (int)puVar15) = 1;
+  *(undefined1 *)((int)param_2 + (int)puVar15) = 0x62;
+  memw();
+  iVar19 = puVar2[0xc];
+  puVar2[3] = (uint)(param_3 + (int)puVar15);
+  *(char *)puVar2[3] = (char)puVar13;
+  param_4[(int)puVar15] = 2;
+  memw();
+  iVar17 = puVar2[1];
+  param_5[(int)puVar15] = (byte)iVar17;
+  puVar15[iVar18] = 2;
+  puVar15[iVar19] = (byte)iVar17;
+  memw();
+  puVar15 = (undefined1 *)0x9;
+code_r0x401912c3:
+  if (puVar9 <= puVar15) {
+    return;
+  }
+  bVar11 = (byte)puVar13;
+  *(byte *)(puVar2[0xe] + 9) = bVar11;
+  memw();
+  *(byte *)((int)param_1 + (int)puVar15) = bVar11;
+  *(undefined1 *)((int)param_2 + (int)puVar15) = 100;
+  memw();
+  iVar17 = *puVar2;
+  iVar18 = puVar2[0xc];
+  param_3[(int)puVar15] = 4;
+  param_4[(int)puVar15] = 0x18;
+  param_5[(int)puVar15] = bVar11;
+  puVar15[iVar17] = 0x18;
+  puVar15[iVar18] = bVar11;
+  memw();
+  if (puVar9 < (undefined1 *)0xb) {
+    return;
+  }
+  *(byte *)(puVar2[0xe] + 10) = bVar11;
+  memw();
+  iVar19 = *puVar2;
+  *(byte *)((int)param_1 + 10) = bVar11;
+  *(undefined1 *)((int)param_2 + 10) = 100;
+  uVar20 = 7;
+  param_3[10] = 7;
+  iVar17 = 0x19;
+  param_4[10] = 0x19;
+  memw();
+  iVar18 = puVar2[0xc];
+  puVar15 = (undefined1 *)0xa;
+  param_5[10] = bVar11;
+  *(undefined1 *)(iVar19 + 10) = 0x19;
+  *(byte *)(iVar18 + 10) = bVar11;
+  memw();
+LAB_40191348:
+  puVar15 = (undefined1 *)((uint)(puVar15 + 1) & 0xff);
+  if (puVar9 <= puVar15) {
+    return;
+  }
+  goto LAB_4019100c;
+switchD_40191036_caseD_40190a9e:
+  uVar20 = uVar20 + iVar17;
+  param_2 = _UNK_40190878;
+  goto switchD_40190a01_caseD_40190a4c;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x401913e0 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_401913e0 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[401913e0, 4019146d] [40191470, 40191486]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+void FUN_401913e0(uint param_1)
+
+{
+  uint *puVar1;
+  undefined4 uVar2;
+  undefined1 *puVar3;
+  uint uVar4;
+  uint uVar5;
+  undefined4 uVar6;
+  uint uVar7;
+  uint *puVar8;
+  undefined1 uVar9;
+  uint local_30 [12];
+  
+  uVar2 = DAT_40190524;
+  puVar1 = DAT_40190520;
+  puVar8 = local_30;
+  uVar4 = (param_1 & 0xff) * 3 & 0xff;
+  uVar7 = uVar4 + 3;
+  do {
+    uVar5 = (*DAT_4018a104)(puVar1);
+    memw();
+    *puVar1 = uVar5 & 0xffffff00 | uVar4;
+    uVar6 = (*DAT_4018a104)(uVar2);
+    puVar3 = DAT_401913dc;
+    uVar4 = uVar4 + 1 & 0xff;
+    *puVar8 = uVar6;
+    puVar8 = puVar8 + 1;
+  } while (uVar4 != (uVar7 & 0xff));
+  uVar4 = (uint)*DAT_401913d8;
+  if (0xf < uVar4) {
+    uVar9 = (undefined1)(local_30[0] >> ((uVar4 & 3) << 3));
+    if (0x13 < uVar4) {
+      uVar9 = (undefined1)(local_30[1] >> (uVar4 << 3 & 0x1f));
+      if (0x17 < uVar4) {
+        uVar9 = (undefined1)(local_30[2] >> (uVar4 << 3 & 0x1f));
+      }
+    }
+    *DAT_401913dc = uVar9;
+    memw();
+  }
+  FUN_40190e38(puVar3,0xb,0xb,puVar3 + 1);
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x40190e38 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_40190e38 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[40190e38, 40190e96] [40190e98, 40190ec9] [40190ecc, 40190ed1] [40190ed4, 40190f19]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+void FUN_40190e38(byte *param_1,char param_2)
+
+{
+  uint uVar1;
+  uint uVar2;
+  uint *puVar3;
+  
+  if (param_2 != '\0') {
+    uVar1 = 0;
+    do {
+      uVar2 = (uVar1 & 0xff) >> 2;
+      if (uVar2 == 1) {
+        uVar2 = (*DAT_4018a104)(DAT_40190e28);
+        memw();
+        *DAT_40190e28 =
+             (0xff << 0x20 - ((uVar1 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar2 |
+             (uint)*param_1 << 0x20 - ((uVar1 & 3) * -8 + 0x20);
+      }
+      else if (uVar2 == 0) {
+        uVar2 = (*DAT_4018a104)(DAT_40190e24);
+        memw();
+        *DAT_40190e24 =
+             (0xff << 0x20 - (0x20 - (uVar1 << 3 & 0x1f)) ^ 0xffffffffU) & uVar2 |
+             (uint)*param_1 << 0x20 - (0x20 - (uVar1 << 3 & 0x1f));
+      }
+      else {
+        puVar3 = DAT_40190e2c;
+        if ((uVar2 != 2) && (puVar3 = DAT_40190e30, uVar2 != 3)) {
+          puVar3 = DAT_40190e34;
+        }
+        uVar2 = (*DAT_4018a104)(puVar3);
+        memw();
+        *puVar3 = (0xff << 0x20 - ((uVar1 & 3) * -8 + 0x20) ^ 0xffffffffU) & uVar2 |
+                  (uint)*param_1 << 0x20 - ((uVar1 & 3) * -8 + 0x20);
+      }
+      uVar1 = uVar1 + 1;
+      param_1 = param_1 + 1;
+    } while (uVar1 != (byte)(param_2 - 1) + 1);
+  }
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x4019153c === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_4019153c (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[4019153c, 401915b3]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+void FUN_4019153c(void)
+
+{
+  int *piVar1;
+  undefined2 local_30;
+  undefined2 uStack_2e;
+  undefined2 uStack_2c;
+  undefined2 uStack_2a;
+  
+  (*(code *)PTR_FUN_40191534)(0);
+  (*(code *)PTR_FUN_40191538)();
+  piVar1 = DAT_40190150;
+  if ((*DAT_4019152c == '\0') || (*DAT_40191530 == '\0')) {
+    (**(code **)(*DAT_40190150 + 0xc0))();
+    local_30 = *(undefined2 *)PTR_DAT_4019014c;
+    uStack_2e = *(undefined2 *)(PTR_DAT_4019014c + 2);
+    uStack_2c = *(undefined2 *)(PTR_DAT_4019014c + 4);
+    uStack_2a = *(undefined2 *)(PTR_DAT_4019014c + 6);
+    memw();
+    (**(code **)(*piVar1 + 0xdc))(&local_30);
+    (**(code **)(*piVar1 + 0xd4))();
+    (**(code **)(*piVar1 + 0xcc))();
+    (**(code **)(*piVar1 + 0xc4))();
+  }
+  FUN_40191490(2,4);
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x401b3d00 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_401b3d00 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[401b3d00, 401b3d07]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+/* WARNING: Instruction at (ram,0x401b3d0c) overlaps instruction at (ram,0x401b3d0b)
+    */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void FUN_401b3d00(char param_1)
+
+{
+  uint *puVar1;
+  uint *puVar2;
+  int unaff_retaddr;
+  uint uVar3;
+  
+  *(BADSPACEBASE **)(unaff_retaddr + 0x10) = register0x00000004;
+  *(BADSPACEBASE **)(unaff_retaddr + 0x10) = register0x00000004;
+  (**(code **)(*DAT_401b3cec + 0xa0))(0x66,4,0xc,0);
+  puVar1 = DAT_401b3cf0;
+  uVar3 = (*DAT_401b3cfc)(DAT_401b3cf0);
+  puVar2 = DAT_401b3cf8;
+  memw();
+  *puVar1 = uVar3 | DAT_401b3cf4;
+  uVar3 = (*DAT_401b3cfc)(puVar2);
+  memw();
+  *puVar2 = uVar3 | 0x400;
+  if (param_1 == '\0') {
+    (*_FUN_401b3d00)();
+    (*pcRam401b3d04)();
+  }
+  return;
+}
+
+ (GhidraScript)  
+INFO  DecompileDisplay.class> 
+============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> === Function at 0x401b2d34 === (GhidraScript)  
+INFO  DecompileDisplay.class> ============================================================ (GhidraScript)  
+INFO  DecompileDisplay.class> Name: FUN_401b2d34 (GhidraScript)  
+INFO  DecompileDisplay.class> Body: [[401b2d34, 401b2d3b]] (GhidraScript)  
+INFO  DecompileDisplay.class> 
+/* WARNING: Instruction at (ram,0x401b2d46) overlaps instruction at (ram,0x401b2d45)
+    */
+/* WARNING: Globals starting with '_' overlap smaller symbols at the same address */
+
+void FUN_401b2d34(void)
+
+{
+  int *piVar1;
+  byte bVar2;
+  uint uVar3;
+  undefined1 uStack_50;
+  undefined1 uStack_4f;
+  byte bStack_4e;
+  byte bStack_4d;
+  undefined1 uStack_4c;
+  undefined1 uStack_4b;
+  undefined1 uStack_4a;
+  undefined1 uStack_49;
+  undefined1 uStack_48;
+  undefined1 uStack_47;
+  undefined1 uStack_46;
+  undefined1 uStack_45;
+  undefined1 uStack_44;
+  undefined1 uStack_43;
+  undefined1 uStack_42;
+  undefined1 uStack_41;
+  undefined4 uStack_40;
+  undefined4 uStack_3c;
+  undefined4 uStack_38;
+  undefined4 uStack_34;
+  uint uStack_30;
+  
+  uStack_40 = (*DAT_401b2d30)();
+  piVar1 = DAT_401b2d28;
+  uVar3 = (**(code **)(*DAT_401b2d28 + 0x98))(0x66,4,10);
+  bVar2 = (**(code **)(*piVar1 + 0x98))(0x66,4,0xb);
+  uStack_3c = (**(code **)(*piVar1 + 0x98))(0x66,4,9);
+  uStack_44 = 99;
+  uStack_50 = 0xf3;
+  uStack_4f = 0xa8;
+  uStack_48 = 0;
+  uStack_4c = 1;
+  uStack_43 = 0x6b;
+  uStack_4b = 3;
+  uStack_42 = 0x62;
+  uStack_46 = 1;
+  uStack_4a = 3;
+  bStack_4e = 0x77;
+  uStack_47 = 2;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,3);
+  uStack_30 = uVar3 & 0xffffffcf | 0x10;
+  uStack_4c = 8;
+  uStack_50 = 0;
+  uStack_42 = 0x66;
+  memw();
+  uStack_4f = 7;
+  uStack_38 = 7;
+  uStack_44 = 0x62;
+  uStack_48 = 1;
+  uStack_43 = 0x6b;
+  uStack_4a = 10;
+  bStack_4e = (byte)uStack_30;
+  uStack_34 = 10;
+  uStack_47 = 2;
+  uStack_4b = 4;
+  uStack_46 = 4;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,3);
+  bStack_4e = bVar2 & 0xfe;
+  uStack_50 = 0xb0;
+  uStack_4b = 5;
+  memw();
+  uStack_4f = 8;
+  uStack_42 = 0x66;
+  uStack_4c = (undefined1)uStack_34;
+  uStack_44 = 0x62;
+  uStack_48 = 1;
+  uStack_43 = 0x6b;
+  uStack_4a = 0xb;
+  uStack_47 = 2;
+  uStack_46 = 4;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,3);
+  uStack_4b = 6;
+  uStack_44 = 0x62;
+  uStack_48 = 1;
+  uStack_50 = (undefined1)uStack_38;
+  uStack_43 = 0x6b;
+  uStack_4f = 0xb8;
+  uStack_4c = 9;
+  uStack_47 = 2;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,2);
+  uStack_4c = 0;
+  uStack_4b = (undefined1)uStack_38;
+  uStack_50 = 0x3f;
+  uStack_4f = 0x5d;
+  uStack_44 = 0x62;
+  uStack_48 = 1;
+  uStack_43 = 0x6b;
+  uStack_47 = 2;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,2);
+  uStack_43 = 0x6b;
+  uStack_44 = 0x62;
+  uStack_4f = 0x74;
+  uStack_48 = 1;
+  uStack_50 = 0xbf;
+  uStack_4b = (undefined1)uStack_34;
+  uStack_4c = 4;
+  uStack_47 = 2;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,2);
+  uStack_50 = 0x71;
+  uStack_47 = 3;
+  uStack_4f = 99;
+  uStack_4b = 0;
+  uStack_49 = 8;
+  uStack_44 = 0x67;
+  uStack_48 = 1;
+  uStack_43 = 0x68;
+  uStack_42 = 0x6a;
+  bStack_4e = 0x68;
+  uStack_41 = 0x66;
+  bStack_4d = 0x21;
+  uStack_34 = 0x6a;
+  uStack_38 = 0x67;
+  uStack_4c = 9;
+  uStack_46 = 2;
+  uStack_4a = 2;
+  uStack_45 = 4;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50,4);
+  bStack_4d = (byte)uStack_3c & 0xf0 | 4;
+  uStack_48 = 1;
+  uStack_4b = 1;
+  memw();
+  uStack_44 = (undefined1)uStack_38;
+  uStack_4f = 0x80;
+  uStack_4c = 0xb;
+  uStack_43 = 0x68;
+  uStack_4a = 0;
+  uStack_50 = 0x61;
+  uStack_47 = 3;
+  uStack_42 = (undefined1)uStack_34;
+  bStack_4e = 0x26;
+  uStack_46 = 2;
+  uStack_41 = 0x66;
+  uStack_45 = 4;
+  uStack_49 = 9;
+  memw();
+  (*_FUN_401b2d34)(&uStack_44,&uStack_48,&uStack_4c,&uStack_50);
+  FUN_401b2c9c();
+  if (*(char *)(DAT_401b2d2c + 1) == '\x01') {
+    FUN_401b2b28();
+  }
+  (*pcRam401b2d38)(uStack_40);
+  return;
+}
+
+ (GhidraScript)  
+INFO  ANALYZING changes made by post scripts: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Post-analysis succeeded for file: /ota_0.elf (HeadlessAnalyzer)  
+INFO  REPORT: Save succeeded for processed file: /ota_0.elf (HeadlessAnalyzer)  
