@@ -417,6 +417,18 @@ Podczas testu kombinacji `{33, 32, 18}` (`CLK=33`, `CS=32`, `MOSI=18`), pin `GPI
 | CLK=GPIO18 | CLK=**GPIO33** | ✅ Potwierdzone |
 | CS=GPIO5 | CS=**GPIO32** | ✅ Potwierdzone |
 
+## WYNIKI EKSPERYMENTU SWEEP NA FIZYCZNYCH PINACH (2026-06-20)
+
+Wgrano oprogramowanie z pinami: `CLK=33`, `MOSI=25`, `CS=32`. Wynik:
+* **Fazy 1-24 (pojedyncze bity):** Kompletnie ciemno.
+* **Faza 25 (ALL_ON, `0xFFFFFF`):** Wyświetlacz **rozświetlił się w całości** (wszystkie segmenty i cyfry)!
+* **Faza 26 (ALL_OFF, `0x000000`):** Wyświetlacz natychmiast zgasł.
+
+**Interpretacja sprzętowa (Przełom fizyczny):**
+Wyświetlacz jest multipleksowany, a wspólne katody/anody cyfr są kluczowane przez **tranzystory inwertujące** (ULN2003 / PNP). 
+Aby zapalić segment, na wyjściu rejestru `74HC595` musi pojawić się `1` (HIGH) dla segmentu ORAZ `1` (HIGH) dla aktywacji cyfry (która po inwersji daje niskie wspólne ujście prądu). 
+Podczas faz 1-24 (single-bit) nigdy nie występowały jednocześnie te dwa warunki (mieliśmy tylko jedną jedynkę w całej 24-bitowej ramce), dlatego wyświetlacz był ciemny. Faza `ALL_ON` podała jedynki wszędzie i zapaliła całość.
+
 ## Key files
 
 | File | Purpose |
