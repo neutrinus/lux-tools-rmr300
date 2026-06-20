@@ -113,7 +113,7 @@ static int voltage_to_percent(float v) {
 
 static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
                     uint8_t b0, uint8_t b1, uint8_t b2) {
-  gpio_set_level(cs, 1);
+  gpio_set_level(cs, 0);
   delayMicroseconds(2);
   uint8_t bytes[] = {b0, b1, b2};
   for (int b = 0; b < 3; b++) {
@@ -127,7 +127,7 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
     }
   }
   delayMicroseconds(2);
-  gpio_set_level(cs, 0);
+  gpio_set_level(cs, 1);
 }
 
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
@@ -164,6 +164,16 @@ void SnkMower::setup() {
     setup_display();
     sweep_bit_ = 0;
     sweep_phase_ = 0;
+    last_sweep_ms_ = millis();
+    return;
+  }
+
+  if (lcd_find_rclk_) {
+    ESP_LOGI(TAG, "=== RCLK FINDER (CLK=%d MOSI=%d CS=%d as OE) ===",
+             (int)display_clk_, (int)display_mosi_, (int)display_cs_);
+    ESP_LOGI(TAG, "Testing RCLK candidates: GPIO5, GPIO25");
+    setup_display();
+    rclk_test_phase_ = 0;
     last_sweep_ms_ = millis();
     return;
   }
@@ -353,6 +363,10 @@ void SnkMower::set_lcd_find(bool enable) {
 
 void SnkMower::set_lcd_sweep(bool enable) {
   lcd_sweep_ = enable;
+}
+
+void SnkMower::set_lcd_find_rclk(bool enable) {
+  lcd_find_rclk_ = enable;
 }
 
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
@@ -589,6 +603,34 @@ void SnkMower::loop() {
         shift24(display_clk_, display_mosi_, display_cs_,
                 (pattern >> 16) & 0xFF, (pattern >> 8) & 0xFF, pattern & 0xFF);
         sweep_frames_--;
+      }
+    }
+    return;
+  }
+
+  if (lcd_find_rclk_) {
+    if (now - last_sweep_ms_ >= 4000) {
+      last_sweep_ms_ = now;
+      if (rclk_test_phase_ < 4) {
+        int candidates[] = {5, 25};
+        int cand = rclk_test_phase_ / 2;
+        bool all_on = (rclk_test_phase_ % 2) == 0;
+        rclk_test_pin_ = candidates[cand];
+        gpio_set_direction((gpio_num_t)rclk_test_pin_, GPIO_MODE_OUTPUT);
+        gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
+        uint32_t pat = all_on ? 0xFFFFFF : 0x000000;
+        shift24(display_clk_, display_mosi_, display_cs_,
+                (pat >> 16) & 0xFF, (pat >> 8) & 0xFF, pat & 0xFF);
+        gpio_set_level((gpio_num_t)rclk_test_pin_, 1);
+        delayMicroseconds(2);
+        gpio_set_level((gpio_num_t)rclk_test_pin_, 0);
+        ESP_LOGI(TAG, "RCLK test: candidate=GPIO%d %s -> display should %s",
+                 rclk_test_pin_, all_on ? "ALL_ON" : "ALL_OFF",
+                 all_on ? "show 8888" : "go blank");
+        rclk_test_phase_++;
+      } else {
+        ESP_LOGI(TAG, "=== RCLK test complete ===");
+        lcd_find_rclk_ = false;
       }
     }
     return;

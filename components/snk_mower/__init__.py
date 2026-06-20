@@ -24,6 +24,7 @@ CONF_PIN_DIAG = "pin_diag"
 CONF_BOOT_DELAY = "boot_delay"
 CONF_LCD_FIND = "lcd_find"
 CONF_LCD_SWEEP = "lcd_sweep"
+CONF_LCD_FIND_RCLK = "lcd_find_rclk"
 
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
@@ -73,6 +74,7 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_BOOT_DELAY, default=0): cv.positive_int,
             cv.Optional(CONF_LCD_FIND, default=False): cv.boolean,
             cv.Optional(CONF_LCD_SWEEP, default=False): cv.boolean,
+            cv.Optional(CONF_LCD_FIND_RCLK, default=False): cv.boolean,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -205,6 +207,9 @@ async def to_code(config):
 
     if config[CONF_LCD_SWEEP]:
         cg.add(var.set_lcd_sweep(True))
+
+    if config[CONF_LCD_FIND_RCLK]:
+        cg.add(var.set_lcd_find_rclk(True))
 
     if config[CONF_BOOT_DELAY] > 0:
         cg.add(var.set_boot_delay(config[CONF_BOOT_DELAY]))

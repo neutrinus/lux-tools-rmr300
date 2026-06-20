@@ -334,15 +334,20 @@ ESP32 (SNK_DISPLAY_CP_V11)      Mainboard (via J2)
 **Wnioski:**
 - **CLK=33, MOSI=18, CS=32** — jedyna kombinacja, która kiedykolwiek zapaliła wyświetlacz
 - FW analysis wskazuje CLK=5, MOSI=32, CS=25 — nie zgadza się z naszym PCB (może inna rewizja SNK_DISPLAY_CP)
-- ALL_OFF (0x000000) nie zmienia wyświetlacza → **dane nie są latchowane** do 74HC595
-- Prawdopodobnie CS jest podpięte do **OE (output enable)** a nie do RCLK (latch)
+- CS=32 to **OE (output enable)** 74HC595, a nie RCLK (latch) — potwierdzone empirycznie:
+  - CS=0 = OE active → wyjścia włączone → display pokazuje power-on state (8888)
+  - CS=1 = OE inactive → high-Z → display nie świeci
+- RCLK to **nieznany pin** — jeden z {**GPIO5, GPIO25**} (oba I/O, ścieżki do 74HC595)
 
 **Co dalej:**
-1. Przetestować **inverted CS polarity** — CS=HIGH podczas shift, CS=LOW po = falling edge latch (już w kodzie)
-2. Jeśli nadal nie działa → CS może być OE, a RCLK na stałe do VCC. Wtedy dane latchują się na 24. zboczu CLK (opadającym?).
-3. Ostateczność: oscyloskop na nóżkach 74HC595 (U1/U3/U4) — sprawdzić które piny GPIO idą do RCLK/OE/SRCLK
+1. Przetestować `lcd_find_rclk: true` z YAML — testuje GPIO5 i GPIO25 jako RCLK:
+   - Dla każdego kandydata: shift ALL_ON → pulse RCLK HIGH → czekaj 4s → shift ALL_OFF → pulse RCLK HIGH → czekaj 4s
+   - Jeśli RCLK trafiony: display pokaże 8888 po ALL_ON i zgaśnie po ALL_OFF
+2. Jeśli żaden nie działa → RCLK może być zwierany do VCC przez pull-up, wtedy pulse LOW zamiast HIGH
+3. Ostateczność: RCLK jest na stałe HIGH, a dane latchują się na zboczu opadającym CLK (niestandardowe)
 
 | 2026-06-20 | lcd_sweep — 24-bit sweep + byte tests | CLK=33, MOSI=18, CS=32 | **❌ Display cały czas 88:88** — ALL_OFF (0x000000) nie zmienił wyświetlacza | Dane nie są latchowane do 74HC595. CS prawdopodobnie podłączone do **OE (output enable)** a nie do RCLK. |
+| 2026-06-20 | lcd_sweep — inverted CS polarity (CS HIGH→shift→CS LOW) | CLK=33, MOSI=18, CS=32 | **❌ Display ani razu się nie zapalił** | Potwierdza: CS=32 to **OE active LOW**. CS=0 → wyjścia włączone (widać stan power-on = 8888). CS=1 → wyjścia wyłączone (high-Z), display zgaszony. RCLK to inny pin. |
 
 
 **Błędy w HARDWARE.md zweryfikowane empiricalnie:**
