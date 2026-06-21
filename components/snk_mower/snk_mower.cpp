@@ -619,11 +619,6 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
-    if (!pin_sent_) {
-      send_pin();
-      pin_sent_ = true;
-      ESP_LOGI(TAG, "PIN sent after boot handshake");
-    }
     if (now - last_wifi_status_ > 5000) {
       last_wifi_status_ = now;
       send_wifi_status();
@@ -818,10 +813,10 @@ void SnkMower::handle_status(const JsonDocument &doc) {
 void SnkMower::handle_pin_result(const JsonDocument &doc) {
   bool ok = doc["result"] | false;
   if (ok) {
-    ESP_LOGI(TAG, "PIN accepted");
+    ESP_LOGI(TAG, "PIN needed — sending PIN to mainboard");
+    send_pin();
     pin_ok_ = true;
     pin_retries_ = 0;
-    publish_mower_state(MowerState::IDLE);
   } else {
     ESP_LOGW(TAG, "PIN rejected (attempt %d/5)", pin_retries_);
     if (++pin_retries_ >= 5) {
@@ -835,7 +830,14 @@ void SnkMower::handle_pin_result(const JsonDocument &doc) {
 
 void SnkMower::handle_pin_result2(const JsonDocument &doc) {
   bool ok = doc["result"] | false;
-  ESP_LOGD(TAG, "PIN result2: %s", ok ? "OK" : "FAIL");
+  if (ok) {
+    ESP_LOGI(TAG, "PIN result2: OK — session established");
+    pin_ok_ = true;
+    pin_retries_ = 0;
+    publish_mower_state(MowerState::IDLE);
+  } else {
+    ESP_LOGW(TAG, "PIN result2: FAIL");
+  }
 }
 
 void SnkMower::handle_error_notify(const JsonDocument &doc) {
