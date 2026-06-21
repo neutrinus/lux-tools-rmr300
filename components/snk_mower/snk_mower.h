@@ -192,7 +192,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   static uint8_t char_to_segments_(char c);
 
   static constexpr uint8_t DIGITS = 4;
-  static constexpr uint8_t DISPLAY_REFRESH_MS = 4;
+  static constexpr uint8_t DISPLAY_REFRESH_MS = 2;
 
   spi_device_handle_t spi_dev_{nullptr};
 

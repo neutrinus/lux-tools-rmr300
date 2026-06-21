@@ -170,7 +170,7 @@ void SnkMower::setup_display() {
   }
 
   spi_device_interface_config_t dev_cfg = {};
-  dev_cfg.clock_speed_hz = 1000000;
+  dev_cfg.clock_speed_hz = 2000000;
   dev_cfg.mode = 0;
   dev_cfg.spics_io_num = display_cs_;
   dev_cfg.queue_size = 1;
