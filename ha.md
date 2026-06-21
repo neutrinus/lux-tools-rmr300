@@ -436,6 +436,28 @@ Wgrano oprogramowanie w trybie normalnym (`lcd_sweep: false`):
 2. **Faza po handshaku:** Wyświetlacz zaczął mrugać wartością `73` (poziom naładowania baterii pobrany z płyty głównej kosiarki!).
 3. **Zidentyfikowany problem:** Widoczne mruganie/migotanie z częstotliwością ok. 20-30Hz (wynika z cooperative multitaskingu ESPHome w `loop()`, opóźnianego przez VERBOSE logging i obsługę sieci).
 
+## ROZWIĄZANIE PROBLEMÓW I PEŁNA KONTROLA 4 SEGMENTÓW (2026-06-21)
+
+W wyniku dalszych eksperymentów i analizy zachowania wyświetlacza oraz komunikacji UART po ostatnich aktualizacjach oprogramowania, dokonaliśmy następujących przełomowych odkryć:
+
+### 1. Rozwiązanie blokady UART RX
+Wprowadzone wcześniej wysyłanie ramek `POLL` podczas startowego opóźnienia (`boot_delay`) w celu uniknięcia watchdog-cuta z płyty głównej zawierało błąd logiki: pętla `loop()` wykonywała wczesny powrót (`return;`), całkowicie omijając odczytywanie portu UART RX.
+- **Problem:** ESP32 wysyłał zapytania, płyta główna na nie odpowiadała, a nieodczytywany bufor RX ESP32 ulegał całkowitemu przepełnieniu (overflow). Powodowało to stałe zablokowanie procesu handshake w fazie `BootPhase::PRE`.
+- **Rozwiązanie:** Usunięto wczesny powrót (`return;`) podczas oczekiwania startowego. Bufor RX jest teraz odczytywany na bieżąco od samego początku, a handshake przebiega natychmiast i bezbłędnie. Zwiększono domyślny `boot_delay` w `snk-mower.yaml` do 30 sekund w celu zapewnienia bardzo bezpiecznego okna dla OTA.
+
+### 2. Smetryczne sterowanie 4 segmentami (Split Digit Select)
+Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświetlacza (działały tylko dwa lewe segmenty Digit 0 i 1). 
+- **Odkrycie:** Tranzystory sterujące wspólnymi katodami/anodami cyfr są fizycznie rozdzielone na dwa różne rejestry przesuwne w kaskadzie ze względu na trasowanie ścieżek na PCB:
+  - **Lewa strona (Digit 0 i Digit 1):** Sterowane przez rejestr **`U3`** (bajt danych `b1`).
+  - **Prawa strona (Digit 2 i Digit 3):** Sterowane przez rejestr **`U4`** (bajt danych `b0`).
+- **Seryjna Symetria:** Wzorce aktywacji cyfr są idealnie symetryczne na obu rejestrach:
+  - **Digit 0** (skrajnie lewy): active on `b1` bit 2 (`0x04`)
+  - **Digit 1** (drugi od lewej): active on `b1` bit 3 (`0x08`)
+  - **Digit 2** (trzeci od lewej): active on `b0` bit 2 (`0x04`)
+  - **Digit 3** (skrajnie prawy): active on `b0` bit 3 (`0x08`)
+- **Implementacja:** Zaimplementowano tablice mapowania `DIGIT_B0_MAP` oraz `DIGIT_B1_MAP` w `refresh_display_impl()`. Wygaszanie nieaktywnych cyfr na drugim rejestrze odbywa się automatycznie poprzez wzajemne wykluczenie (gdy `b0` steruje prawą stroną, `b1` jest wygaszony i na odwrót), co eliminuje powidoki (ghosting).
+- **Format Baterii:** Poziom baterii i ładowania wyświetla się teraz perfekcyjnie wyrównany na trzech prawych cyfrach (Digit 1, 2, 3), a pierwszy segment (Digit 0) jest zarezerwowany dla animacji ładowania (uruchamianej na `current_digit_ == 0`).
+
 ## Key files
 
 | File | Purpose |
