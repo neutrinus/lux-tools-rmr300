@@ -203,6 +203,10 @@ class SnkMower : public Component, public uart::UARTDevice {
   static inline void fp_set(const FastPin& fp) { *fp.set_reg = fp.mask; }
   static inline void fp_clr(const FastPin& fp) { *fp.clr_reg = fp.mask; }
 
+  static void shift24_fast(const FastPin& clk, const FastPin& mosi,
+                           const FastPin& cs,
+                           uint8_t b0, uint8_t b1, uint8_t b2);
+
   FastPin clk_pin_;
   FastPin mosi_pin_;
   FastPin cs_pin_;

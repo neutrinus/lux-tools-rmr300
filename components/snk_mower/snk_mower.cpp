@@ -106,24 +106,23 @@ void SnkMower::fp_init(FastPin& fp, gpio_num_t gpio) {
   fp.mask = 1UL << (gpio % 32);
 }
 
-static void shift24_fast(const SnkMower::FastPin& clk,
-                         const SnkMower::FastPin& mosi,
-                         const SnkMower::FastPin& cs,
-                         uint8_t b0, uint8_t b1, uint8_t b2) {
-  SnkMower::fp_clr(cs);
+void SnkMower::shift24_fast(const FastPin& clk, const FastPin& mosi,
+                            const FastPin& cs,
+                            uint8_t b0, uint8_t b1, uint8_t b2) {
+  fp_clr(cs);
   const uint8_t bytes[] = {b0, b1, b2};
   for (int b = 0; b < 3; b++) {
     uint8_t val = bytes[b];
     for (int i = 7; i >= 0; i--) {
       if ((val >> i) & 1)
-        SnkMower::fp_set(mosi);
+        fp_set(mosi);
       else
-        SnkMower::fp_clr(mosi);
-      SnkMower::fp_set(clk);
-      SnkMower::fp_clr(clk);
+        fp_clr(mosi);
+      fp_set(clk);
+      fp_clr(clk);
     }
   }
-  SnkMower::fp_set(cs);
+  fp_set(cs);
 }
 
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
