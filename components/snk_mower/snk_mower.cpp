@@ -347,7 +347,7 @@ void SnkMower::refresh_display_impl() {
   if (display_off_) return;
 
   static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
-  static const uint8_t DIGIT_B1_MAP[4] = {0x10, 0x20, 0x04, 0x08};
+  static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
   // Physical positions: 0 (leftmost)=b1 bit4, 1=b1 bit5, 2=b1 bit2, 3(rightmost)=b1 bit3
   // U4 (b0) controls colon/battery LEDs — not digit transistors.
 
