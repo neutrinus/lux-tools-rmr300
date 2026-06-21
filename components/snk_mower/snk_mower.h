@@ -167,7 +167,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   gpio_num_t rain_pin_{GPIO_NUM_NC};
 
   uint32_t display_off_timeout_ms_{0};
-  bool display_off_{false};
+  volatile bool display_off_{false};
 
   uint32_t boot_delay_ms_{0};
   bool shutdown_pending_{false};
@@ -182,7 +182,6 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   void finish_setup();
   void setup_display();
-  void refresh_display();
   void refresh_display_impl();
   static void display_timer_callback(void *arg);
   void set_display_text(const char *text, bool colon = false);
@@ -193,6 +192,20 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   static constexpr uint8_t DIGITS = 4;
   static constexpr uint8_t DISPLAY_REFRESH_MS = 4;
+
+  struct FastPin {
+    volatile uint32_t* set_reg;
+    volatile uint32_t* clr_reg;
+    uint32_t mask;
+  };
+
+  static void fp_init(FastPin& fp, gpio_num_t gpio);
+  static inline void fp_set(const FastPin& fp) { *fp.set_reg = fp.mask; }
+  static inline void fp_clr(const FastPin& fp) { *fp.clr_reg = fp.mask; }
+
+  FastPin clk_pin_;
+  FastPin mosi_pin_;
+  FastPin cs_pin_;
 
   static constexpr uint8_t CHG_FRAMES[3] = {
       0b00001000,
@@ -206,9 +219,9 @@ class SnkMower : public Component, public uart::UARTDevice {
   gpio_num_t display_cs_{GPIO_NUM_NC};
   esp_timer_handle_t display_timer_{nullptr};
 
-  uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
-  uint8_t display_colon_{0};
-  uint8_t current_digit_{0};
+  volatile uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
+  volatile uint8_t display_colon_{0};
+  volatile uint8_t current_digit_{0};
   uint32_t last_display_ms_{0};
 
   uint8_t charging_frame_{0};

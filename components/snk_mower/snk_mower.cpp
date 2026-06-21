@@ -5,6 +5,7 @@
 #include "esphome/components/wifi/wifi_component.h"
 #include <esp_mac.h>
 #include <time.h>
+#include "soc/gpio_struct.h"
 
 namespace esphome {
 namespace snk_mower {
@@ -94,23 +95,35 @@ static int voltage_to_percent(float v) {
   return 50;
 }
 
-static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
-                    uint8_t b0, uint8_t b1, uint8_t b2) {
-  gpio_set_level(cs, 0);
-  delayMicroseconds(2);
-  uint8_t bytes[] = {b0, b1, b2};
+void SnkMower::fp_init(FastPin& fp, gpio_num_t gpio) {
+  if (gpio < 32) {
+    fp.set_reg = &GPIO.out_w1ts;
+    fp.clr_reg = &GPIO.out_w1tc;
+  } else {
+    fp.set_reg = &GPIO.out1_w1ts.val;
+    fp.clr_reg = &GPIO.out1_w1tc.val;
+  }
+  fp.mask = 1UL << (gpio % 32);
+}
+
+static void shift24_fast(const SnkMower::FastPin& clk,
+                         const SnkMower::FastPin& mosi,
+                         const SnkMower::FastPin& cs,
+                         uint8_t b0, uint8_t b1, uint8_t b2) {
+  SnkMower::fp_clr(cs);
+  const uint8_t bytes[] = {b0, b1, b2};
   for (int b = 0; b < 3; b++) {
+    uint8_t val = bytes[b];
     for (int i = 7; i >= 0; i--) {
-      gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(1);
-      gpio_set_level(clk, 1);
-      delayMicroseconds(1);
-      gpio_set_level(clk, 0);
-      delayMicroseconds(1);
+      if ((val >> i) & 1)
+        SnkMower::fp_set(mosi);
+      else
+        SnkMower::fp_clr(mosi);
+      SnkMower::fp_set(clk);
+      SnkMower::fp_clr(clk);
     }
   }
-  delayMicroseconds(2);
-  gpio_set_level(cs, 1);
+  SnkMower::fp_set(cs);
 }
 
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
@@ -138,7 +151,6 @@ void SnkMower::finish_setup() {
     ESP_LOGI(TAG, "Rain sensor on GPIO%d", (int)rain_pin_);
   }
 
-  setup_display();
   set_display_text("boot");
 
   if (boot_delay_ms_ > 0) {
@@ -180,6 +192,11 @@ void SnkMower::setup_display() {
   gpio_set_level(display_clk_, 0);
   gpio_set_level(display_mosi_, 0);
   gpio_set_level(display_cs_, 0);  // OE active (LOW)
+
+  fp_init(clk_pin_, display_clk_);
+  fp_init(mosi_pin_, display_mosi_);
+  fp_init(cs_pin_, display_cs_);
+
   ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 
@@ -206,10 +223,6 @@ void SnkMower::display_timer_callback(void *arg) {
   self->refresh_display_impl();
 }
 
-void SnkMower::refresh_display() {
-  // Do nothing here — display is driven precisely by the background hardware timer!
-}
-
 void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
@@ -226,7 +239,7 @@ void SnkMower::refresh_display_impl() {
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  shift24(display_clk_, display_mosi_, display_cs_, b0, b1, seg);
+  shift24_fast(clk_pin_, mosi_pin_, cs_pin_, b0, b1, seg);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
@@ -668,8 +681,6 @@ void SnkMower::loop() {
       }
     }
   }
-
-  refresh_display();
 }
 
 void SnkMower::handle_json(const JsonDocument &doc) {
