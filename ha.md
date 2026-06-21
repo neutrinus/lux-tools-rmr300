@@ -498,10 +498,16 @@ Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80), **
 Wykonano pełny skan 16 kombinacji `b0` (wszystkie single bity + wybrane kombinacje + 0x00 + 0xFF) na wygaszonym tle (`seg=0x80` = DP). Wynik z logu:
 - **Stan początkowy:** Przy starcie zapalił się tylko dwukropek — i tak zostało. Żadna kropka ani cyfra nie zapaliła się.
 - **Wniosek:** Dwukropek jest sprawny i świeci stale, gdy wyświetlacz jest aktywny. Nie reaguje na zmiany `b0` w locie — prawdopodobnie jest hardwarowo zawsze zasilany, sterowany globalnym enable, lub wymaga określonej sekwencji inicjalizacji.
-- **Kropki dziesiętne (`seg=0x80`):** Nie zapaliły się — bit 7 (`0x80`) nie steruje DP w tym wyświetlaczu. DP może być na innym bicie segmentu lub na U4.
-- **Dalsze kroki:** Zbadać DP testując różne bity segmentów (0x01–0x40) z aktywną cyfrą. Dwukropek pozostawiony jako zawsze włączony (hardwarowo) do czasu znalezienia bitu sterującego na U4.
+- **Kropki dziesiętne (`seg=0x80`):** Nie zapaliły się — bit 7 (`0x80`) nie steruje DP w tym wyświetlaczu.
+- **Dalsze kroki:** Zbadać DP na U4 (b0) poprzez sweep bitów b0 z aktywną cyfrą "8".
 
-### 7. RESTORE NORMAL DISPLAY — PEŁNA KONTROLA (2026-06-21)
+### 7. DP SEGMENT BIT SWEEP — WYNIK: DP NIE NA SEGMENTACH (2026-06-21)
+Wykonano sweep wszystkich 8 bitów segmentu (0x01–0x80) na lewej cyfrze (`b1=0x20`, `b0=0x00`). Wynik:
+- **Bity 0-6:** Zapalają standardowe segmenty 7-segmentowego wyświetlacza (a=bit0, b=bit1, c=bit2, d=bit3, e=bit4, f=bit5, g=bit6).
+- **Bit 7 (0x80):** Nie zapalił żadnej kropki dziesiętnej.
+- **Wniosek:** DP nie jest na żadnym bicie segmentu (U1/b2). Kropki są sterowane przez U4 (b0). Rozpoczęto sweep b0 z wyświetloną cyfrą "8" (`seg=0x7F`) w celu znalezienia bitu DP na U4.
+
+### 8. RESTORE NORMAL DISPLAY — PEŁNA KONTROLA (2026-06-21)
 Przywrócono normalną logikę wyświetlania:
 - `DIGIT_B1_MAP = {0x20, 0x10, 0x08, 0x04}` (lewa→prawa: bit5, bit4, bit3, bit2)
 - `DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}` (U4 wyłączony dla cyfr)
