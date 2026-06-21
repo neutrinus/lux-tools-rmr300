@@ -142,7 +142,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t last_keepalive_{0};
   uint32_t last_wifi_status_{0};
   uint32_t last_esp_info_{0};
-  uint32_t last_esp_state_{0};
+
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
   uint32_t last_boot_ms_{0};
@@ -176,7 +176,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t boot_delay_ms_{0};
   bool shutdown_pending_{false};
   uint32_t shutdown_start_ms_{0};
-  bool compat_mode_{false};  // original firmware compatibility (wifi=0, no periodic state)
+  bool compat_mode_{false};  // original firmware compatibility (wifi=0, str=0)
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];

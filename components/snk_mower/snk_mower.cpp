@@ -632,12 +632,6 @@ void SnkMower::loop() {
       last_esp_info_ = now;
       send_esp_info();
     }
-    if (now - last_esp_state_ > 10000) {
-      last_esp_state_ = now;
-      if (!compat_mode_) {
-        send_esp_state(state_);
-      }
-    }
     if (now - last_rain_read_ > 60000) {
       last_rain_read_ = now;
       read_rain_sensor();
