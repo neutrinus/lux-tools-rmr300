@@ -898,6 +898,116 @@ LCD_CAM jest peryferium hardware — jeśli coś nie działa, logi nic nie poka�
 
 ---
 
+## EKSPERYMENTY I WYNIKI (2026-06-21)
+
+### Eksperyment 1: Boot handshake
+**Kod:** `components/snk_mower/snk_mower.cpp`  
+**Cel:** Ustabilizować boot sekwencję ESP↔MB
+
+**Zmiany:**
+- Usunięto blokujący `&& boot_delay_ms_ == 0` w `handle_device_info()` — MB wysyła DEVICE_INFO tylko raz, więc warunek był niespełnialny po boot_delay
+- Dodano INIT burst (×6) po ESP_INFO (×5) w SYNC phase
+- PIN wysyłany tylko raz po SYNC→DONE transition
+
+**Wynik:** Boot działa: PRE → SYNC → DONE → PIN accepted → state=idle. Logi czyste.
+
+---
+
+### Eksperyment 2: Capture 04 analysis
+**Kod:** `captures/04-return-home/decoded.json`  
+**Cel:** Znaleźć ESP→MB command inicjującą koszenie
+
+**Wynik:** ⚠️ **Oryginalny ESP32 nie wysyła żadnej komendy koszenia.** Po naciśnięciu START, ESP kontynuuje tylko POLL/KEEPALIVE. START jest obsługiwany w 100% lokalnie przez U16 (J8 pin6 → U16 GPIO → U13).
+
+**Kluczowe różnice między oryginałem a ESPHome:**
+| Aspekt | Oryginał | ESPHome (przed compat_mode) |
+|--------|----------|----------------------------|
+| `wifi` | 0 (disconnected) | 1 (connected) |
+| `state` | 0, wysłany RAZ przy bootcie | 1, co 10s |
+| `esp_state` periodic | NIE | TAK |
+| POLL interval | ~30ms | TYLKO w PRE/SYNC phase |
+
+**Rozwiązanie:** `compat_mode: true` — wymusza wifi=0 i usuwa periodic state. Plus dodanie POLL w DONE phase.
+
+---
+
+### Eksperyment 3: Przyciski fizyczne i HA
+**Kod:** `snk-mower.yaml` (przyciski), `snk_mower.cpp` (start_mowing, return_to_dock, send_action)  
+**Cel:** Sprawdzić czy ESP może zainicjować koszenie
+
+**Testy:**
+1. **Fizyczny START:** ❌ Kosiarka na podłodze, START wciśnięty — nic. MB nie wysyła START_ACK/EXEC_ACTION
+2. **start_mowing() z HA:** ❌ Sekwencja ESP_TRIM + ESP_ERR_ACK1 + ESP_STATE(state=2) wysłana, MB odpowiedziało SCHEDULE (trim=36 auto=0) ale nie zmieniło stanu
+3. **return_to_dock() z HA:** ❌ ESP wysłało 0x10000001, MB bez reakcji
+4. **send_action(1/4) z HA:** ❌ Ignorowane przez MB (brak `cmd` field)
+5. **send_raw_json (START_ACK/EXEC_ACTION/CMD action):** ❌ Wszystkie zignorowane — to są MB→ESP komendy, nie ESP→MB
+
+**Wnioski:**
+- Nie istnieje znane ESP→MB JSON command inicjujące koszenie
+- Fizyczny START nie generuje UART — wszystko lokalnie na U16
+- Jedyna droga przez ESP: harmonogram z `auto=1` (U13 ma "Robot on schedule, start work")
+
+---
+
+### Eksperyment 4: compat_mode na żywej kosiarce
+**Kod:** wersja `1ad3c2b` (compat_mode + usunięty periodic state)  
+**Cel:** Sprawdzić czy compat_mode (wifi=0, str=0, brak periodic state) pozwala na działanie START
+
+**Logi (16:15:17-16:16:47):**
+- Boot OK: ESP_INFO → wifi=0,str=0 → PIN accepted → state=idle
+- OK Button (GPIO19) działa: wykrywa naciśnięcie
+- KEEPALIVE co 1s OK
+- wifi/bt status co 5s OK
+- ESP_INFO co 30s OK
+
+**🔴 Problem: BRAK STATUS FRAMES Z MB**
+- MB wysyła PIN_RESULT + PIN_RESULT2 **przy każdym wifi/bt status** (co 5s)
+- MB **nigdy nie wysyła STATUS** (0x330000A0) — nie widać "Status: state=..." w logach
+- Bez STATUS nie widać zmiany stanu po naciśnięciu START
+- Kosiarka pozostaje w "idle" na stałe
+
+**Hipotezy:**
+1. **Brak POLL w DONE phase** — oryginał wysyła POLL co ~30ms przez cały czas. My wysyłamy tylko KEEPALIVE. MB może nie wysyłać STATUS bez POLL.
+2. **wifi/bt w PRE phase** — oryginał nie wysyła wifi/bt przed DEVICE_INFO. My wysyłamy co 5s już w PRE, co może mylić MB i powodować reset sesji.
+3. **Init value (init=3)** — może MB oczekuje innej wartości lub sekwencji INIT.
+4. **Frame format** — różnica w znakach start/stop/CRC między oryginałem a nami.
+
+**Naprawa (commit `94a38de`):**
+- Dodano POLL co 30ms w DONE phase (tak jak oryginał)
+- Usunięto wifi/bt z PRE phase (tylko POLL+KEEPALIVE w PRE)
+
+**Czeka na test:** czy POLL w DONE + brak wifi/bt w PRE przywróci STATUS frames od MB.
+
+---
+
+### Eksperyment 5: send_action() — komendy bez cmd field
+**Kod:** `snk_mower.cpp:send_action()`  
+**Cel:** Przetestować czy MB rozumie komendy `{"app_main":24.125,"chedule":<value>}` z dekompilacji ESP32
+
+**Wynik:** ❌ Wszystkie zignorowane (brak `cmd` field — MB odrzuca)
+
+| Wartość action | Znaczenie (z dekompilacji) | Reakcja MB |
+|---------------|---------------------------|------------|
+| 0 | idle/stop | ❌ |
+| 1 | work/mow | ❌ |
+| 2 | edge | ❌ |
+| 3 | pause | ❌ |
+| 4 | dock/return | ❌ |
+
+---
+
+### Podsumowanie stanu
+
+| Co działa | Co nie działa | Co wymaga testu |
+|-----------|--------------|-----------------|
+| Boot handshake (PRE→SYNC→DONE) | Fizyczny START (obsługa na U16) | POLL w DONE phase (commit 94a38de) |
+| PIN accepted | STATUS frames z MB | |
+| KEEPALIVE co 1s | start_mowing() z HA | |
+| POLL co 30ms | return_to_dock() z HA | |
+| wifi=0,str=0 (compat_mode) | send_action() / send_raw_json | |
+| OK Button (GPIO19) | | |
+| SNTP time sync | | |
+
 ## Key files
 
 | File | Purpose |
