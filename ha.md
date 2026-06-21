@@ -544,32 +544,49 @@ Sprawdzić czy ESP może zainicjować koszenie (przez HA lub przycisk START) i c
 6. Dodano SNTP do synchronizacji czasu.
 7. Kompilacja: `esphome compile` — OK.
 
-### Wyniki testów użytkownika
+### Wyniki testów użytkownika (2026-06-21, kompilacja z GitHub z nowym kodem)
 
 | Aspekt | Status | Szczegóły |
 |--------|--------|-----------|
 | Boot handshake | ✅ Działa | PRE → SYNC → DONE → PIN accepted → state=idle. Logi czyste. |
 | Wszystkie sensory w HA | ✅ Działają | Bateria 42%, area 300m², itd. |
-| `start_mowing()` przez HA | ❌ Stary stub | User dalej używa GitHub component — logi pokazują starą wersję `start_mowing()` bez implementacji. |
+| OK Button (GPIO19) | ✅ Działa | `binary_sensor` pokazał ON przy naciśnięciu |
+| `start_mowing()` przez HA | ✅ Wykonany, ❌ Nie uruchomił koszenia | Kod wykonał się: ESP_TRIM + ESP_ERR_ACK1 + ESP_STATE(state=2). Mower pozostał w idle. |
 | Fizyczny przycisk START | ❌ Brak ruchu UART | W logach ESP nie widać żadnych ramek START_ACK / EXEC_ACTION z MB po naciśnięciu START. |
 | `return_to_dock()` | ❌ Nie testowane | — |
 
-### Wnioski
-1. **Przycisk START nie generuje UART traffic** — obsługa jest w 100% lokalna na U16 (J8 pin 6 → U16 GPIO). ESP nie jest informowany o naciśnięciu START.
-2. **`start_mowing()` niewidoczny** bo user dalej ma starą kompilację z GitHub. Należy przełączyć na `local: components` i przeflashować.
-3. **Harmonogram przez ESP_TRIM to eksperymentalna droga** — nie wiadomo czy mainboard wykona harmonogram od razu. Może wymagać synchronizacji czasu z RTC U13.
+### Co się stało po `start_mowing()` z HA
+
+Sekwencja wysłana przez ESP (13:56:41):
+1. `ESP_TRIM` (0x300000A6) z harmonogramem natychmiastowym (sun_st=836, czyli 13:56)
+2. `ESP_ERR_ACK1` (0x10000001)
+3. `ESP_STATE(state=2)` (mowing)
+
+Reakcja MB (13:56:41):
+- `Schedule: trim=36 auto=0 pause=0` — **MB odpowiedziało swoim własnym harmonogramem**, a nie potwierdzeniem naszego. Oznacza że MB ma własny wewnętrzny harmonogram (trim=36, start=570=9:30, len=120) z auto=0 (wyłączony).
+- Stan pozostał `idle` — MB zignorowało `state=2` od ESP.
+
+**Wniosek:** MB ma własny harmonogram w pamięci i nie nadpisuje go tym z ESP_TRIM (lub ignoruje ESP_TRIM gdy auto=0). ESP_TRIM może działać tylko jeśli MB ma ustawione `auto=1`.
+
+### Kluczowe obserwacje
+
+1. **ESP_ERR_ACK1 (0x10000001) wysłany bez widocznego efektu** — MB nie zmieniło stanu. Prawdopodobnie error ack działa tylko w określonym kontekście (gdy MB oczekuje potwierdzenia błędu).
+2. **ESP_STATE(state=2) zignorowane** — MB nie zmienia swojego stanu na podstawie `state` od ESP. To pole jest raczej informacyjne (ESP informuje MB o swoim stanie), a nie komenda.
+3. **MB odesłało SWÓJ harmonogram** (`Schedule: trim=36 auto=0`) zaraz po otrzymaniu ESP_TRIM — to może oznaczać że MB faktycznie przetwarza ESP_TRIM, ale `auto=0` blokuje wykonanie. Wartość `trim=36` to prawdopodobnie ustawienie z menu (krawędź 36%?).
+4. **Fizyczny START nie generuje żadnych ramek UART** — potwierdza architekturę: START → J8 pin6 → U16 GPIO, całość lokalnie na U16, ESP nie jest informowany.
 
 ### Co dalej
-1. Przełączyć `external_components` w YAML z `github://neutrinus/lux-tools-rmr300@main` na `local: components`
-2. Przeflashować ESP nową kompilacją
-3. Test: przycisk START (nadal brak → to sprzętowe ograniczenie U16)
-4. Test: `start_mowing()` z HA (powinien pokazać `send_trim()` + ESP_STATE w logach)
-5. Jeśli nadal nie działa — rozważyć drugiego ESP do sniffera UART z oryginalnym firmware
+
+1. **Zbadać parametr `auto` w ESP_TRIM** — wysłać ESP_TRIM z `auto=1` (MB może wtedy wykonać harmonogram). Obecnie wysyłamy `auto=1` ale MB odsyła `auto=0` — może MB ma priorytet własnych ustawień.
+2. **Zbadać czy MB zapamiętuje ESP_TRIM** — sprawdzić czy po resecie MB wysyła SCHEDULE z naszymi wartościami czy swoimi.
+3. **Przeanalizować oryginalny firmware** — jak oryginalny ESP32 ustawiał harmonogram? Czy używał `auto=1` i czy to faktycznie uruchamiało koszenie?
+4. **Sniffer UART z oryginalnym firmware** — jedyny sposób by zobaczyć jak oryginalny ESP32 komunikował się z MB przy starcie koszenia.
+5. **Przycisk START** — skoro nie generuje UART, jedyna droga przez ESP to symulacja przez U16 (J8 pin6). Ale to wymagałoby fizycznego podłączenia do pinu J8.
 
 ### Kluczowy wniosek architektoniczny
 **Nie ma znanego JSON command ESP→MB które by inicjowało koszenie.** Fizyczny START jest obsługiwany wyłącznie przez U16. ESP może tylko:
 - Otrzymywać notyfikacje (STATE, EXEC_ACTION, START_ACK)
-- Ustawiać harmonogram (ESP_TRIM 0x300000A6)
+- Ustawiać harmonogram (ESP_TRIM 0x300000A6) — ale MB ma własny harmonogram i może go nie nadpisywać
 - Wysyłać error ack (ESP_ERR_ACK1 0x10000001 — to samo co return_to_dock)
 
 ## Key files
