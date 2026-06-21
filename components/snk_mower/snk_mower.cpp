@@ -70,20 +70,6 @@ static const char *const STATE_DISPLAY[] = {
     "ChAr", "IdLE", "Err ", "LoCK",
 };
 
-static const int DIAG_SCAN_PINS[] = {
-    0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18,
-    19, 21, 22, 23, 25, 26, 27, 32, 33, 34,
-    35, 36, 39
-};
-// Full list of GPIOs we test. Excluded: 1,3 (UART0), 6-11 (flash/PSRAM),
-// 20,24,28-31,37,38 (not broken out on ESP32-WROOM-32).
-static const int NUM_DIAG_SCAN_PINS = sizeof(DIAG_SCAN_PINS) / sizeof(DIAG_SCAN_PINS[0]);
-
-// LCD pin candidates (pins with traces to 74HC595 shift registers)
-static const int LCD_CANDIDATES[] = {5, 18, 25, 32, 33, 34, 39};
-static const int NUM_LCD_CANDIDATES = sizeof(LCD_CANDIDATES) / sizeof(LCD_CANDIDATES[0]);
-static const int LCD_CANDIDATES_TOTAL = 210;  // 7P3 = 7*6*5
-
 static const float VOLTAGE_LUT[101] = {
     15.0f, 15.05f, 15.1f, 15.15f, 15.2f, 15.25f, 15.3f, 15.35f, 15.4f, 15.5f,
     15.6f, 15.7f,  15.8f, 15.85f, 15.9f, 16.0f,  16.1f, 16.15f, 16.2f, 16.25f,
@@ -126,129 +112,10 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
   gpio_set_level(cs, 1);
 }
 
-static void shift24_nocs(gpio_num_t clk, gpio_num_t mosi,
-                          uint8_t b0, uint8_t b1, uint8_t b2) {
-  uint8_t bytes[] = {b0, b1, b2};
-  for (int b = 0; b < 3; b++) {
-    for (int i = 7; i >= 0; i--) {
-      gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(1);
-      gpio_set_level(clk, 1);
-      delayMicroseconds(1);
-      gpio_set_level(clk, 0);
-      delayMicroseconds(1);
-    }
-  }
-  delayMicroseconds(2);
-}
-
-static void max7219_write(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
-                           uint8_t reg, uint8_t data) {
-  gpio_set_level(cs, 0);
-  delayMicroseconds(2);
-  uint16_t word = ((uint16_t)reg << 8) | data;
-  for (int i = 15; i >= 0; i--) {
-    gpio_set_level(mosi, (word >> i) & 1);
-    delayMicroseconds(1);
-    gpio_set_level(clk, 1);
-    delayMicroseconds(1);
-    gpio_set_level(clk, 0);
-    delayMicroseconds(1);
-  }
-  delayMicroseconds(2);
-  gpio_set_level(cs, 1);
-}
-
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 void SnkMower::setup() {
   ESP_LOGI(TAG, "SNK Mower starting (PIN: %s, JSON at 230400)", pin_.c_str());
-
-  if (pin_diag_) {
-    ESP_LOGI(TAG, "=== GPIO PIN DIAGNOSTIC MODE ===");
-    ESP_LOGI(TAG, "Scanning %d pins every %ums for changes...",
-             NUM_DIAG_SCAN_PINS, DIAG_INTERVAL_MS);
-    for (int i = 0; i < NUM_DIAG_SCAN_PINS; i++) {
-      int gpio = DIAG_SCAN_PINS[i];
-      gpio_set_direction((gpio_num_t)gpio, GPIO_MODE_INPUT);
-      int level = gpio_get_level((gpio_num_t)gpio);
-      diag_prev_[gpio] = level;
-      ESP_LOGI(TAG, "  GPIO%02d: initial=%d", gpio, level);
-    }
-    ESP_LOGI(TAG, "=== DIAG: monitoring started ===");
-    return;
-  }
-
-  if (lcd_find_) {
-    ESP_LOGI(TAG, "=== LCD PIN FINDER ===");
-    ESP_LOGI(TAG, "Testing %d candidates: %d combos of (CLK, CS, MOSI) x 1.5s",
-             NUM_LCD_CANDIDATES, LCD_CANDIDATES_TOTAL);
-    ESP_LOGI(TAG, "Pattern: 0xFF, 0x0F, 0xFF");
-    lcd_scan_idx_ = 0;
-    last_lcd_scan_ms_ = millis();
-    return;
-  }
-
-  if (lcd_sweep_) {
-    ESP_LOGI(TAG, "=== LCD BIT SWEEP (CLK=%d MOSI=%d CS=%d) ===",
-             (int)display_clk_, (int)display_mosi_, (int)display_cs_);
-    ESP_LOGI(TAG, "Sweeping 24 bits individually, then all-on/off, byte tests");
-    setup_display();
-    sweep_bit_ = 0;
-    sweep_phase_ = 0;
-    last_sweep_ms_ = millis();
-    return;
-  }
-
-  if (lcd_test_max7219_) {
-    ESP_LOGI(TAG, "=== MAX7219 test: CLK=%d MOSI=%d CS=%d ===",
-             display_clk_, display_mosi_, display_cs_);
-    setup_display();
-
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0C, 0x01);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x09, 0x00);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0B, 0x03);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0A, 0x0F);
-    delay(50);
-
-    ESP_LOGI(TAG, "=== MAX7219: display test (all segments on) ===");
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0F, 0x01);
-    delay(3000);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x0F, 0x00);
-    delay(500);
-
-    ESP_LOGI(TAG, "=== MAX7219: 8888 ===");
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x01, 0x7F);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x02, 0x7F);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x03, 0x7F);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x04, 0x7F);
-    delay(3000);
-
-    ESP_LOGI(TAG, "=== MAX7219: 1234 ===");
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x01, 0x06);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x02, 0x5B);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x03, 0x4F);
-    max7219_write(display_clk_, display_mosi_, display_cs_, 0x04, 0x66);
-    delay(3000);
-
-    ESP_LOGI(TAG, "=== MAX7219 test done ===");
-    lcd_test_max7219_ = false;
-    return;
-  }
-
-  if (lcd_find_rclk_) {
-    ESP_LOGI(TAG, "=== LCD: CLK=33 MOSI=18 CS=32, shift24_nocs, CS=0 ===");
-    setup_display();
-    gpio_set_level(display_cs_, 0);
-    shift24_nocs(display_clk_, display_mosi_, 0xFF, 0xFF, 0xFF);
-    shift24_nocs(display_clk_, display_mosi_, 0x00, 0x0F, 0xFF);
-    delay(5000);
-    shift24_nocs(display_clk_, display_mosi_, 0x00, 0x00, 0x00);
-    delay(2000);
-    ESP_LOGI(TAG, "=== Test complete ===");
-    lcd_find_rclk_ = false;
-    return;
-  }
 
   setup_display();
   set_display_text("8888", true);
@@ -454,28 +321,8 @@ void SnkMower::set_rain_pin(gpio_num_t pin) {
   rain_pin_ = pin;
 }
 
-void SnkMower::set_pin_diag(bool enable) {
-  pin_diag_ = enable;
-}
-
 void SnkMower::set_boot_delay(uint32_t seconds) {
   boot_delay_ms_ = seconds * 1000;
-}
-
-void SnkMower::set_lcd_find(bool enable) {
-  lcd_find_ = enable;
-}
-
-void SnkMower::set_lcd_sweep(bool enable) {
-  lcd_sweep_ = enable;
-}
-
-void SnkMower::set_lcd_find_rclk(bool enable) {
-  lcd_find_rclk_ = enable;
-}
-
-void SnkMower::set_lcd_test_max7219(bool enable) {
-  lcd_test_max7219_ = enable;
 }
 
 void SnkMower::set_display_off_timeout(uint32_t minutes) {
@@ -632,129 +479,6 @@ void SnkMower::read_rain_sensor() {
 
 void SnkMower::loop() {
   uint32_t now = millis();
-
-  if (pin_diag_) {
-    if (now - last_diag_ms_ >= DIAG_INTERVAL_MS) {
-      last_diag_ms_ = now;
-      for (int i = 0; i < NUM_DIAG_SCAN_PINS; i++) {
-        int gpio = DIAG_SCAN_PINS[i];
-        int level = gpio_get_level((gpio_num_t)gpio);
-        if ((uint8_t)level != diag_prev_[gpio]) {
-          ESP_LOGD(TAG, "DIAG: GPIO%02d: %d\u2192%d", gpio, diag_prev_[gpio], level);
-          diag_prev_[gpio] = level;
-        }
-      }
-    }
-    return;
-  }
-
-  if (lcd_sweep_) {
-    if (now - last_sweep_ms_ >= 8) {
-      last_sweep_ms_ = now;
-      if (sweep_frames_ <= 0) {
-        sweep_phase_++;
-        if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
-          sweep_frames_ = 375;
-        } else if (sweep_phase_ == 25 || sweep_phase_ == 26) {
-          sweep_frames_ = 500;
-        } else if (sweep_phase_ >= 27 && sweep_phase_ <= 29) {
-          sweep_frames_ = 250;
-        } else {
-          sweep_phase_ = 0;
-          sweep_frames_ = 1;
-        }
-        const char *label;
-        uint32_t pattern;
-        if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
-          pattern = 1 << (sweep_phase_ - 1);
-          label = "bit";
-        } else if (sweep_phase_ == 25) {
-          pattern = 0xFFFFFF;
-          label = "ALL_ON";
-        } else if (sweep_phase_ == 26) {
-          pattern = 0x000000;
-          label = "ALL_OFF";
-        } else if (sweep_phase_ == 27) {
-          pattern = 0xFF0000;
-          label = "byte0";
-        } else if (sweep_phase_ == 28) {
-          pattern = 0x00FF00;
-          label = "byte1";
-        } else if (sweep_phase_ == 29) {
-          pattern = 0x0000FF;
-          label = "byte2";
-        } else {
-          pattern = 0;
-          label = "";
-        }
-        if (sweep_phase_ > 0) {
-          ESP_LOGI(TAG, "SWEEP phase=%d (%s) pattern=0x%06X",
-                   sweep_phase_, label, pattern);
-        }
-      }
-      uint32_t pattern;
-      if (sweep_phase_ >= 1 && sweep_phase_ <= 24) {
-        pattern = 1 << (sweep_phase_ - 1);
-      } else if (sweep_phase_ == 25) {
-        pattern = 0xFFFFFF;
-      } else if (sweep_phase_ == 26) {
-        pattern = 0x000000;
-      } else if (sweep_phase_ == 27) {
-        pattern = 0xFF0000;
-      } else if (sweep_phase_ == 28) {
-        pattern = 0x00FF00;
-      } else if (sweep_phase_ == 29) {
-        pattern = 0x0000FF;
-      } else {
-        pattern = 0;
-      }
-      if (sweep_phase_ > 0) {
-        shift24(display_clk_, display_mosi_, display_cs_,
-                (pattern >> 16) & 0xFF, (pattern >> 8) & 0xFF, pattern & 0xFF);
-        sweep_frames_--;
-      }
-    }
-    return;
-  }
-
-  if (lcd_find_rclk_) {
-    return;
-  }
-
-  if (lcd_find_) {
-    if (now - last_lcd_scan_ms_ >= 1500) {
-      last_lcd_scan_ms_ = now;
-      int n = NUM_LCD_CANDIDATES;
-      while (lcd_scan_idx_ < LCD_CANDIDATES_TOTAL) {
-        int i = lcd_scan_idx_ / (n * n);
-        int j = (lcd_scan_idx_ / n) % n;
-        int k = lcd_scan_idx_ % n;
-        lcd_scan_idx_++;
-        if (i == j || i == k || j == k) continue;
-        int clk = LCD_CANDIDATES[i];
-        int cs  = LCD_CANDIDATES[j];
-        int mosi = LCD_CANDIDATES[k];
-        gpio_set_direction((gpio_num_t)clk, GPIO_MODE_OUTPUT);
-        gpio_set_direction((gpio_num_t)cs, GPIO_MODE_OUTPUT);
-        gpio_set_direction((gpio_num_t)mosi, GPIO_MODE_OUTPUT);
-        gpio_set_level((gpio_num_t)clk, 0);
-        gpio_set_level((gpio_num_t)cs, 1);
-        gpio_set_level((gpio_num_t)mosi, 0);
-        shift24((gpio_num_t)clk, (gpio_num_t)mosi, (gpio_num_t)cs,
-                0xFF, 0x0F, 0xFF);
-        ESP_LOGI(TAG, "LCD: #%d/%d — CLK=%d CS=%d MOSI=%d",
-                 lcd_scan_idx_, LCD_CANDIDATES_TOTAL, clk, cs, mosi);
-        break;
-      }
-      if (lcd_scan_idx_ >= LCD_CANDIDATES_TOTAL) {
-        ESP_LOGI(TAG, "=== LCD scan complete (%d combos tested) ===",
-                 LCD_CANDIDATES_TOTAL);
-        lcd_find_ = false;
-        finish_setup();
-      }
-    }
-    return;
-  }
 
   int rx_count = 0;
   while (available() > 0 && rx_count < 256) {
