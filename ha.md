@@ -13,15 +13,16 @@ All 4 digits driven by U3 (b1). Colon hardware-powered. Decimal points not prese
 Key insight: MB sends `0x330000A1` as a **request** for ESP identification.  
 When ESP has preemptively sent INFO, MB sends `0x330000A9` instead.
 
-## Protocol (confirmed by LA capture + CRC verification)
+## Protocol (confirmed by 4 LA captures on 2026-06-21 + CRC verification)
 
 ### Physical layer
 - UART @ **230400 8N1**, standard polarity
 - ESP TX=GPIO17, ESP RX=GPIO16
-- Frame: `&<json>{crc_byte>#` (Dallas CRC-8 over JSON bytes)
+- Frame: `&{json}<CRC>##` (Dallas CRC-8 over JSON bytes, `##` terminator)
 - Max message: 128 bytes (mport driver limit on U16)
+- Connector: J2 (display board) / J8 (mainboard), 7-pin ribbon
 
-### Verified CRCs (Dallas CRC-8 MAXIM)
+### Verified CRCs (Dallas CRC-8 MAXIM, poly 0x31)
 
 | Command | JSON | CRC |
 |---------|------|:---:|
@@ -40,46 +41,74 @@ All match original ESP captures.
 ESP32 (ESPHome, custom snk_mower component)
   │
   │ UART @230400, JSON+CRC via J2 connector
-  │ Frame: &JSON{CRC}#
+  │ Frame: &JSON<CRC>##
   │
   ▼
 U16 (GD32F303) — board MCU, translates JSON ↔ internal
-  │
-  │ UART @230400, JSON via cJSON
-  ▼
+  │                                               
+  │ UART @230400, JSON via cJSON                   
+  ▼                                               
 U13 (GD32F305) — main MCU (motor, sensors, PIN, USB, OTA)
 ```
 
-### Boot sequence (original capture)
+### Key architectural finding (2026-06-21)
+
+**START/STOP/HOME są fizycznymi przyciskami → U16 (GD32F303), nie ESP32.**
+
+Przyciski są podpięte bezpośrednio do U16 (START=J2 pin6, OK=J2 pin7, ON=J2 pin2). ESP32 **nie może zainicjować koszenia ani powrotu do stacji przez UART** — nie ma takiej komendy. ESP tylko:
+- Wysyła PIN do odblokowania
+- ACKuje akcje użytkownika (START_ACK, EXEC_ACTION, HOME)
+- Synchronizuje RTC
+- Raportuje stan do chmury/MQTT
+
+Do sterowania przez HA trzeba by podłączyć GPIO ESP32 do linii przycisków (ale idą do U16, nie ESP) — lub znaleźć inny mechanizm.
+
+### Stany MB (raportowane przez ESP w `0x330000A0`)
+
+| State | Znaczenie |
+|-------|-----------|
+| 0 | Idle (po włączeniu, przed PIN) |
+| 1 | Ready (PIN odblokowany) |
+| 2 | **MOWING** (lub jazda) |
+| 6 | Stop / pauza |
+| 7 | Error (z polem `error:N`) |
+| 8 | Seek wire? |
+| 9 | **RETURNING TO DOCK** |
+| 10 | **CHARGING** |
+
+Dodatkowe pola w `0x330000A0`: `station`, `border_state`, `stop_state`, `rain_state`, `bat_per`, `bat_lv`.
+
+### Boot sequence (confirmed by LA capture)
 
 ```
-MB→ESP:
-  0x20000001 action=0          POWER_ON
-  0x40000009 ×5                BOOT_HEART
-  0x40000008 ×5                BOOT_INIT
-  0x50000021 bat=3             BATTERY
-  0x20000004 ×2                POWER_READY
-  0x330000A1                   DEVICE_INFO (name, SN, version, model)
-  0x330000A2                   HW_VERSIONS
-  0x330000B0                   MAP_CFG
-  0x40000020 lv=255            LIGHT
-  0x330000A6                   SCHEDULE
-  0x330000A0 state=0           STATUS (IDLE/LOCKED)
-  0x41000002 lock=1            LOCK
-  0x33000021 result=True       PIN_RESULT
-  0x330000A0 state=1           STATUS (UNLOCKED/READY)
-  0x40000011 rtc=TS...         RTC_HEARTBEAT (~1 Hz)
+ESP→MB (D2):
+  0x20000001 {"action":0}        ← power-on wake
+  0x40000009 ×N                  ← boot heartbeat
+  0x40000008 ×N                  ← init in progress
+  0x50000021 {"bat":2}           ← battery level
+  0x20000004 ×N                  ← ready
+  0x330000A1 {"name":"MyMower", ← full device config
+              "sn":"2312CGF...",
+              "version":31018,
+              "model":"RMC300E20V-ECDNSS",...}
+  0x330000A2 {"mb_hv":22500,...} ← hardware versions
+  0x33000030 {"map_sn":0,"area":300} ← map
+  0x330000A6 {"trim":36,...}     ← schedule
+  0x330000A0 {"state":0,...}     ← status IDLE
+  0x41000002 {"lock":1}          ← lock
+  0x330000A0 {"state":1}         ← status READY (po PIN)
+  0x40000011 {"rtc":TS...}       ← RTC heartbeat (~1 Hz)
 
-ESP→MB:
-  0x40000004                   BOOT
-  0x30000005                   KEEPALIVE
-  0x30000028 state=0           STATE
-  0x300000A1 ×N                POLL (keepalive)
-  0x30000021 wifi=0,str=0      WIFI
-  0x30000022 bt=0,str=0        BT
-  0x40000006 hv=...,sv=...,mac=... INFO
-  0x40000001 init=3            INIT
-  0x30000005 ×60               KEEPALIVE
+MB→ESP (D1):
+  0x40000004                     ← BOOT
+  0x30000005                     ← KEEPALIVE (ciągle)
+  0x30000028 {"state":0}         ← STATE
+  0x300000A1 ×N                  ← POLL (keepalive)
+  0x30000021 {"wifi":0,"str":0}  ← WiFi status req
+  0x30000022 {"bt":0,"str":0}    ← BT status req
+  0x40000006 {"hv":60400,...}    ← ESP info req
+  0x40000001 {"init":3}          ← INIT complete
+  0x22000000 {"rain":0/1}        ← rain sensor
 ```
 
 ### Current problems
