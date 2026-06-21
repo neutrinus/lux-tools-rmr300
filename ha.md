@@ -553,7 +553,7 @@ Sprawdzić czy ESP może zainicjować koszenie (przez HA lub przycisk START) i c
 | OK Button (GPIO19) | ✅ Działa | `binary_sensor` pokazał ON przy naciśnięciu |
 | `start_mowing()` przez HA | ✅ Wykonany, ❌ Nie uruchomił koszenia | Kod wykonał się: ESP_TRIM + ESP_ERR_ACK1 + ESP_STATE(state=2). Mower pozostał w idle. |
 | Fizyczny przycisk START | ❌ Brak ruchu UART | W logach ESP nie widać żadnych ramek START_ACK / EXEC_ACTION z MB po naciśnięciu START. |
-| `return_to_dock()` | ❌ Nie testowane | — |
+| `return_to_dock()` | ❌ Bez efektu | ESP wysłało 0x10000001, MB nie zmieniło stanu. Mower pozostał w idle. API disconnect zaraz po — niepewne czy związane. |
 
 ### Co się stało po `start_mowing()` z HA
 
