@@ -309,6 +309,8 @@ uint8_t SnkMower::char_to_segments_(char c) {
     case 't': return 0b01111000;
     case 'U': return 0b00111110;
     case 'u': return 0b00011100;
+    case 'y': return 0b01100110;
+    case 'Y': return 0b01100110;
     default: return 0;
   }
 }
@@ -975,7 +977,7 @@ void SnkMower::handle_exec_action(const JsonDocument &doc) {
 
 void SnkMower::handle_shutdown(const JsonDocument &doc) {
   ESP_LOGI(TAG, "Shutdown requested");
-  publish_mower_state(MowerState::IDLE);
+  set_display_text("byE ");
 }
 
 void SnkMower::handle_start_time_query(const JsonDocument &doc) {
