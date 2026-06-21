@@ -490,7 +490,7 @@ Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80), **
 | 3 (skrajnie prawa) | bit 3 | 0x08 |
 
 - **Wszystkie 4 cyfry są sterowane przez U3 (b1).** U4 (b0) nie uczestniczy w selekcji cyfr — prawdopodobnie steruje dwukropkiem, wskaźnikiem baterii lub backlightem.
-- **`DIGIT_B1_MAP = {0x10, 0x20, 0x04, 0x08}`**
+- **`DIGIT_B1_MAP = {0x20, 0x10, 0x08, 0x04}`** (kolejność lewa→prawa: bit5, bit4, bit3, bit2)
 - **`DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}`** (U4 wyłączony dla cyfr)
 - **Dwukropek (`display_colon_`):** Ustawiony na `0b00110000` (0x30) koliduje z bitami 4 i 5 U3 — wymaga przeniesienia na U4. Na razie wyłączony (0x00) do dalszej diagnostyki.
 
