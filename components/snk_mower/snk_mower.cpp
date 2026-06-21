@@ -115,11 +115,11 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
   for (int b = 0; b < 3; b++) {
     for (int i = 7; i >= 0; i--) {
       gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
       gpio_set_level(clk, 1);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
       gpio_set_level(clk, 0);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
     }
   }
   delayMicroseconds(2);
@@ -132,11 +132,11 @@ static void shift24_nocs(gpio_num_t clk, gpio_num_t mosi,
   for (int b = 0; b < 3; b++) {
     for (int i = 7; i >= 0; i--) {
       gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
       gpio_set_level(clk, 1);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
       gpio_set_level(clk, 0);
-      delayMicroseconds(1);
+      delayMicroseconds(2);
     }
   }
   delayMicroseconds(2);
@@ -817,7 +817,6 @@ void SnkMower::loop() {
         phase_start_ms_ = now;
         last_boot_ms_ = now;
       }
-      return;
     }
   }
 
@@ -1103,7 +1102,7 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
   }
 
   // DEVICE_INFO from MB — start SYNC burst on first receipt
-  if (boot_phase_ == BootPhase::PRE) {
+  if (boot_phase_ == BootPhase::PRE && boot_delay_ms_ == 0) {
     ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
     boot_phase_ = BootPhase::SYNC;
     phase_start_ms_ = millis();
