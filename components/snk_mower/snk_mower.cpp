@@ -346,28 +346,14 @@ void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
 
-  // COLON/B0 SWEEP v2: blank segments + sweep b0 combos to find colon clearly
-  static const uint8_t B0_TEST[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,
-                                     0x03,0x30,0xC0,0x0C,0x50,0xA0,0x00,0xFF};
+  static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
   static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
-
-  static uint32_t last_sw_ms = 0;
-  static uint8_t sw_idx = 0;
-  uint32_t now = millis();
-  if (now - last_sw_ms >= 3000) {
-    last_sw_ms = now;
-    sw_idx = (sw_idx + 1) % (sizeof(B0_TEST)/sizeof(B0_TEST[0]));
-    ESP_LOGI(TAG, "COLON BLANK SWEEP: b0=0x%02X", B0_TEST[sw_idx]);
-  }
-
-  display_segments_[0] = 0x80;  // just DP
-  display_segments_[1] = 0x80;
-  display_segments_[2] = 0x80;
-  display_segments_[3] = 0x80;
+  // Physical positions: 0 (leftmost)=b1 bit5, 1=b1 bit4, 2=b1 bit3, 3(rightmost)=b1 bit2
+  // U4 (b0) controls colon — stays lit whenever display is active.
 
   uint8_t seg = display_segments_[current_digit_];
-  uint8_t b0 = B0_TEST[sw_idx];
-  uint8_t b1 = DIGIT_B1_MAP[current_digit_];
+  uint8_t b0 = DIGIT_B0_MAP[current_digit_];
+  uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
