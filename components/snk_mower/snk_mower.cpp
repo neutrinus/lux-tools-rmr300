@@ -347,23 +347,25 @@ void SnkMower::refresh_display_impl() {
   if (display_off_) return;
 
   uint32_t now = millis();
-  uint8_t seg = display_segments_[current_digit_];
-
-  if (current_state_ == MowerState::CHARGING && current_digit_ == 0) {
-    if (now - last_charging_frame_ms_ >= CHG_FRAME_MS) {
-      last_charging_frame_ms_ = now;
-      charging_frame_ = (charging_frame_ + 1) % 3;
-    }
-    seg = CHG_FRAMES[charging_frame_];
+  
+  static uint32_t last_step_change_ms = 0;
+  static uint8_t diag_step = 0;
+  if (now - last_step_change_ms >= 4000) {
+    last_step_change_ms = now;
+    diag_step = (diag_step + 1) % 16;
+    ESP_LOGI(TAG, "DIAG SWEEP: Step %d/16: b0=0x%02X b1=0x%02X (all segments ON)",
+             diag_step, (diag_step < 8) ? (1 << diag_step) : 0, (diag_step >= 8) ? (1 << (diag_step - 8)) : 0);
   }
 
-  static const uint8_t DIGIT_B0_MAP[] = {0x00, 0x00, 0x02, 0x04};
-  static const uint8_t DIGIT_B1_MAP[] = {0x02, 0x04, 0x00, 0x00};
+  uint8_t b0 = 0;
+  uint8_t b1 = 0;
+  if (diag_step < 8) {
+    b0 = 1 << diag_step;
+  } else {
+    b1 = 1 << (diag_step - 8);
+  }
 
-  uint8_t b0 = DIGIT_B0_MAP[current_digit_];
-  uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
-
-  current_digit_ = (current_digit_ + 1) % DIGITS;
+  uint8_t seg = 0xFF;
 
   shift24(display_clk_, display_mosi_, display_cs_,
           b0,
