@@ -458,12 +458,18 @@ Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświ
 - **Implementacja:** Zaimplementowano tablice mapowania `DIGIT_B0_MAP` oraz `DIGIT_B1_MAP` w `refresh_display_impl()`. Wygaszanie nieaktywnych cyfr na drugim rejestrze odbywa się automatycznie poprzez wzajemne wykluczenie (gdy `b0` steruje prawą stroną, `b1` jest wygaszony i na odwrót), co eliminuje powidoki (ghosting).
 - **Format Baterii:** Poziom baterii i ładowania wyświetla się teraz perfekcyjnie wyrównany na trzech prawych cyfrach (Digit 1, 2, 3), a pierwszy segment (Digit 0) jest zarezerwowany dla animacji ładowania (uruchamianej na `current_digit_ == 0`).
 
-### 3. Eksperyment Diagnostyczny: Taktowanie i Skanowanie Seryjne (2026-06-21)
-Ze względu na zaobserwowane anomalie w wyświetlaniu znaków po uproszczeniu mapowania oraz potrzebę precyzyjnego ustalenia, które bity sterują dwiema prawymi cyframi (Digit 2 i Digit 3), zaimplementowaliśmy automatyczny test diagnostyczny `DIAG SWEEP` bezpośrednio w `refresh_display_impl()`.
-- **Działanie:** Test co 4 sekundy przełącza aktywny krok od 0 do 15. Kroki 0-7 podają pojedyncze bity na `b0` (od bitu 0 do 7), a kroki 8-15 na `b1` (od bitu 0 do 7). Wszystkie segmenty są na stałe włączone (`seg = 0xFF`).
-- **Logowanie:** ESPHome loguje aktualny krok w formacie:
-  `DIAG SWEEP: Step X/16: b0=0xXX b1=0xXX (all segments ON)`
-- **Cel:** Pozwala to określić z absolutną dokładnością, który bit którego rejestru (`b0`/`b1`) fizycznie zapala każdą z 4 cyfr oraz dwukropek (colon).
+### 3. Eksperyment Diagnostyczny: Bezpieczne Skanowanie Multipleksowe (2026-06-21)
+Zaimplementowaliśmy bezpieczny test dynamiczny `DISPLAY TEST` bezpośrednio w `refresh_display_impl()` w celu uniknięcia przeciążenia linii zasilania (stałe włączenie wszystkich segmentów na 100% duty cycle mogło wywołać spadek napięcia lub watchdog reset).
+- **Działanie:** Test co 5 sekund przełącza podejście (`Approach 0` do `4`), stale wyświetlając cyfry `"1234"` w trybie multipleksowanym (4ms).
+- **Logowanie:** ESPHome loguje aktualne podejście:
+  `DISPLAY TEST: Approach X (showing 1234 multiplexed)`
+- **Podejścia:**
+  - **Approach 0:** `b0=0x00`, `b1=dig` (tylko rejestr `U3` aktywny)
+  - **Approach 1:** `b0=dig`, `b1=0x00` (tylko rejestr `U4` aktywny)
+  - **Approach 2:** Sometryczne mapowanie A (`b0={0x02,0x04}`, `b1={0x02,0x04}`)
+  - **Approach 3:** Sometryczne mapowanie B (`b0={0x04,0x08}`, `b1={0x04,0x08}`)
+  - **Approach 4:** Podział C (`b0={0x01,0x02}`, `b1={0x02,0x04}`)
+- **Cel:** Pozwala to naocznie i bezbłędnie zidentyfikować optymalne mapowanie wszystkich 4 cyfr.
 
 ## Key files
 
