@@ -134,20 +134,79 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 ### What's confirmed
 
 - CRC algorithm: ✅ Dallas CRC-8 (matches original ESP captures)
-- Frame format: ✅ `&JSON{CRC}#`
+- Frame format: ✅ `&{json}<CRC>##`
 - UART baud: ✅ 230400 8N1
 - RX parser: ✅ receives JSON frames from MB
-- PIN: ✅ stored in U13 RAM, value `9633`
+- PIN: ✅ `9633` — potwierdzony w LA capture
 - Protocol: ✅ JSON
 - Boot handshake: ✅ PRE → SYNC → DONE completes successfully
 - System stability: ✅ 40+ seconds and counting (no power cut)
-- PIN accepted: ✅ MB confirms PIN
+- PIN accepted: ✅ MB confirms via `0x33000022 {"result":true}`
 
-### What's NOT yet working
+### LA Capture Analysis (2026-06-21, 4 captures, fx2lafw)
 
-- **Decimal points** — not found on seg bits (0x01–0x80) nor on U4 (b0 0x00–0xFF). May not exist physically.
-- Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
-- Mowing start: not yet tested via HA
+**Architektura — kluczowe odkrycie:**
+
+START/STOP/HOME to **fizyczne przyciski podpięte bezpośrednio do U16** (J2 pin 2=ON, 6=START, 7=OK). ESP **nie może zainicjować koszenia przez UART** — nie ma takiej komendy. ESP tylko ACKuje akcje użytkownika, synchronizuje RTC i raportuje stan.
+
+**Full command map:**
+
+OEM ESP→MB (to co musimy WYSYŁAĆ):
+| CMD | HEX | Opis |
+|-----|-----|------|
+| `action:0` | `0x20000001` | Pierwszy msg po boot — ESP ready |
+| DEVICE_INFO | `0x330000A1` | Pełna konfiguracja urządzenia |
+| HW_VERSIONS | `0x330000A2` | Wersje HW |
+| MAP_CFG | `0x33000030` | Mapa/area |
+| SCHEDULE | `0x330000A6` | Harmonogram koszenia |
+| STATUS | `0x330000A0` | Raport stanu (state, bat, ...) |
+| LOCK | `0x41000002` | lock=1 po odblokowaniu PIN |
+| START_ACK | `0x41000020 {"result":1}` | Gdy stan→2 (mowing) |
+| EXEC_ACTION | `0x41000003` | Gdy STOP |
+| HOME_ACK | `0x41000006` | Gdy stan→9 (returning) |
+| DOCKED_ACK | `0x41000007` | Gdy station=true |
+| RTC | `0x40000011 {"rtc":TS}` | Sync czasu co ~1s |
+
+OEM MB→ESP (to co musimy ODBIERAĆ):
+| CMD | HEX | Opis |
+|-----|-----|------|
+| BOOT | `0x40000004` | Handshake |
+| KEEPALIVE | `0x30000005` | Ciągły heartbeat |
+| STATE | `0x30000028 {"state":N}` | Zmiana stanu MB |
+| POLL | `0x300000A1` | Poll/heartbeat |
+| WIFI_REQ | `0x30000021` | Zapytanie o status WiFi |
+| BT_REQ | `0x30000022` | Zapytanie o status BT |
+| INFO_REQ | `0x40000006` | Zapytanie o info ESP |
+| INIT | `0x40000001 {"init":3}` | Init potwierdzenie |
+| RAIN | `0x22000000 {"rain":0/1}` | Czujnik deszczu |
+| TRIM_REQ | `0x300000A6` | Zapytanie o trim schedule |
+| ERR_ACK1 | `0x10000001` | Error ack |
+| ERR_ACK2 | `0x10000007` | Error ack |
+
+**Stany MB (w `0x30000028` i `0x330000A0`):**
+| Stan | Znaczenie |
+|------|-----------|
+| 0 | Idle (przed PIN) |
+| 1 | Ready (odblokowany) |
+| 2 | **MOWING** / jazda |
+| 6 | STOP |
+| 7 | Error (z polem `error:N`) |
+| 8 | Seek wire? |
+| 9 | **RETURNING TO DOCK** |
+| 10 | **CHARGING** |
+
+### Co jest źle w obecnym ESPHome firmware
+
+Na podstawie porównania z LA capture:
+
+1. **Brak `action:0` (0x20000001) przy boot** — OEM wysyła to jako pierwszy message. Bez tego U16 może nie akceptować komend/STARTu.
+2. **`CMD_RETURN_HOME = 0x10000001` jest błędne** — to ESP_ERR_ACK1. Rzeczywisty HOME to `0x41000006`, DOCKED to `0x41000007`.
+3. **Brak START_ACK (`0x41000020`)** — OEM wysyła gdy stan→2.
+4. **`handle_status` odbiera `0x330000A0`** — ale z LA to jest ESP→MB! Powinniśmy to WYSYŁAĆ, a odbierać `0x30000028` (STATE).
+5. **Złe mapowanie stanów**: 6=STOP (nie RETURNING), 9=RETURNING (nie IDLE), 10=CHARGING (nie 11).
+6. **Brak `0x41000006` i `0x41000007`** w ogóle w kodzie.
+7. **Brak własnego DEVICE_INFO/HW_VERSIONS/SCHEDULE** — OEM wysyła te konfiguracje po boot.
+8. **Brak RTC sync** — OEM wysyła `0x40000011 {"rtc":TS}` co ~1s.
 
 ## ESPHome Entities
 
