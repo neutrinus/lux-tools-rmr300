@@ -119,29 +119,64 @@ state:0 (idle)
   → stop_state:0
 ```
 
+## 4. `czwarty.sr` — Dokowanie: HOME+OK → wjazd na stację → ładowanie
+
+**Czas**: ~60s
+
+**Co robione**: Kosiarka przed stacją. Włączono, wpisano PIN, naciśnięto HOME+OK. Kosiarka wjechała na stację i zaczęła ładować.
+
+**Sekwencja**:
+
+```
+→ boot, device info
+→ state:0, result:true, lock:1
+→ state:1 (ready)
+→ HOME+OK (fizyczny)
+  → 0x41000020 {"result":1}    ← START_ACK (zjeżdża ze stacji)
+  → state:2                    ← jazda (krótki odjazd)
+  → 0x41000003                 ← EXEC_ACTION
+  → state:6
+  → 0x41000006                 ← ★ RETURN HOME
+  → state:9                    ← RETURNING TO DOCK
+  → station:true               ← ★ NA STACJI!
+  → border_state:0             ← kabel zniknął
+  → 0x41000007                 ← ★ CHARGE_START / DOCKED
+  → state:10                   ← ★ CHARGING!
+  → RTC sync continues...
+```
+
+### Nowe odkrycia
+
+- **`0x41000007` (1090519047)** = DOCKED/CHARGE_START — wysyłany gdy kosiarka jest na stacji
+- **`station:true`** = pole w `0x33000020` (state update) informujące że wykryto stację
+- **state:10 = CHARGING**
+- Sekwencja HOME: najpierw krótki odjazd (state:2), potem powrót po kablu (state:9), potem wykrycie stacji i ładowanie (state:10)
+
 ### Odkryte komendy ESP→MB
 
 | CMD HEX | DEC | Nazwa z disasm | Użycie |
 |---------|-----|----------------|--------|
-| `0x41000020` | 1090519072 | START_ACK | Gdy START wciśnięty |
+| `0x41000020` | 1090519072 | START_ACK | Gdy START/HOME wciśnięty |
 | `0x41000003` | 1090519043 | EXEC_ACTION | Przy każdym STOP |
 | `0x41000004` | 1090519044 | ERROR_NOTIFY | Gdy błąd |
-| `0x41000005` | 1090519045 | PIN_SEND? | Po mowingu przed powrotem? |
+| `0x41000005` | 1090519045 | PIN_SEND? | Z `pwd`=PIN albo bez pola |
 | `0x41000006` | 1090519046 | (unknown) | **★ HOME / RETURN** |
+| `0x41000007` | 1090519047 | (unknown) | **★ DOCKED / CHARGE START** |
 | `0x41000002` | 1090519042 | LOCK | lock=1 po PIN |
 | `0x4100000A` | 1090519050 | "action" | (nie zaobserwowano) |
 
-### Stany MB (ESP→MB raportuje)
+### Stany MB (ESP→MB raportuje w `0x33000020`)
 
 | State | Znaczenie |
 |-------|-----------|
 | 0 | Idle (po włączeniu, przed PIN) |
 | 1 | Ready (PIN odblokowany) |
-| 2 | **MOWING** |
-| 6 | Stop/pauza (po STOP) |
-| 7 | Error (z `error:N`) |
-| 8 | **? Seek wire?** (po mowingu, przed HOME?) |
-| 9 | **RETURNING TO DOCK** (HOME) |
+| 2 | **MOWING** (lub jazda/odjazd) |
+| 6 | Stop/pauza |
+| 7 | Error (z polem `error:N`) |
+| 8 | **? Seek wire?** |
+| 9 | **RETURNING TO DOCK** |
+| 10 | **CHARGING** |
 
 ---
 
