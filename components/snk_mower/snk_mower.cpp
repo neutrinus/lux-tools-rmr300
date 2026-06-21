@@ -271,7 +271,7 @@ void SnkMower::finish_setup() {
   }
 
   setup_display();
-  set_display_text("----");
+  set_display_text("boot");
 
   if (boot_delay_ms_ > 0) {
     ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
@@ -375,15 +375,18 @@ void SnkMower::set_display_text(const char *text, bool colon) {
 }
 
 void SnkMower::set_display_battery(int percent) {
-  char buf[5];
   percent = std::min(100, std::max(0, percent));
+  display_segments_[0] = 0;
   if (percent == 100) {
-    buf[0] = 'b', buf[1] = '1', buf[2] = '0', buf[3] = '0';
+    display_segments_[1] = char_to_segments_('1');
+    display_segments_[2] = char_to_segments_('0');
+    display_segments_[3] = char_to_segments_('0');
   } else {
-    buf[0] = 'b', buf[1] = '0' + (percent / 10);
-    buf[2] = '0' + (percent % 10), buf[3] = ' ';
+    display_segments_[1] = char_to_segments_('0' + (percent / 10));
+    display_segments_[2] = char_to_segments_('0' + (percent % 10));
+    display_segments_[3] = char_to_segments_(' ');
   }
-  set_display_text(buf);
+  display_colon_ = 0;
 }
 
 void SnkMower::set_charging_display(int percent) {
@@ -1300,6 +1303,20 @@ void SnkMower::publish_mower_state(MowerState state) {
     set_display_battery(last_battery_percent_);
   } else if (state == MowerState::CHARGING) {
     set_charging_display(last_battery_percent_);
+  } else if (state == MowerState::ERROR_STATE) {
+    char buf[5];
+    int err = std::max(0, std::min(error_code_, 999));
+    if (err >= 100) {
+      buf[0] = 'E'; buf[1] = '0' + (err / 100);
+      buf[2] = '0' + ((err / 10) % 10); buf[3] = '0' + (err % 10);
+    } else if (err >= 10) {
+      buf[0] = 'E'; buf[1] = '0' + (err / 10);
+      buf[2] = '0' + (err % 10); buf[3] = ' ';
+    } else {
+      buf[0] = 'E'; buf[1] = '0' + err; buf[2] = ' '; buf[3] = ' ';
+    }
+    buf[4] = '\0';
+    set_display_text(buf);
   } else {
     set_display_text(STATE_DISPLAY[idx]);
   }
