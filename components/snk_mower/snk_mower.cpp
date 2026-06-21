@@ -5,7 +5,6 @@
 #include "esphome/components/wifi/wifi_component.h"
 #include <esp_mac.h>
 #include <time.h>
-#include "soc/gpio_struct.h"
 
 namespace esphome {
 namespace snk_mower {
@@ -95,36 +94,6 @@ static int voltage_to_percent(float v) {
   return 50;
 }
 
-void SnkMower::fp_init(FastPin& fp, gpio_num_t gpio) {
-  if (gpio < 32) {
-    fp.set_reg = &GPIO.out_w1ts;
-    fp.clr_reg = &GPIO.out_w1tc;
-  } else {
-    fp.set_reg = &GPIO.out1_w1ts.val;
-    fp.clr_reg = &GPIO.out1_w1tc.val;
-  }
-  fp.mask = 1UL << (gpio % 32);
-}
-
-void SnkMower::shift24_fast(const FastPin& clk, const FastPin& mosi,
-                            const FastPin& cs,
-                            uint8_t b0, uint8_t b1, uint8_t b2) {
-  fp_clr(cs);
-  const uint8_t bytes[] = {b0, b1, b2};
-  for (int b = 0; b < 3; b++) {
-    uint8_t val = bytes[b];
-    for (int i = 7; i >= 0; i--) {
-      if ((val >> i) & 1)
-        fp_set(mosi);
-      else
-        fp_clr(mosi);
-      fp_set(clk);
-      fp_clr(clk);
-    }
-  }
-  fp_set(cs);
-}
-
 SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 
 void SnkMower::setup() {
@@ -185,18 +154,34 @@ void SnkMower::setup_display() {
     ESP_LOGW(TAG, "Display pins not configured, skipping display init");
     return;
   }
-  gpio_set_direction(display_clk_, GPIO_MODE_OUTPUT);
-  gpio_set_direction(display_mosi_, GPIO_MODE_OUTPUT);
-  gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
-  gpio_set_level(display_clk_, 0);
-  gpio_set_level(display_mosi_, 0);
-  gpio_set_level(display_cs_, 0);  // OE active (LOW)
 
-  fp_init(clk_pin_, display_clk_);
-  fp_init(mosi_pin_, display_mosi_);
-  fp_init(cs_pin_, display_cs_);
+  spi_bus_config_t bus_cfg = {};
+  bus_cfg.mosi_io_num = display_mosi_;
+  bus_cfg.miso_io_num = -1;
+  bus_cfg.sclk_io_num = display_clk_;
+  bus_cfg.quadwp_io_num = -1;
+  bus_cfg.quadhd_io_num = -1;
+  bus_cfg.max_transfer_sz = 4;
 
-  ESP_LOGI(TAG, "Display initialized (CLK=%d, MOSI=%d, CS=%d)",
+  esp_err_t ret = spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_DISABLED);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "SPI bus init failed: %d", ret);
+    return;
+  }
+
+  spi_device_interface_config_t dev_cfg = {};
+  dev_cfg.clock_speed_hz = 1000000;
+  dev_cfg.mode = 0;
+  dev_cfg.spics_io_num = display_cs_;
+  dev_cfg.queue_size = 1;
+
+  ret = spi_bus_add_device(SPI2_HOST, &dev_cfg, &spi_dev_);
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "SPI device add failed: %d", ret);
+    return;
+  }
+
+  ESP_LOGI(TAG, "Display initialized (SPI2: CLK=%d, MOSI=%d, CS=%d, 1MHz)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
 
   if (display_timer_ == nullptr) {
@@ -225,12 +210,10 @@ void SnkMower::display_timer_callback(void *arg) {
 void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
+  if (spi_dev_ == nullptr) return;
 
   static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
   static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
-  // Physical positions: 0 (leftmost)=b1 bit5, 1=b1 bit4, 2=b1 bit3, 3(rightmost)=b1 bit2
-  // U4 (b0) reserved for colon / peripherals (not digit select)
-  // Decimal point bit not yet identified (not on seg bit7, not on b0)
 
   uint8_t seg = display_segments_[current_digit_];
   uint8_t b0 = DIGIT_B0_MAP[current_digit_];
@@ -238,7 +221,14 @@ void SnkMower::refresh_display_impl() {
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  shift24_fast(clk_pin_, mosi_pin_, cs_pin_, b0, b1, seg);
+  spi_transaction_t trans = {};
+  trans.length = 24;
+  trans.flags = SPI_TRANS_USE_TXDATA;
+  trans.tx_data[0] = b0;
+  trans.tx_data[1] = b1;
+  trans.tx_data[2] = seg;
+
+  spi_device_polling_transmit(spi_dev_, &trans);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {

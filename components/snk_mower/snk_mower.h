@@ -7,6 +7,7 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <driver/gpio.h>
+#include <driver/spi_master.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
 
@@ -193,23 +194,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   static constexpr uint8_t DIGITS = 4;
   static constexpr uint8_t DISPLAY_REFRESH_MS = 4;
 
-  struct FastPin {
-    volatile uint32_t* set_reg;
-    volatile uint32_t* clr_reg;
-    uint32_t mask;
-  };
-
-  static void fp_init(FastPin& fp, gpio_num_t gpio);
-  static inline void fp_set(const FastPin& fp) { *fp.set_reg = fp.mask; }
-  static inline void fp_clr(const FastPin& fp) { *fp.clr_reg = fp.mask; }
-
-  static void shift24_fast(const FastPin& clk, const FastPin& mosi,
-                           const FastPin& cs,
-                           uint8_t b0, uint8_t b1, uint8_t b2);
-
-  FastPin clk_pin_;
-  FastPin mosi_pin_;
-  FastPin cs_pin_;
+  spi_device_handle_t spi_dev_{nullptr};
 
   static constexpr uint8_t CHG_FRAMES[3] = {
       0b00001000,
