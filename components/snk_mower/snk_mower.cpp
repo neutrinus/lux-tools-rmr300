@@ -358,11 +358,22 @@ void SnkMower::refresh_display_impl() {
   }
 
   uint8_t dig = 1 << current_digit_;
+  uint8_t b0 = 0;
+  uint8_t b1 = 0;
+
+  if (current_digit_ == 0 || current_digit_ == 3) {
+    b0 = display_colon_ | dig;
+    b1 = 0x00;
+  } else {
+    b0 = 0x00;
+    b1 = display_colon_ | dig;
+  }
+
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
   shift24(display_clk_, display_mosi_, display_cs_,
-          0x00,
-          display_colon_ | dig,
+          b0,
+          b1,
           seg);
 }
 
