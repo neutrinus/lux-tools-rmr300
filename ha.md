@@ -1,8 +1,8 @@
 # Home Assistant Integration — SNK Mower ESPHome
 
-## Status: ⚠️ Boot handshake works — display dark, protocol unknown
+## Status: ✅ Boot handshake works — display fully controllable
 
-Boot sequence resolved 2026-06-19:
+All 4 digits driven by U3 (b1). Colon hardware-powered. Decimal points not present/identified. Boot sequence resolved 2026-06-19:
 
 | Phase | Trigger | ESP sends | MB sends |
 |-------|---------|-----------|----------|
@@ -116,10 +116,7 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 ### What's NOT yet working
 
-- Display (LED 7-segment) — never reliably lit up. See [Display test history](#display-test-history) below.
-  - CLK=5, MOSI=32 confirmed as working data pins (210 scan) but no protocol works
-  - 74HC595 shift register protocol likely wrong — probably **MAX7219** (standard LED 7-segment driver, 3-wire), I²C or main MCU controls display
-  - GPIO34/39 are input-only (silent gpio_set_level failure)
+- **Decimal points** — not found on seg bits (0x01–0x80) nor on U4 (b0 0x00–0xFF). May not exist physically.
 - Buttons (START/HOME/ON) — tylko OK na GPIO19 potwierdzony. Reszta prawdopodobnie przez UART (CMD_EXEC_ACTION = 0x41000003 od MB)
 - Mowing start: not yet tested via HA
 
@@ -171,6 +168,14 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 | Docked | `IdLE` | Steady |
 | Error | `Err` | Permanently |
 | Locked | `LoCK` | Permanently |
+
+**Display driver summary (discovered 2026-06-21):**
+- Pins: CLK=GPIO33, MOSI=GPIO25, CS=GPIO32 — 3× 74HC595 daisy-chained
+- Data order: shift24(b0=U4, b1=U3, b2=U1) — U1 drives segment lines, U3 drives digit select, U4 unused for digits
+- Digit select (U3/b1): `{0x20, 0x10, 0x08, 0x04}` — all 4 digits via U3, bit5→bit2 left→right
+- Segments (U1/b2): standard 7-segment a=bit0…g=bit6. Bit7 (DP) not connected.
+- Colon: hardware-powered (stays lit whenever display active). Not controlled by any b0 bit in isolation.
+- Decimal points: not found on seg bits 0–7 nor on U4 bits 0–7.
 
 ## Home Assistant — Template Lawn Mower
 
@@ -452,12 +457,12 @@ Wprowadzone wcześniej wysyłanie ramek `POLL` podczas startowego opóźnienia (
 - **Problem:** ESP32 wysyłał zapytania, płyta główna na nie odpowiadała, a nieodczytywany bufor RX ESP32 ulegał całkowitemu przepełnieniu (overflow). Powodowało to stałe zablokowanie procesu handshake w fazie `BootPhase::PRE`.
 - **Rozwiązanie:** Usunięto wczesny powrót (`return;`) podczas oczekiwania startowego. Bufor RX jest teraz odczytywany na bieżąco od samego początku, a handshake przebiega natychmiast i bezbłędnie. Zwiększono domyślny `boot_delay` w `snk-mower.yaml` do 30 sekund w celu zapewnienia bardzo bezpiecznego okna dla OTA.
 
-### 2. Podział sterowania wyświetlaczem (U3 = prawa strona, U4 = lewa strona)
+### 2. Podział sterowania wyświetlaczem (U3 = prawa strona, U4 = lewa strona — HIPOTEZA ODRZUCONA)
 Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświetlacza. Po korekcie orientacji:
 - **Ustalono:** Rejestr `U3` (bajt `b1`) steruje **prawymi dwoma fizycznymi pozycjami** (poz. 2 i 3).
 - **Fakty:** `b1=0x04` → pozycja fizyczna 2 (druga od prawej), `b1=0x08` → pozycja fizyczna 3 (skrajnie prawa).
-- Rejestr `U4` (bajt `b0`) musi sterować **lewymi dwoma fizycznymi pozycjami** (poz. 0 i 1).
-- Bity `0x01`, `0x02`, `0x04`, `0x08` na `b0` (testowane w Approach 1) **nie aktywują żadnych pozycji** — lewa strona potrzebuje innych bitów.
+- **Początkowa hipoteza:** Rejestr `U4` (bajt `b0`) musi sterować lewymi dwoma pozycjami. **Późniejsze testy obaliły tę hipotezę** — wszystkie 4 cyfry są na U3 (b1), a U4 nie steruje żadną cyfrą.
+- Bity `0x01`, `0x02`, `0x03`, `0x04`, `0x08` na `b0` (**nie aktywują żadnych pozycji**). Ostatecznie odkryto brakujące bity na U3: `b1=0x10` i `b1=0x20`.
 
 ### 3. Eksperyment Diagnostyczny: DISPLAY TEST — wyniki po korekcie orientacji (2026-06-21)
 Obserwacje z poprawną orientacją (przyciski na dole):
@@ -489,10 +494,10 @@ Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80), **
 | 2 (druga od prawej) | bit 2 | 0x04 |
 | 3 (skrajnie prawa) | bit 3 | 0x08 |
 
-- **Wszystkie 4 cyfry są sterowane przez U3 (b1).** U4 (b0) nie uczestniczy w selekcji cyfr — prawdopodobnie steruje dwukropkiem, wskaźnikiem baterii lub backlightem.
+- **Wszystkie 4 cyfry są sterowane przez U3 (b1).** U4 (b0) nie uczestniczy w selekcji cyfr.
 - **`DIGIT_B1_MAP = {0x20, 0x10, 0x08, 0x04}`** (kolejność lewa→prawa: bit5, bit4, bit3, bit2)
-- **`DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}`** (U4 wyłączony dla cyfr)
-- **Dwukropek (`display_colon_`):** Ustawiony na `0b00110000` (0x30) koliduje z bitami 4 i 5 U3 — wymaga przeniesienia na U4. Na razie wyłączony (0x00) do dalszej diagnostyki.
+- **`DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}`** (U4 nieużywany — colon jest hardwarowo zawsze włączony, DP nie znaleziony na seg ani na U4)
+- **Dwukropek (`display_colon_`):** Stale włączony przez hardware. Ustawienie `display_colon_` na 0x30 koliduje z bitami 4 i 5 U3 i jest niepotrzebne — colon działa bez sterowania.
 
 ### 6. COLON BLANK SWEEP — WYNIK: DWUKROPEK DZIAŁA (2026-06-21)
 Wykonano pełny skan 16 kombinacji `b0` (wszystkie single bity + wybrane kombinacje + 0x00 + 0xFF) na wygaszonym tle (`seg=0x80` = DP). Wynik z logu:
