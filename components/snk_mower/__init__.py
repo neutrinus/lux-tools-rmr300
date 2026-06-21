@@ -60,9 +60,9 @@ CONFIG_SCHEMA = (
         {
             cv.GenerateID(): cv.declare_id(SnkMower),
             cv.Optional(CONF_PIN, default="9633"): validate_pin,
-            cv.Optional(CONF_DISPLAY_CLK, default=18): cv.int_range(0, 39),
-            cv.Optional(CONF_DISPLAY_MOSI, default=23): cv.int_range(0, 39),
-            cv.Optional(CONF_DISPLAY_CS, default=5): cv.int_range(0, 39),
+            cv.Optional(CONF_DISPLAY_CLK, default=33): cv.int_range(0, 39),
+            cv.Optional(CONF_DISPLAY_MOSI, default=25): cv.int_range(0, 39),
+            cv.Optional(CONF_DISPLAY_CS, default=32): cv.int_range(0, 39),
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
             cv.Optional(CONF_RAIN_PIN): cv.int_range(0, 39),

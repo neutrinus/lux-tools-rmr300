@@ -4,6 +4,7 @@
 #include "esphome/core/application.h"
 #include "esphome/components/wifi/wifi_component.h"
 #include <esp_mac.h>
+#include <time.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -459,6 +460,26 @@ void SnkMower::send_return_home() {
   send_json(doc);
 }
 
+void SnkMower::send_trim() {
+  JsonDocument doc;
+  doc["cmd"] = CMD_ESP_TRIM;
+  doc["auto"] = 1;
+  doc["trim"] = 120;
+  time_t now = time(nullptr);
+  struct tm *t = localtime(&now);
+  int st = t->tm_hour * 60 + t->tm_min;
+  const char *days[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
+  for (int i = 0; i < 7; i++) {
+    char st_key[8];
+    snprintf(st_key, sizeof(st_key), "%s_st", days[i]);
+    doc[st_key] = st;
+    char len_key[8];
+    snprintf(len_key, sizeof(len_key), "%s_len", days[i]);
+    doc[len_key] = 120;
+  }
+  send_json(doc);
+}
+
 void SnkMower::send_esp_state(int state) {
   JsonDocument doc;
   doc["cmd"] = CMD_ESP_STATE;
@@ -546,6 +567,14 @@ void SnkMower::loop() {
         boot_delay_ms_ = 0;
         phase_start_ms_ = now;
         last_boot_ms_ = now;
+
+        if (device_info_received_) {
+          ESP_LOGI(TAG, "DEVICE_INFO already received — entering SYNC phase");
+          boot_phase_ = BootPhase::SYNC;
+          device_info_arrived_ms_ = now;
+          info_burst_count_ = 0;
+          init_burst_count_ = 0;
+        }
       }
     }
   }
@@ -852,14 +881,19 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     }
   }
 
-  // DEVICE_INFO from MB — start SYNC burst on first receipt
-  if (boot_phase_ == BootPhase::PRE && boot_delay_ms_ == 0) {
-    ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
-    boot_phase_ = BootPhase::SYNC;
-    phase_start_ms_ = millis();
-    device_info_arrived_ms_ = phase_start_ms_;
-    info_burst_count_ = 0;
-    init_burst_count_ = 0;
+  // DEVICE_INFO from MB — start SYNC burst
+  if (boot_phase_ == BootPhase::PRE) {
+    device_info_received_ = true;
+    if (boot_delay_ms_ == 0) {
+      ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
+      boot_phase_ = BootPhase::SYNC;
+      phase_start_ms_ = millis();
+      device_info_arrived_ms_ = phase_start_ms_;
+      info_burst_count_ = 0;
+      init_burst_count_ = 0;
+    } else {
+      ESP_LOGI(TAG, "DEVICE_INFO received during boot delay — will transition after delay");
+    }
   }
 }
 
@@ -1021,7 +1055,21 @@ void SnkMower::handle_setting_ack(const JsonDocument &doc, uint32_t cmd) {
 }
 
 void SnkMower::start_mowing() {
-  ESP_LOGI(TAG, "Command: start mowing (physical button on mainboard)");
+  ESP_LOGI(TAG, "Command: start mowing");
+
+  // Approach 1: Set schedule to start NOW via ESP_TRIM
+  // The MB may auto-start if it sees a matching schedule time
+  send_trim();
+  delay(5);
+
+  // Approach 2: Clear any pending error state
+  send_error_ack();
+  delay(5);
+
+  // Approach 3: Signal ESP state as mowing to encourage MB to follow
+  send_esp_state(2);
+
+  ESP_LOGI(TAG, "Start mowing: trim schedule sent, state=2 signaled");
 }
 
 void SnkMower::return_to_dock() {

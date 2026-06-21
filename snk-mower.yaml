@@ -33,6 +33,10 @@ wifi:
 
 captive_portal:
 
+time:
+  - platform: sntp
+    id: mower_time
+
 api:
   encryption:
     key: "NDgm+gGpAoan2fh1f71mGv9lMga8nOynabbt8gF3JRM="
@@ -57,3 +61,75 @@ snk_mower:
   buzzer_pin: 27
   rain_pin: 36
   boot_delay: 30
+
+  battery_level:
+    name: "${friendly_name} Battery Level"
+  battery_voltage:
+    name: "${friendly_name} Battery Voltage"
+  error_code:
+    name: "${friendly_name} Error Code"
+  light_level:
+    name: "${friendly_name} Light Level"
+  signal_level:
+    name: "${friendly_name} Signal Level"
+  work_area:
+    name: "${friendly_name} Work Area"
+  cut_area:
+    name: "${friendly_name} Cut Area"
+  total_minutes:
+    name: "${friendly_name} Total Minutes"
+  on_minutes:
+    name: "${friendly_name} On Minutes"
+  bat_health:
+    name: "${friendly_name} Battery Health"
+  bat_level_bars:
+    name: "${friendly_name} Battery Bars"
+  rain_delay:
+    name: "${friendly_name} Rain Delay"
+
+  is_mowing:
+    name: "${friendly_name} Is Mowing"
+  is_charging:
+    name: "${friendly_name} Is Charging"
+  is_docked:
+    name: "${friendly_name} Is Docked"
+  has_error:
+    name: "${friendly_name} Has Error"
+  is_locked:
+    name: "${friendly_name} Is Locked"
+  is_returning:
+    name: "${friendly_name} Is Returning"
+
+  device_name:
+    name: "${friendly_name} Device Name"
+  model:
+    name: "${friendly_name} Model"
+  serial:
+    name: "${friendly_name} Serial"
+  firmware_version:
+    name: "${friendly_name} Firmware Version"
+  battery_name:
+    name: "${friendly_name} Battery Name"
+  mower_state:
+    name: "${friendly_name} Mower State"
+
+binary_sensor:
+  - platform: gpio
+    pin: GPIO19
+    name: "${friendly_name} OK Button"
+    device_class: "connectivity"
+    filters:
+      - invert:
+      - delayed_on_off: 10ms
+
+button:
+  - platform: template
+    name: "${friendly_name} Start Mowing"
+    icon: "mdi:play"
+    on_press:
+      - lambda: 'id(my_mower).start_mowing();'
+  - platform: template
+    name: "${friendly_name} Return to Dock"
+    icon: "mdi:home-import-outline"
+    on_press:
+      - lambda: 'id(my_mower).return_to_dock();'

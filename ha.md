@@ -530,6 +530,48 @@ Przywrócono normalną logikę wyświetlania:
 - `display_colon_ = 0` (dwukropek stale włączony przez hardware)
 - Wyświetlacz działa poprawnie: `set_display_text()`, bateria, ładowanie.
 
+## WYNIKI EKSPERYMENTU — START MOWING I PRZYCISK FIZYCZNY (2026-06-21)
+
+### Cel
+Sprawdzić czy ESP może zainicjować koszenie (przez HA lub przycisk START) i czy fizyczny przycisk START generuje ruch na UART.
+
+### Co zrobiono
+1. **Naprawiono boot handshake** — dodano flagę `device_info_received_`, usunięto blokujący guard `&& boot_delay_ms_ == 0` w `handle_device_info()`. Bez tej poprawki ESP nigdy nie wychodził z fazy PRE.
+2. **Zaimplementowano `send_trim()`** — wysyła ESP_TRIM (0x300000A6) z harmonogramem natychmiastowego koszenia na wszystkie 7 dni.
+3. **Zaimplementowano `start_mowing()`** — sekwencja: ESP_TRIM + error ack (ESP_ERR_ACK1) + STATE(state=2).
+4. **Zaktualizowano YAML** — dodano wszystkie sensory, binary_sensory, text_sensory, przyciski (Start Mowing, Return to Dock, OK Button).
+5. **Domyślne piny wyświetlacza** zmieniono na CLK=33, MOSI=25, CS=32.
+6. Dodano SNTP do synchronizacji czasu.
+7. Kompilacja: `esphome compile` — OK.
+
+### Wyniki testów użytkownika
+
+| Aspekt | Status | Szczegóły |
+|--------|--------|-----------|
+| Boot handshake | ✅ Działa | PRE → SYNC → DONE → PIN accepted → state=idle. Logi czyste. |
+| Wszystkie sensory w HA | ✅ Działają | Bateria 42%, area 300m², itd. |
+| `start_mowing()` przez HA | ❌ Stary stub | User dalej używa GitHub component — logi pokazują starą wersję `start_mowing()` bez implementacji. |
+| Fizyczny przycisk START | ❌ Brak ruchu UART | W logach ESP nie widać żadnych ramek START_ACK / EXEC_ACTION z MB po naciśnięciu START. |
+| `return_to_dock()` | ❌ Nie testowane | — |
+
+### Wnioski
+1. **Przycisk START nie generuje UART traffic** — obsługa jest w 100% lokalna na U16 (J8 pin 6 → U16 GPIO). ESP nie jest informowany o naciśnięciu START.
+2. **`start_mowing()` niewidoczny** bo user dalej ma starą kompilację z GitHub. Należy przełączyć na `local: components` i przeflashować.
+3. **Harmonogram przez ESP_TRIM to eksperymentalna droga** — nie wiadomo czy mainboard wykona harmonogram od razu. Może wymagać synchronizacji czasu z RTC U13.
+
+### Co dalej
+1. Przełączyć `external_components` w YAML z `github://neutrinus/lux-tools-rmr300@main` na `local: components`
+2. Przeflashować ESP nową kompilacją
+3. Test: przycisk START (nadal brak → to sprzętowe ograniczenie U16)
+4. Test: `start_mowing()` z HA (powinien pokazać `send_trim()` + ESP_STATE w logach)
+5. Jeśli nadal nie działa — rozważyć drugiego ESP do sniffera UART z oryginalnym firmware
+
+### Kluczowy wniosek architektoniczny
+**Nie ma znanego JSON command ESP→MB które by inicjowało koszenie.** Fizyczny START jest obsługiwany wyłącznie przez U16. ESP może tylko:
+- Otrzymywać notyfikacje (STATE, EXEC_ACTION, START_ACK)
+- Ustawiać harmonogram (ESP_TRIM 0x300000A6)
+- Wysyłać error ack (ESP_ERR_ACK1 0x10000001 — to samo co return_to_dock)
+
 ## Key files
 
 | File | Purpose |
