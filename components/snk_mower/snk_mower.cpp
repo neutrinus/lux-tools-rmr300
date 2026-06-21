@@ -428,7 +428,7 @@ void SnkMower::send_wifi_status() {
   JsonDocument doc;
   auto *wifi = wifi::global_wifi_component;
   bool wifi_connected = wifi && wifi->is_connected();
-  int wifi_str = wifi_connected ? 1 : 0;
+  int wifi_str = (compat_mode_) ? 0 : (wifi_connected ? 1 : 0);
 
   doc["cmd"] = CMD_ESP_WIFI;
   doc["wifi"] = wifi_str;
@@ -634,7 +634,9 @@ void SnkMower::loop() {
     }
     if (now - last_esp_state_ > 10000) {
       last_esp_state_ = now;
-      send_esp_state(state_);
+      if (!compat_mode_) {
+        send_esp_state(state_);
+      }
     }
     if (now - last_rain_read_ > 60000) {
       last_rain_read_ = now;
@@ -1101,6 +1103,11 @@ void SnkMower::send_raw_json(const std::string &json_str) {
     return;
   }
   send_json(doc);
+}
+
+void SnkMower::set_compat_mode(bool mode) {
+  compat_mode_ = mode;
+  ESP_LOGI(TAG, "Compat mode (original firmware): %s", mode ? "ON" : "OFF");
 }
 
 void SnkMower::publish_mower_state(MowerState state) {

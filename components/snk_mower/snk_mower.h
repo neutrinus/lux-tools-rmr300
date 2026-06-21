@@ -70,6 +70,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_display_off_timeout(uint32_t minutes);
   void set_rain_pin(gpio_num_t pin);
   void set_boot_delay(uint32_t seconds);
+  void set_compat_mode(bool mode);
 
  protected:
   std::string pin_;
@@ -175,6 +176,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t boot_delay_ms_{0};
   bool shutdown_pending_{false};
   uint32_t shutdown_start_ms_{0};
+  bool compat_mode_{false};  // original firmware compatibility (wifi=0, no periodic state)
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];

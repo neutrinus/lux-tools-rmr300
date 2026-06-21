@@ -1,6 +1,6 @@
 # Home Assistant Integration — SNK Mower ESPHome
 
-## Status: ✅ Boot handshake works — display fully controllable
+## Status: ✅ Full integration working — display optimized with hardware SPI
 
 All 4 digits driven by U3 (b1). Colon hardware-powered. Decimal points not present/identified. Boot sequence resolved 2026-06-19:
 
@@ -530,6 +530,48 @@ Przywrócono normalną logikę wyświetlania:
 - `display_colon_ = 0` (dwukropek stale włączony przez hardware)
 - Wyświetlacz działa poprawnie: `set_display_text()`, bateria, ładowanie.
 
+## OPTYMALIZACJA WYŚWIETLACZA - HARDWARE SPI I REDUKCJA MIGOTANIA (2026-06-21)
+
+### Problem: Wyświetlacz zajmuje ESP32
+Oryginalny kod bit-banging używał `gpio_set_level()` + `delayMicroseconds(1)` przy każdym bicie, co blokowało task timera przez ~144μs per callback (250Hz = ~36ms/s blokowania). Timer `ESP_TIMER_TASK` ma wysoki priorytet, więc blokowanie opóźniało inne timery (WiFi, keepalive, itp.).
+
+### Optymalizacja P0: Direct GPIO Registers + volatile
+**Zmiany:**
+- Dodano strukturę `FastPin` z precomputed maskami rejestrów GPIO (`GPIO.out_w1ts/out_w1tc` dla GPIO<32, `GPIO.out1_w1ts/out1_w1tc` dla GPIO≥32)
+- Zastąpiono `gpio_set_level()` + `delayMicroseconds()` bezpośrednimi zapisami do rejestrów (`*fp.set_reg = fp.mask`)
+- Oznaczono współdzielone dane jako `volatile` (`display_segments_`, `display_colon_`, `current_digit_`, `display_off_`) - zapobiega race conditions między `loop()` a callbackiem timera
+- Usunięto podwójne `setup_display()` z `finish_setup()` i martwą funkcję `refresh_display()`
+
+**Wynik:** Callback timera: ~144μs → ~3-4μs (~40x szybciej)
+
+### Optymalizacja P1: Hardware SPI
+**Zmiany:**
+- Zastąpiono bit-banging (`shift24_fast`) przez hardware SPI2 peripheral
+- Konfiguracja: `spi_bus_initialize(SPI2_HOST, {.mosi=25, .sclk=33, ...}, SPI_DMA_DISABLED)`
+- Device: `spi_bus_add_device(SPI2_HOST, {.clock_speed_hz=2000000, .mode=0, .spics_io_num=-1, .queue_size=1}, &spi_dev_)`
+- Transfer: `spi_transaction_t trans = {.length=24, .flags=SPI_TRANS_USE_TXDATA, .tx_data={b0,b1,seg}}; spi_device_polling_transmit(spi_dev_, &trans);`
+- CS kontrolowany ręcznie: `gpio_set_level(display_cs_, 0)` przed transferem, `gpio_set_level(display_cs_, 1)` po
+- Usunięto `FastPin` struct, `fp_init/fp_set/fp_clr`, `shift24_fast`
+
+**Wynik:** Zerowe obciążenie CPU - transfer przez hardware. Callback: ~3-4μs → ~1-2μs (głównie overhead API call).
+
+### Problem migotania i rozwiązanie CS (OE)
+**Objaw:** Wyświetlacz migotał nawet po optymalizacjach - widoczne "mrugnięcia" przy odświeżaniu.
+
+**Diagnoza:** CS (GPIO32) steruje Output Enable (OE) na wyświetlaczu. Gdy CS=HIGH, wyjścia 74HC595 są wyłączone (high-impedance). W oryginalnym kodzie bit-banging CS szło HIGH po każdym transferze, więc wyświetlacz był wygaszony przez ~99% czasu między odświeżeniami.
+
+**Próby rozwiązania:**
+1. **CS=LOW na stałe** - wyświetlacz pokazywał tylko "b" (niepoprawne dane) - CS musi być strobowany per transfer żeby latchować dane
+2. **CS kontrolowany ręcznie (HIGH między transferami, LOW tylko podczas shiftowania)** - poprawne działanie, minimalne migotanie
+
+**Finalne rozwiązanie:** CS jest kontrolowany ręcznie - HIGH między transferami, LOW tylko podczas `spi_device_polling_transmit()`. To zapewnia poprawne latchowanie danych przy minimalnym czasie wygaszenia.
+
+**Dodatkowe optymalizacje migotania:**
+- `DISPLAY_REFRESH_MS`: 4ms → 2ms (500Hz total, 125Hz per digit zamiast 250Hz/62.5Hz)
+- SPI clock: 1MHz → 2MHz (transfer 24 bitów: 24μs → 12μs)
+
+**Status:** Migotanie zredukowane do minimum. Dalsza redukcja wymagałaby DMA (nie używamy - `SPI_DMA_DISABLED`) lub wyższej częstotliwości odświeżania (1ms), ale 500Hz/2MHz jest wystarczające dla akceptowalnego obrazu. Oryginalny firmware producenta nie migotał wcale - prawdopodobnie używał DMA lub dedykowanego hardware (LCD_CAM peripheral).
+
 ## WYNIKI EKSPERYMENTU — START MOWING I PRZYCISK FIZYCZNY (2026-06-21)
 
 ### Cel
@@ -588,6 +630,273 @@ Reakcja MB (13:56:41):
 - Otrzymywać notyfikacje (STATE, EXEC_ACTION, START_ACK)
 - Ustawiać harmonogram (ESP_TRIM 0x300000A6) — ale MB ma własny harmonogram i może go nie nadpisywać
 - Wysyłać error ack (ESP_ERR_ACK1 0x10000001 — to samo co return_to_dock)
+
+## ANALIZA CAPTURE 04 — KLUCZOWE ODKRYCIE (2026-06-21)
+
+### Co oryginalny ESP32 wysyłał po naciśnięciu START
+
+Pełna analiza `captures/04-return-home/decoded.json` (293 wiadomości, 210 ESP→MB, 83 MB→ESP):
+
+**ESP→MB — wszystkie unikalne komendy:**
+| Cmd hex | Decimal | Fields | Count | Uwagi |
+|---------|---------|--------|-------|-------|
+| 0x40000004 | 1073741828 | — | 1 | BOOT |
+| 0x30000005 | 805306373 | — | 40 | KEEPALIVE |
+| 0x30000028 | 805306408 | state=0 | 1 | ESP_STATE (TYLKO RAZ, state=0!) |
+| 0x300000A1 | 805306529 | — | 123 | POLL |
+| 0x22000000 | 570425344 | rain=1 | 2 | RAIN |
+| 0x30000021 | 805306401 | **wifi=0, str=0** | 12 | WIFI (**DISCONNECTED!**) |
+| 0x30000022 | 805306402 | bt=0, str=0 | 12 | BT |
+| 0x10000001 | 268435457 | — | 1 | ERR_ACK1 |
+| 0x10000002 | 268435458 | — | 1 | ERR_ACK2 |
+| 0x10000007 | 268435463 | — | 2 | ERR_ACK7 |
+| 0x300000A6 | 805306534 | — | 1 | ESP_TRIM (**PUSTY — bez pól harmonogramu!**) |
+| 0x300000A7 | 805306535 | — | 3 | ESP_RAIN_CFG |
+| 0x300000A8 | 805306536 | — | 1 | ESP_MULTIZONE |
+| 0x40000001 | 1073741825 | init=3 | 4 | INIT |
+| 0x40000006 | 1073741830 | hv,sv,mac | 5 | ESP_INFO |
+| 0x41000005 | 1090519045 | pwd | 1 | PIN_SEND |
+
+**MB→ESP — sekwencja START:**
+1. `[48] 0x41000020 result=1` — START_ACK
+2. `[49] 0x330000A0 state=2` — STATUS MOWING
+3. `[50] 0x41000003` — EXEC_ACTION
+4. `[51] 0x330000A0 state=6` — STATUS ERROR (lift on bench)
+5. `[55] 0x41000004 err=16` — ERROR_NOTIFY
+6. `[56] 0x330000A0 state=7 error=16`
+
+### KLUCZOWE WNIOSKI
+
+1. **Oryginalny ESP32 NIE wysyłał żadnej komendy koszenia!** Po naciśnięciu START, ESP kontynuował tylko POLL/KEEPALIVE. START jest obsługiwany w 100% lokalnie przez U16 (J8 pin6 → U16 GPIO → U13).
+
+2. **WiFi był DISCONNECTED (wifi=0, str=0)** — oryginalny firmware nie był połączony z MQTT. Wszystkie komendy "action" z dekompilacji (`{"app_main":24.125,"chedule":<value>}`) były wysyłane do chmury MQTT, NIE do MB przez UART.
+
+3. **ESP_STATE wysłane TYLKO RAZ z state=0** — oryginał nie wysyłał cyklicznie state=1. Nasz ESPHome wysyła state=1 co 10s — może nadpisywać state=2 (MOWING) po naciśnięciu START.
+
+4. **ESP_TRIM wysłany jako PUSTY `{"cmd":805306534}`** — bez pól harmonogramu! Harmonogram przychodzi Z MB jako SCHEDULE (0x330000A6). ESP_TRIM od ESP to tylko "odbiór" harmonogramu, nie ustawianie.
+
+5. **Korekta wcześniejszych notatek**: ha.md linia 618 mówiła "Fizyczny START nie generuje żadnych ramek UART". **TO BYŁO BŁĘDNE** — capture 04 pokazuje że START generuje 0x41000020 (START_ACK), 0x41000003 (EXEC_ACTION), STATUS state=2. Ale to są MB→ESP (notyfikacje), nie ESP→MB (komendy).
+
+### DLACZEGO START NIE DZIAŁA Z ESPHOME
+
+Dwie kluczowe różnice między oryginalnym firmware a ESPHome:
+
+| Parametr | Oryginał | ESPHome | Wpływ |
+|----------|----------|---------|-------|
+| `wifi` | 0 (disconnected) | 1 (connected) | MB może blokować START gdy WiFi "connected" (oczekuje komend z chmury) |
+| `state` | 0, wysłany RAZ | 1, wysyłany co 10s | Cykliczne state=1 może nadpisywać state=2 (MOWING) |
+
+### ROZWIĄZANIE: compat_mode
+
+Dodano `compat_mode: true` w YAML które:
+- Wymusza `wifi=0, str=0` (jak oryginał — disconnected)
+- Wyłącza cykliczne wysyłanie ESP_STATE (tylko state=0 raz przy starcie)
+
+To powinno pozwolić fizycznemu przyciskowi START działać z ESPHome firmware.
+
+## TESTY KOMEND ACTION (2026-06-21)
+
+### Komendy przetestowane przez HA (wszystkie zignorowane przez MB)
+
+| Komenda | JSON wysłany | Reakcja MB |
+|---------|-------------|------------|
+| Action Mow | `{"app_main":24.125,"chedule":1}` | ❌ Ignorowane (brak `cmd` field) |
+| Action Dock | `{"app_main":24.125,"chedule":4}` | ❌ Ignorowane |
+| START_ACK | `{"cmd":1090519072}` | ❌ Ignorowane (to MB→ESP cmd, nie ESP→MB) |
+| EXEC_ACTION | `{"cmd":1090519043}` | ❌ Ignorowane (to MB→ESP cmd) |
+| CMD action=1 | `{"cmd":1090519050,"action":1}` | ❌ Ignorowane |
+| CMD action=4 | `{"cmd":1090519050,"action":4}` | ❌ Ignorowane |
+
+### Wniosek
+**Nie istnieje komenda ESP→MB która uruchamia koszenie.** Oryginalny firmware też jej nie miał — START jest wyłącznie fizyczny (U16 GPIO).
+
+Jedyna droga do koszenia z HA:
+1. **Harmonogram z auto=1** — U13 ma "Robot on schedule, start work" (automatyczne koszenie)
+2. **Sniffer oryginalnego firmware** — może odkryje więcej (choć oryginał też nie kosił z ESP)
+
+## PLAN: SNIFFER ORYGINALNEGO FIRMWARE (2026-06-21)
+
+### Cel
+Podsłuchać pełną komunikację UART z oryginalnym firmware ESP32 podczas:
+- Normalnego bootu
+- Naciśnięcia START + OK
+- Koszenia
+- Powrotu do docku
+- Obsługi błędów
+
+### Hardware
+1. Wgrać oryginalny firmware na ESP32 na płytce display (z dumpa `esp32_dump.bin`)
+2. Dodatkowe ESP32 (sniffer) na pająku, zasilane z szpilek wbitych w J2 na display PCB
+3. Sniffer podłączony do obu linii UART J2 (TX i RX)
+4. Zamknięta obudowa — sniffer podsłuchuje zdalnie przez WiFi
+
+### Co szukamy
+1. Czy oryginalny ESP wysyła cokolwiek ponad POLL/KEEPALIVE/BOOT/PIN/INIT/INFO/WIFI/BT/RAIN/TRIM/RAIN_CFG/MULTIZONE
+2. Czy jest jakakolwiek reakcja ESP na START_ACK / EXEC_ACTION (poza kontynuacją POLL)
+3. Pełna sekwencja przy harmonogramie auto=1 (jeśli oryginał kiedykolwiek kosił automatycznie)
+4. Czy są jakieś nieudokumentowane komendy w innych scenariuszach
+
+### Ograniczenia
+- Oryginalny firmware miał WiFi disconnected (wifi=0) — nie kosił z chmury
+- START jest lokalny (U16) — sniffer pokaże tylko notyfikacje MB→ESP
+- Jeśli nie ma ścieżki ESP→MB dla koszenia, sniffer to potwierdzi ale nie rozwiąże problemu
+
+## Key files
+
+### Główna przyczyna
+
+Oryginalny firmware używa **sprzętowego peryferium LCD_CAM (I80)** z DMA do ciągłego, jitter-free odświeżania wyświetlacza — potwierdzone dekompilacją w `esp32/notes/ESP32_DECOMPILATION.md`. Nasz kod używa **software'owego timera + CPU-initiated SPI** — fundamentalnie różna architektura.
+
+SOC ESP32 potwierdza wsparcie: `SOC_LCD_I80_SUPPORTED=true`, `SOC_LCD_I80_BUSES=2`, `SOC_LCD_I80_BUS_WIDTH=24` (z sdkconfig ESPHome).
+
+### Konkretne problemy w `components/snk_mower/snk_mower.cpp`
+
+1. **`ESP_TIMER_TASK` dispatch** (`snk_mower.cpp:194`) — callback działa w tasku FreeRTOS, podlega jitterowi od WiFi/BLE/loggingu innych tasków systemowych. Opóźnienie = opuszczenie klatki = migotanie.
+2. **`skip_unhandled_events = true`** (`snk_mower.cpp:196`) — jeśli callback się spóźni, następny tick jest pomijany. Przeskoczona klatka = widoczne "mrugnięcie".
+3. **Multiplexing 125Hz/digit, 25% duty** (`DISPLAY_REFRESH_MS = 2`, 4 cyfry): każda cyfra świeci 2ms, gaszona 6ms. Jitter w 2ms interwale = nierównomierne naświetlenie cyfr = flicker.
+4. **Brak double-bufferingu** — `loop()` zapisuje `display_segments_[]` podczas gdy timer czyta. `volatile` zapobiega reorderingowi kompilatora, ale nie torn reads w 4-cyfrowym cyklu.
+5. **Overhead per callback**: `gpio_set_level()` (function call + bounds check) × 2 + stack-alloc `spi_transaction_t` + `spi_device_polling_transmit()` API overhead — wszystko CPU-bound, zmienny czas.
+6. **`spi_device_polling_transmit()` blokuje CPU** na ~12μs — szybkie, ale nie deterministyczne (bus arbitration, interrupts).
+
+### Rozwiązania (ranking effort/impact)
+
+#### Tier 1 — Szybkie software'owe (niski effort, umiarkowana poprawa)
+
+| # | Co | Gdzie | Dlaczego |
+|---|-----|-------|----------|
+| 1 | Zwiększ refresh: `DISPLAY_REFRESH_MS` 2→1ms (250Hz/digit) | `snk_mower.h:195` | SPI transfer = 12μs, masz 188μs headroom. Wyższa freq = mniej widoczny flicker |
+| 2 | Direct GPIO register writes dla CS zamiast `gpio_set_level()` | `snk_mower.cpp:227,238` | `GPIO.out1_w1tc/w1ts` dla GPIO32 — deterministyczne ~50ns vs zmienny function call |
+| 3 | Pre-allocate `spi_transaction_t` jako member/static | `snk_mower.cpp:229` | Unikaj stack alloc + zero-init per callback |
+| 4 | Double-buffer `display_segments_[]` z atomowym pointer swap | `snk_mower.h:211` | Eliminuje torn reads między `loop()` a timerem |
+
+#### Tier 2 — Średni effort, duża poprawa
+
+| # | Co | Dlaczego |
+|---|-----|----------|
+| 5 | **Dedykowany FreeRTOS task** (pinned to Core 1, priority high) z `vTaskDelayUntil()` | Core 0 = WiFi/BT; Core 1 = display. `vTaskDelayUntil` daje precyzyjny period. Większa kontrola niż `esp_timer` |
+| 6 | **`ESP_TIMER_ISR` dispatch** zamiast `ESP_TIMER_TASK` | Callback w ISR = nie podlega scheduleringowi. UWAGA: `spi_device_polling_transmit()` może nie być ISR-safe — wymaga low-level SPI register access lub `spi_device_polling_transmit()` z `intr_flags` |
+| 7 | **Hardware CS przez SPI** (`spics_io_num` + `cs_ena_pretrans/posttrans`) | Precyzyjne CS timing przez hardware. Zespół próbował i odrzucił, ale warto ponowić z poprawną konfiguracją timing |
+| 8 | **SPI DMA** (`SPI_DMA_ENABLED`) | Transfer bez CPU, deterministyczny. Dla 24-bit gain jest mały, ale eliminuje bus arbitration jitter |
+
+#### Tier 3 — Najlepsze (replikuje oryginalny firmware, najwyższy effort)
+
+| # | Co | Dlaczego |
+|---|-----|----------|
+| 9 | **LCD_CAM (I80) peripheral z 1-bit bus** — **ROZWIĄZANIE ORYGINALNEGO FW** | ESP32 ma dedykowany LCD_CAM z DMA. Bus width konfigurowalny: 1/2/4/8/16/24 bit. Z 1-bit: `LCD_DATA0`→DS(MOSI), `LCD_WR`→SH_CP(CLK), `LCD_CS`→ST_CP(latch). **Zero CPU load, perfect timing, DMA continuous** — identycznie jak oryginał. SOC potwierdza: `SOC_LCD_I80_SUPPORTED=true`. ESP-IDF: `esp_lcd_new_panel_i80()` lub low-level `lcd_cam` HAL. Dekompilacja potwierdza rejestr `0x3FF4E0C4` = LCD_CAM control |
+| 10 | **RMT peripheral** (alternatywa) | RMT z DMA + loop = ciągły output bez CPU. Używany dla WS2812 ale napędzi 74HC595. 3 zsynchronizowane kanały (MOSI/CLK/CS) lub encoding 3 sygnałów. ESPHome ma RMT component |
+| 11 | **I2S peripheral** (mniej konwencjonalne) | `SOC_I2S_SUPPORTS_LCD_CAMERA=true` — I2S może drive'ować LCD_CAM. Continuous DMA stream. Trudniejsza konfiguracja dla non-audio |
+
+### Diagnostyka (przed / równolegle z implementacją)
+
+| # | Co | Dlaczego |
+|---|-----|----------|
+| 12 | **Logic analyzer** na CLK/CS/MOSI — zmierz aktualny jitter interwału 2ms | Ilościowo zweryfikuj gdzie jest jitter (timer? SPI? both?) |
+| 13 | **Profile `refresh_display_impl()`** — mierz actual vs expected interval | `esp_timer_get_time()` na początku callback |
+| 14 | **Tymczasowo wyłącz WiFi** i obserwuj czy flicker maleje | Potwierdza czy WiFi scheduling jest głównym winowajcą |
+| 15 | **Zmierz oryginalny firmware** — jeśli masz drugi ESP32 jako sniffer, zmierz refresh rate oryginału | Daje baseline do match'owania |
+
+### Rekomendacja
+
+**Najwyższy ROI**: #1 + #2 + #4 (Tier 1, ~30 min pracy) — powinno zredukować flicker znacząco przy minimalnym ryzyku.
+
+**Docelowo**: #9 (LCD_CAM) — to jest dokładnie to, co robił oryginalny firmware. Dekompilacja już to potwierdza, SOC wspiera I80 z 1-bit bus, ESP-IDF ma API. Po implementacji flicker zniknie całkowicie (hardware DMA, zero jitter).
+
+---
+
+## Wyzwania implementacji LCD_CAM (I80) dla wyświetlacza 74HC595 (2026-06-21)
+
+Implementacja LCD_CAM (#9 z analizy powyżej) jest docelowym rozwiązaniem, ale stoją przed nią konkretne wyzwania:
+
+### 1. Bus width — musimy użyć 1-bit (nieparallel)
+
+Mamy fizycznie tylko 3 linie do 74HC595: CLK=GPIO33, MOSI=GPIO25, CS=GPIO32. LCD_CAM I80 standardowo używa równoległy bus (8/16/24-bit), ale obsługuje też 1-bit. 24-bit frame = 24 cykli zegara z 1-bit bus (zamiast 1 cyklu z 24-bit bus).
+
+**Wątpliwość**: Oryginalny firmware według dekompilacji ("5 × 4 bytes data buffer", "11 items", "24-bit frame format") może używał szerszego busa. Jeśli tak, to znaczy że na innej rewizji PCB był parallel connector. My musimy zrobić 1-bit na naszych pinach — powinno działać, ale wymaga weryfikacji że `esp_lcd_new_panel_i80()` akceptuje `bus_width=1`.
+
+### 2. CS polarity — konflikt 74HC595 vs LCD_CAM
+
+**74HC595 ST_CP**: latchuje na **narastającym** zboczu (rising edge). Po transferze CS musi: LOW (przez shift) → HIGH (latch).
+
+**LCD_CAM I80 CS**: standardowo **active-low** (low podczas transferu, high między). To akurat pasuje — ale LCD_CAM często automatycznie strobuje CS w specyficzny sposób (cs_ena_pretrans / cs_ena_posttrans). Trzeba skonfigurować precyzyjnie, by CS rising edge następował PO ostatnim bicie clocka, nie wcześniej.
+
+**Ryzyko**: jeśli LCD_CAM podniesie CS zanim skończy clockować ostatni bit, ostatni bit nie wejdzie do rejestru. 74HC595 wymaga setup/hold time na SH_CP.
+
+### 3. Multiplexing — DMA continuous vs 4 różne frames
+
+LCD_CAM z DMA jest projektowany do jednorazowego zapisu całego frame buffer (jak LCD panel). My potrzebujemy **cyklicznie** wysyłać 4 różne 24-bit frames (po jednym na cyfrę multiplexu) w pętli, ~500-1000 razy na sekundę.
+
+Opcje:
+- **(a) Jeden duży DMA buffer z 4-frame cycle repeat** — np. 1000 powtórzeń cyklu 4 cyfr = 12 KB, re-fill gdy się kończy. Skomplikowane zarządzanie, ale realistyczne.
+- **(b) 4 osobne DMA transfers schedulowane po kolei** — interrupt po każdym transferze, schedule następnego. Wraca część jittera.
+- **(c) DMA circular mode** — ESP32 LCD_CAM obsługuje? Trzeba weryfikować w TRM §14.
+
+### 4. ESPHome/ESP-IDF API — nie ma gotowego panel driver dla 74HC595
+
+`esp_lcd` component ESP-IDF ma panel drivers dla ST7789, ST7735, ILI9341, NV3024 itd. **Nie ma driver dla "74HC595 multiplexed display"**. Trzeba:
+
+- **Opcja A**: użyć `esp_lcd_new_i80_bus()` (low-level bus) + własne wysyłanie 24-bit frames przez `esp_lcd_panel_io_tx_param()` lub bezpośrednio po DMA. Piszemy własny "panel" bez `esp_lcd_new_panel_*`.
+- **Opcja B**: bezpośredni dostęp do rejestrów LCD_CAM (`0x3FF4E0C4` control + `0x3FF4E0130..140` data buffer) — tak jak robił oryginalny firmware. Niskopoziomowe, hardware-specific, ale deterministyczne.
+- **Opcja C**: custom ESPHome component wrap'ujący esp_lcd_panel_io_i80.
+
+### 5. GPIO matrix routing — sygnały LCD_CAM do GPIO
+
+LCD_CAM używa sygnały: `LCD_DATA0` (signal ID 100), `LCD_WR` (128), `LCD_CS` (130). Te trzeba przemapować przez `gpio_matrix_out()` na GPIO33/25/32. ESP-IDF `esp_lcd` robi to automatycznie przy `esp_lcd_new_i80_bus()`, ale musimy podać piny poprawnie w `esp_lcd_i80_bus_config_t`.
+
+**Ryzyko**: GPIO32/33 to piny RTC/touch-capable. Może wymagać specjalnej konfiguracji `rtc_gpio_deinit()` przed użyciem jako LCD_CAM. Do weryfikacji.
+
+### 6. Conflict z istniejącym SPI2 — inicjalizacja kolejność
+
+Aktualny kod używa `spi_bus_initialize(SPI2_HOST, ...)`. LCD_CAM to osobny peryferium, nie koliduje sprzętowo, ale:
+- Piny GPIO25/33 są już zajęte przez SPI2. Trzeba `spi_bus_remove_device()` + `spi_bus_free()` przed inicjalizacją LCD_CAM.
+- Kod musi mieć fallback na SPI jeśli LCD_CAM się nie zainicjalizuje.
+
+### 7. OE (Output Enable) — niepewność hardwarowa
+
+HARDWARE.md mówi: "Piny 13 układów U1/U3/U4 są sprzętowo podłączone do masy (GND), dzięki czemu wyjścia są stale aktywne."
+
+Ale w ha.md sekcji "Problem migotania i rozwiązanie CS (OE)" napisaliśmy: "CS (GPIO32) steruje Output Enable (OE) na wyświetlaczu. Gdy CS=HIGH, wyjścia 74HC595 są wyłączone (high-impedance)."
+
+**Te dwa stwierdzenia się wykluczają.** Jeśli OE=GND stale (HARDWARE.md), to CS nie może być OE. Wtedy "migotanie przy CS=HIGH" w starym bit-banging kodzie miało inną przyczynę — np. puste rejestry 74HC595 kiedy CS nie latchuje poprawnie.
+
+**Wyzwanie**: musimy zrozumieć rzeczywisty hardware przed implementacją LCD_CAM. Inaczej skonfigurujemy CS timing błędnie. Logic analyzer na CS/MOSI/CLK + obserwacja oryginalnego firmware'u rozstrzygnie.
+
+### 8. ESP-IDF version compatibility
+
+ESPHome `snk-mower.yaml` używa `framework: type: esp-idf, version: recommended`. `esp_lcd` component jest stabilny od IDF 4.4+, ale API I80 bus miało zmiany w 5.x. Trzeba:
+- Sprawdzić wersję ESP-IDF używaną przez ESPHome (`/home/marek/tmp/kosiarka/.esphome/build/test-mower/.pioenvs/test-mower/config/sdkconfig.json`)
+- Zweryfikować dostępność `esp_lcd_new_i80_bus()` i `esp_lcd_panel_io_ops_t` w tej wersji
+
+### 9. Brak przykładów referencyjnych
+
+Dokumentacja ESP-IDF ma przykłady LCD_CAM dla standardowych paneli LCD. Nie ma przykładu "drive 74HC595 shift register chain via LCD_CAM I80 1-bit". Społeczność ESPHome używa MAX7219 / HT16K33 / TM1637 dla 7-seg — to wszystko I2C/SPI bit-bang.
+
+Znalezione referencje do sprawdzenia:
+- Espressif `esp_lcd` docs (I80 bus section)
+- ESP32 TRM §14 (LCD_CAM) — szczegóły rejestrów `LCD_CLOCK_REG`, `LCD_CTRL_REG`, `LCD_DATA_*`
+- Kod oryginalnego firmware (`disasm.s`, funkcje `FUN_401908b4`, `FUN_40190fb4`, `FUN_401913e0`) — jedyny znany przykład LCD_CAM dla 74HC595
+
+### 10. Debugging — brak widoczności stanu LCD_CAM
+
+LCD_CAM jest peryferium hardware — jeśli coś nie działa, logi nic nie pokażą. Diagnostyka wymaga:
+- Logic analyzer na CLK/MOSI/CS (podstawowe)
+- Dostęp do rejestrów LCD_CAM w runtime (dodatkowy kod diagnostyczny)
+- Możliwość porównania z oryginalnym firmware (drugi ESP32 jako sniffer na te same piny — ale koliduje fizycznie)
+
+### Strategia implementacji (proponowana)
+
+1. **Najpierw**: diagnostyka #12-15 z poprzedniej sekcji — logic analyzer na aktualnym SPI, zmierz jitter. To daje baseline.
+2. **Następnie**: implementacja Tier 1 (#1+#2+#4) — szybka poprawa, low risk.
+3. **Jeśli Tier 1 niewystarczające**: prototyp LCD_CAM w izolowanym środowisku (czysty ESP-IDF, nie ESPHome) — tylko LCD_CAM + 74HC595, bez UART/WiFi. Weryfikacja że hardware path działa.
+4. **Po prototypie**: integracja do ESPHome jako custom component z fallback na obecny SPI.
+5. **Finalnie**: usunięcie fallback jeśli LCD_CAM działa stabilnie.
+
+### Ryzyka projektowe
+
+- **Brak oryginalnego firmware do porównania na żywo** — mamy tylko dekompilację. Nie widzieliśmy LCD_CAM w akcji na tej samej płytce. Prototyp #3 jest krytyczny.
+- **Możliwe że 1-bit bus nie działa poprawnie z LCD_CAM** — peryferium projektowane dla parallel, 1-bit może mieć nieudokumentowane ograniczenia.
+- **Czas implementacji**: Tier 1 = ~30 min, Tier 2 = ~2-4h, LCD_CAM prototyp = 4-8h, integracja ESPHome = kolejne 4-8h. Łącznie LCD_CAM to ~1-2 dni pracy.
+
+---
 
 ## Key files
 

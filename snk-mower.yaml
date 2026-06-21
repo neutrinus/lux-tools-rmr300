@@ -3,9 +3,10 @@ substitutions:
   friendly_name: Kosiarka
 
 external_components:
-  - source: github://neutrinus/lux-tools-rmr300@main:components
+  - source:
+      type: local
+      path: components
     components: [snk_mower]
-    refresh: 10s
 
 esphome:
   name: ${name}
@@ -61,6 +62,7 @@ snk_mower:
   buzzer_pin: 27
   rain_pin: 36
   boot_delay: 30
+  compat_mode: true
 
   battery_level:
     name: "${friendly_name} Battery Level"
@@ -134,11 +136,7 @@ button:
     on_press:
       - lambda: 'id(my_mower).return_to_dock();'
 
-  # Action commands discovered in ESP32 decompilation (FUN_400e277c)
-  # Original firmware sent: {"app_main":24.125,"chedule":<value>}
-  # Action values (mapped from "robot status : XXX" log strings in ESP32):
-  #   0=idle/stop, 1=work/mow, 2=edge, 3=pause, 4=dock/return,
-  #   5=charging, 6=poweroff, 7=rain dock, 8=rain wait, 9=rain delay
+  # === Test commands (no cmd field — likely ignored by MB) ===
   - platform: template
     name: "${friendly_name} Action: Mow (1)"
     icon: "mdi:grass"
@@ -149,40 +147,67 @@ button:
     icon: "mdi:home-import-outline"
     on_press:
       - lambda: 'id(my_mower).send_action(4);'
+
+  # === Test commands with cmd field ===
+  # START_ACK (0x41000020) — normally MB→ESP after START button
   - platform: template
-    name: "${friendly_name} Action: Stop (0)"
-    icon: "mdi:stop"
+    name: "${friendly_name} Test: START_ACK"
+    icon: "mdi:debug-step-over"
     on_press:
-      - lambda: 'id(my_mower).send_action(0);'
+      - lambda: 'id(my_mower).send_raw_json("{\"cmd\":1090519072}");'
+  # EXEC_ACTION (0x41000003) — normally MB→ESP after action executed
   - platform: template
-    name: "${friendly_name} Action: Edge (2)"
-    icon: "mdi:border-all-variant"
+    name: "${friendly_name} Test: EXEC_ACTION"
+    icon: "mdi:debug-step-over"
     on_press:
-      - lambda: 'id(my_mower).send_action(2);'
+      - lambda: 'id(my_mower).send_raw_json("{\"cmd\":1090519043}");'
+  # CMD 0x4100000A ("action" in dispatch table) with action field
   - platform: template
-    name: "${friendly_name} Action: Pause (3)"
-    icon: "mdi:pause"
+    name: "${friendly_name} Test: CMD action=1"
+    icon: "mdi:debug-step-over"
     on_press:
-      - lambda: 'id(my_mower).send_action(3);'
+      - lambda: 'id(my_mower).send_raw_json("{\"cmd\":1090519050,\"action\":1}");'
+  - platform: template
+    name: "${friendly_name} Test: CMD action=4"
+    icon: "mdi:debug-step-over"
+    on_press:
+      - lambda: 'id(my_mower).send_raw_json("{\"cmd\":1090519050,\"action\":4}");'
+  # ESP_TRIM with auto=1 and schedule for current time
+  - platform: template
+    name: "${friendly_name} Test: ESP_TRIM auto=1"
+    icon: "mdi:calendar-clock"
+    on_press:
+      - lambda: |
+          char buf[256];
+          time_t now = ::time(nullptr);
+          struct tm *t = localtime(&now);
+          int st = t->tm_hour * 60 + t->tm_min;
+          snprintf(buf, sizeof(buf),
+            "{\"cmd\":805306534,\"auto\":1,\"trim\":120,\"sun_st\":%d,\"sun_len\":120,\"mon_st\":%d,\"mon_len\":120,\"tue_st\":%d,\"tue_len\":120,\"wed_st\":%d,\"wed_len\":120,\"thu_st\":%d,\"thu_len\":120,\"fri_st\":%d,\"fri_len\":120,\"sat_st\":%d,\"sat_len\":120}",
+            st, st, st, st, st, st, st);
+          id(my_mower).send_raw_json(buf);
+
+  # === Send Raw JSON button (reads from text field below) ===
+  - platform: template
+    name: "${friendly_name} Send Raw JSON"
+    icon: "mdi:send"
+    on_press:
+      - lambda: 'id(my_mower).send_raw_json(id(raw_json_buf));'
+
+globals:
+  - id: raw_json_buf
+    type: std::string
+    restore_value: no
+    initial_value: ''
 
 text:
-  - platform: template
-    name: "${friendly_name} Action Value"
-    icon: "mdi:send"
-    mode: text
-    optimistic: true
-    initial_value: "1"
-    on_value:
-      - lambda: |
-          int v = atoi(x.c_str());
-          ESP_LOGI("ha", "Sending action value: %d", v);
-          id(my_mower).send_action(v);
   - platform: template
     name: "${friendly_name} Raw JSON"
     icon: "mdi:code-json"
     mode: text
     optimistic: true
-    initial_value: '{"app_main":24.125,"chedule":1}'
+    initial_value: '{"cmd":1090519050,"action":1}'
     on_value:
       - lambda: |
-          id(my_mower).send_raw_json(x);
+          id(raw_json_buf) = x;
+          ESP_LOGI("ha", "Raw JSON buffer updated: %s", x.c_str());
