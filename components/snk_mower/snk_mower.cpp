@@ -346,65 +346,18 @@ void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
 
-  uint32_t now = millis();
-  
-  static uint32_t last_phase_change_ms = 0;
-  static uint8_t left_phase = 0;
-  if (now - last_phase_change_ms >= 15000) {
-    last_phase_change_ms = now;
-    left_phase = (left_phase + 1) % 4;
-    switch (left_phase) {
-      case 0: ESP_LOGI(TAG, "LEFT SWEEP: phase=0 (b1=0x10/0x20 for left)"); break;
-      case 1: ESP_LOGI(TAG, "LEFT SWEEP: phase=1 (b1=0x40/0x80 for left)"); break;
-      case 2: ESP_LOGI(TAG, "LEFT SWEEP: phase=2 (b0=0x00 for left — inverted LOW)"); break;
-      case 3: ESP_LOGI(TAG, "LEFT SWEEP: phase=3 (b0=0xFF for left — all HIGH)"); break;
-    }
-  }
-
-  display_segments_[0] = char_to_segments_('1');
-  display_segments_[1] = char_to_segments_('2');
-  display_segments_[2] = char_to_segments_('3');
-  display_segments_[3] = char_to_segments_('4');
+  static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
+  static const uint8_t DIGIT_B1_MAP[4] = {0x10, 0x20, 0x04, 0x08};
+  // Physical positions: 0 (leftmost)=b1 bit4, 1=b1 bit5, 2=b1 bit2, 3(rightmost)=b1 bit3
+  // U4 (b0) controls colon/battery LEDs — not digit transistors.
 
   uint8_t seg = display_segments_[current_digit_];
-
-  uint8_t b0 = 0;
-  uint8_t b1 = 0;
-
-  if (current_digit_ == 0) {
-    b0 = 0x00;
-    b1 = 0x04 | display_colon_;
-  } else if (current_digit_ == 1) {
-    b0 = 0x00;
-    b1 = 0x08 | display_colon_;
-  } else if (current_digit_ >= 2) {
-    b1 = 0x00;
-    switch (left_phase) {
-      case 0:
-        b0 = 0x00;
-        if (current_digit_ == 2) b1 = 0x10;
-        else b1 = 0x20;
-        break;
-      case 1:
-        b0 = 0x00;
-        if (current_digit_ == 2) b1 = 0x40;
-        else b1 = 0x80;
-        break;
-      case 2:
-        b0 = 0x00;
-        break;
-      case 3:
-        b0 = 0xFF;
-        break;
-    }
-  }
+  uint8_t b0 = DIGIT_B0_MAP[current_digit_];
+  uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  shift24(display_clk_, display_mosi_, display_cs_,
-          b0,
-          b1,
-          seg);
+  shift24(display_clk_, display_mosi_, display_cs_, b0, b1, seg);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
@@ -412,7 +365,8 @@ void SnkMower::set_display_text(const char *text, bool colon) {
     char c = text[i] ? text[i] : ' ';
     display_segments_[i] = char_to_segments_(c);
   }
-  display_colon_ = colon ? 0b00110000 : 0;
+  // TODO: colon on b0 (U4) — find correct bit
+  display_colon_ = 0;
 }
 
 void SnkMower::set_display_battery(int percent) {

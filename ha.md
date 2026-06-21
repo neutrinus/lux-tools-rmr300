@@ -475,29 +475,24 @@ Obserwacje z poprawną orientacją (przyciski na dole):
 - **`b1=0x01` i `b1=0x02` nie aktywują żadnych widocznych pozycji** — te bity nie są podłączone do tranzystorów cyfr.
 - **`b0` (U4) nie został jeszcze poprawnie zmapowany** — lewa strona (poz. 0 i 1) pozostała ciemna we wszystkich testach.
 
-### 4. Celowany test B0 SWEEP (2026-06-21) — wersja 2 — WYNIK: LEWE NIGDY SIĘ NIE ZAŚWIECIŁY
-Celem było znalezienie bitów `b0`, które aktywują lewe fizyczne pozycje (poz. 0 i 1).
+### 4. Celowany test B0 SWEEP — WYNIK: LEWE NIGDY SIĘ NIE ZAŚWIECIŁY (2026-06-21)
+Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80), **żaden nie aktywował lewych segmentów**. U4 (`b0`) nie steruje tranzystorami cyfr.
 
-**Wynik:** Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80) w dwóch fazach (dla pozycji 0 i 1), **żaden z bitów nie aktywował lewych segmentów wyświetlacza**. Przez cały czas widoczne było tylko stabilne `"21"` na dwóch prawych pozycjach (sterowane przez `b1=0x04/0x08`).
+### 5. LEFT SIDE SWEEP — PRZEŁOM! (2026-06-21)
+**Wynik:** Phase 0 (`b1=0x10` dla poz.0, `b1=0x20` dla poz.1) — wyświetlacz pokazał **4321** — wszystkie 4 cyfry działają!
 
-**Wnioski:**
-- Rejestr `U4` (bajt `b0`) **nie steruje tranzystorami lewych cyfr** — przynajmniej nie przez pojedyncze bity 0x01–0x80.
-- Możliwe, że `U4` steruje dwukropkiem, wskaźnikiem baterii, lub czymś innym.
-- Lewe pozycje fizyczne (0 i 1) mogą być sterowane przez **nieprzetestowane bity rejestru `U3`** (`b1` bity 4–7: 0x10, 0x20, 0x40, 0x80) — albo przez `b0` w odwróconej logice (active LOW).
+**KOMPLETNE MAPOWANIE WYŚWIETLACZA:**
+| Pozycja fizyczna | Bit b1 (U3) | Wartość |
+|------------------|-------------|---------|
+| 0 (skrajnie lewa) | bit 4 | 0x10 |
+| 1 (druga od lewej) | bit 5 | 0x20 |
+| 2 (druga od prawej) | bit 2 | 0x04 |
+| 3 (skrajnie prawa) | bit 3 | 0x08 |
 
-### 5. Kolejny test: LEFT SIDE SWEEP (2026-06-21)
-Testowanie alternatywnych hipotez dla lewych pozycji (fizyczne poz. 0 i 1):
-
-| Faza | Czas | Digit 2 ('3') | Digit 3 ('4') | Hipoteza |
-|------|------|---------------|---------------|----------|
-| 0 | 15s | b1=0x10, b0=0x00 | b1=0x20, b0=0x00 | Lewe na U3 bit 4/5 |
-| 1 | 15s | b1=0x40, b0=0x00 | b1=0x80, b0=0x00 | Lewe na U3 bit 6/7 |
-| 2 | 15s | b1=0x00, b0=0x00 | b1=0x00, b0=0x00 | U4 active LOW (oba wyjścia wyłączone) |
-| 3 | 15s | b1=0x00, b0=0xFF | b1=0x00, b0=0xFF | U4 all HIGH |
-
-- **Prawa strona (referencja):** Stabilne `"12"` przez `b1=0x04/0x08` (bez zmian).
-- **Logowanie:** `LEFT SWEEP: phase=X (hipoteza: ...)`
-- **Cel:** Znaleźć choć jedną kombinację, która zapali lewe segmenty. Gdy lewa strona się zaświeci, wiemy w którym kierunku szukać dalej.
+- **Wszystkie 4 cyfry są sterowane przez U3 (b1).** U4 (b0) nie uczestniczy w selekcji cyfr — prawdopodobnie steruje dwukropkiem, wskaźnikiem baterii lub backlightem.
+- **`DIGIT_B1_MAP = {0x10, 0x20, 0x04, 0x08}`**
+- **`DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}`** (U4 wyłączony dla cyfr)
+- **Dwukropek (`display_colon_`):** Ustawiony na `0b00110000` (0x30) koliduje z bitami 4 i 5 U3 — wymaga przeniesienia na U4. Na razie wyłączony (0x00) do dalszej diagnostyki.
 
 ## Key files
 
