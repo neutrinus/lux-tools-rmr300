@@ -133,3 +133,56 @@ button:
     icon: "mdi:home-import-outline"
     on_press:
       - lambda: 'id(my_mower).return_to_dock();'
+
+  # Action commands discovered in ESP32 decompilation (FUN_400e277c)
+  # Original firmware sent: {"app_main":24.125,"chedule":<value>}
+  # Action values (mapped from "robot status : XXX" log strings in ESP32):
+  #   0=idle/stop, 1=work/mow, 2=edge, 3=pause, 4=dock/return,
+  #   5=charging, 6=poweroff, 7=rain dock, 8=rain wait, 9=rain delay
+  - platform: template
+    name: "${friendly_name} Action: Mow (1)"
+    icon: "mdi:grass"
+    on_press:
+      - lambda: 'id(my_mower).send_action(1);'
+  - platform: template
+    name: "${friendly_name} Action: Dock (4)"
+    icon: "mdi:home-import-outline"
+    on_press:
+      - lambda: 'id(my_mower).send_action(4);'
+  - platform: template
+    name: "${friendly_name} Action: Stop (0)"
+    icon: "mdi:stop"
+    on_press:
+      - lambda: 'id(my_mower).send_action(0);'
+  - platform: template
+    name: "${friendly_name} Action: Edge (2)"
+    icon: "mdi:border-all-variant"
+    on_press:
+      - lambda: 'id(my_mower).send_action(2);'
+  - platform: template
+    name: "${friendly_name} Action: Pause (3)"
+    icon: "mdi:pause"
+    on_press:
+      - lambda: 'id(my_mower).send_action(3);'
+
+text:
+  - platform: template
+    name: "${friendly_name} Action Value"
+    icon: "mdi:send"
+    mode: text
+    optimistic: true
+    initial_value: "1"
+    on_value:
+      - lambda: |
+          int v = atoi(x.c_str());
+          ESP_LOGI("ha", "Sending action value: %d", v);
+          id(my_mower).send_action(v);
+  - platform: template
+    name: "${friendly_name} Raw JSON"
+    icon: "mdi:code-json"
+    mode: text
+    optimistic: true
+    initial_value: '{"app_main":24.125,"chedule":1}'
+    on_value:
+      - lambda: |
+          id(my_mower).send_raw_json(x);

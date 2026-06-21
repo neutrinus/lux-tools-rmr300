@@ -1084,6 +1084,25 @@ void SnkMower::return_to_dock() {
   send_return_home();
 }
 
+void SnkMower::send_action(int action_value) {
+  ESP_LOGI(TAG, "Sending action command: {\"app_main\":24.125,\"chedule\":%d}", action_value);
+  JsonDocument doc;
+  doc["app_main"] = 24.125f;
+  doc["chedule"] = action_value;
+  send_json(doc);
+}
+
+void SnkMower::send_raw_json(const std::string &json_str) {
+  ESP_LOGI(TAG, "Sending raw JSON: %s", json_str.c_str());
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, json_str);
+  if (err) {
+    ESP_LOGE(TAG, "JSON parse error: %s", err.c_str());
+    return;
+  }
+  send_json(doc);
+}
+
 void SnkMower::publish_mower_state(MowerState state) {
   bool state_changed = state != current_state_;
   current_state_ = state;

@@ -63,6 +63,8 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   void start_mowing();
   void return_to_dock();
+  void send_action(int action_value);
+  void send_raw_json(const std::string &json_str);
   void buzz(int duration_ms);
   void set_buzzer_pin(gpio_num_t pin);
   void set_display_off_timeout(uint32_t minutes);
