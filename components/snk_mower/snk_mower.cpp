@@ -357,8 +357,8 @@ void SnkMower::refresh_display_impl() {
     seg = CHG_FRAMES[charging_frame_];
   }
 
-  static const uint8_t DIGIT_B0_MAP[] = {0x00, 0x00, 0x04, 0x08};
-  static const uint8_t DIGIT_B1_MAP[] = {0x04, 0x08, 0x00, 0x00};
+  static const uint8_t DIGIT_B0_MAP[] = {0x00, 0x00, 0x02, 0x04};
+  static const uint8_t DIGIT_B1_MAP[] = {0x02, 0x04, 0x00, 0x00};
 
   uint8_t b0 = DIGIT_B0_MAP[current_digit_];
   uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
