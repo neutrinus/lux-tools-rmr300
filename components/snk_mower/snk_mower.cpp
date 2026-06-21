@@ -619,6 +619,22 @@ void SnkMower::loop() {
     }
   }
 
+  // ── Idle display cycling: "IdLE" ↔ battery ────────────────────
+
+  if (!display_off_ && !shutdown_pending_ &&
+      (current_state_ == MowerState::IDLE || current_state_ == MowerState::DOCKED)) {
+    uint32_t now = millis();
+    if (now >= idle_display_cycle_ms_) {
+      idle_display_cycle_ms_ = now + 5000;
+      idle_display_battery_ = !idle_display_battery_;
+      if (idle_display_battery_) {
+        set_display_battery(last_battery_percent_);
+      } else {
+        set_display_text(STATE_DISPLAY[static_cast<int>(current_state_)]);
+      }
+    }
+  }
+
   refresh_display();
 }
 
@@ -1057,6 +1073,10 @@ void SnkMower::publish_mower_state(MowerState state) {
     set_display_text(buf);
   } else {
     set_display_text(STATE_DISPLAY[idx]);
+    if (state == MowerState::IDLE || state == MowerState::DOCKED) {
+      idle_display_cycle_ms_ = millis() + 5000;
+      idle_display_battery_ = false;
+    }
   }
 }
 

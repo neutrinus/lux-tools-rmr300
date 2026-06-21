@@ -214,6 +214,8 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   MowerState current_state_{MowerState::UNKNOWN};
   int last_battery_percent_{0};
+  uint32_t idle_display_cycle_ms_{0};
+  bool idle_display_battery_{false};
 
   sensor::Sensor *battery_level_sensor_{nullptr};
   sensor::Sensor *battery_voltage_sensor_{nullptr};
