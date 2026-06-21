@@ -211,3 +211,99 @@ The actual GPIO numbers for these signals are configured in the IO_MUX init code
 | LCD frame timing parameters | ❌ NOT FOUND |
 
 **Next step for GPIO pin identification**: Empirical test — single-bit sweep using ESPHome or custom firmware on candidate pins {33, 18, 32} (the only combination that has empirically produced any display response).
+
+---
+
+## UART Protocol Analysis (2026-06-21) — JSON, not Binary
+
+Wcześniejsza analiza w `ESP32.md` sugerowała protokół binarny (0xAA 0x55 + CMD + CS @115200). **Jest to nieprawidłowe.** Analiza stringów w DROM potwierdza JSON:
+
+| Offset | String | Znaczenie |
+|--------|--------|-----------|
+| 0x3502 | `"json get cmd failed"` | Parsowanie JSON z pola `cmd` |
+| 0x397B | `"json get cmd failed"` | (warning variant) |
+| 0x455C | `"send command: \"%s\""` | Wysyłanie komendy jako string JSON |
+| 0x48E4 | `"cant find cmd:%x callback"` | Dispatch callbacków po ID komendy |
+| 0x4823 | `"add receive message head callback, head = 0x%08x, callback @0x%08x"` | Dynamiczna rejestracja handlerów |
+| 0x5B22 | `"goto action"` | Log przy wykonaniu akcji (mow/charge) |
+
+### Architektura przetwarzania komend
+
+```
+MQTT (server.sk-robot.com) → ESP32 → JSON @230400 → U16 (cJSON) → wewn. protokół → U13
+```
+
+Callbacki są rejestrowane **dynamicznie** (nie ma statycznej tablicy dispatch). Funkcja rejestrująca przyjmuje `head` (32-bit ID komendy) i wskaźnik na handler.
+
+### Tablica Command ID → String (0x31578-0x31718)
+
+Znaleziona w DROM tablica mapująca ID komend na nazwy string (używana do logowania/debug):
+
+| Offset | CMD | String (DROM) | Uwagi |
+|--------|-----|---------------|-------|
+| 0x31578 | 0x41000020 | START_ACK | Potwierdzenie START |
+| 0x31588 | 0x41000002 | LOCK | Blokada PIN |
+| 0x31590 | 0x41000003 | EXEC_ACTION | Akcja wykonana (START/HOME) |
+| 0x31598 | 0x41000004 | ERROR_NOTIFY | Błąd |
+| 0x315A8 | 0x41000005 | PIN_SEND | Wysłanie PIN |
+| 0x315B0 | 0x41000013 | (nieznane) | — |
+| 0x315B8 | 0x41000014 | (nieznane) | — |
+| 0x315C0 | 0x41000006 | (nieznane) | — |
+| 0x315C8 | 0x41000007 | (nieznane) | — |
+| 0x315D0 | 0x41000008 | SHUTDOWN | Wyłączenie |
+| 0x315D8 | 0x41000009 | (nieznane) | — |
+| 0x315E0 | 0x41000010 | (nieznane) | — |
+| 0x315E8 | 0x41000011 | (nieznane) | — |
+| 0x315F0 | 0x41000012 | (nieznane) | — |
+| 0x315F8 | 0x41000030 | (nieznane) | — |
+| 0x31600 | 0x41000031 | (nieznane) | — |
+| 0x31608 | **0x4100000A** | **"action"** | **Kluczowa komenda — "action"** |
+| 0x31700 | 0x10000002 | ESP_ERR_ACK? | — |
+| 0x31708 | 0x10000003 | ESP_ERR_ACK? | — |
+| 0x31710 | 0x10000007 | ESP_ERR_ACK2 | Potwierdzenie błędu |
+| 0x31718 | 0x10000009 | (nieznane) | — |
+
+### Kluczowe obserwacje
+
+1. **CMD 0x4100000A = "action"** — to może być komenda, którą ESP→MB wysyła by zainicjować akcję (mow/charge). Wartość 0x4100000A jest w zakresie MB→ESP (0x410000xx), ale nie jest udokumentowana w żadnym z captures. Może to być komenda ESP→MB lub nieodkryty MB→ESP notification.
+
+2. **"goto action" (0x5B22)** — string logowany gdy firmware przechodzi do wykonania akcji. Występuje w okolicy obsługi hasła i czujnika deszczu. Dokładny przepływ: MQTT command → parse JSON → get "action" field → log "goto action" → send UART command.
+
+3. **Brak stringów "mow"/"charge" w kontekście komend** — oryginalny firmware NIE wysyła stringów "mow" ani "charge" przez UART. Zamiast tego używa numerycznych ID komend (prawdopodobnie 0x4100000A z polem "action" w JSON).
+
+4. **ESP_TRIM (0x300000A6) w oryginalnym firmware** — wysyłany jako pusty `{"cmd":805306534}` (bez pól harmonogramu). Harmonogram (`trim`, `sun_st`, `auto`, itp.) przychodzi TYLKO z MB jako SCHEDULE (0x330000A6).
+
+### Wnioski dla ESPHome
+
+1. `start_mowing()` wysyłający ESP_TRIM + ESP_ERR_ACK1 + ESP_STATE(2) — **nie działa**, bo oryginalny firmware używał innej komendy (prawdopodobnie związanej z 0x4100000A lub 0x41000012).
+
+2. `return_to_dock()` wysyłający 0x10000001 (ESP_ERR_ACK1) — **nie działa**, bo to jest potwierdzenie błędu, a nie komenda powrotu.
+
+3. **Potencjalne nieprzetestowane komendy do wypróbowania:**
+   - `{"cmd":1090519050}` (0x4100000A) — "action"
+   - `{"cmd":1090519058}` (0x41000012) — kolejna nieznana
+   - `{"cmd":805306391}` (0x30000017) — z dispatch table
+   - `{"cmd":805306392}` (0x30000018) — z dispatch table  
+   - `{"cmd":268435458}` (0x10000002) — error ack
+   - `{"cmd":268435459}` (0x10000003) — error ack
+
+4. **Oryginalny firmware vs ESPHome:**
+   - Oryginalny: UART na GPIO13(RX)/GPIO15(TX) @115200 przez GPIO matrix
+   - ESPHome: UART na GPIO16(RX)/GPIO17(TX) @230400 przez UART2
+   - Oba trafiają do tego samego U16 przez J8 — U16 najwyraźniej obsługuje różne piny/baudrates
+
+5. **Aby definitywnie rozstrzygnąć** jaki JSON command startuje koszenie, potrzebny jest:
+   - Sniffer UART z oryginalnym firmware (drugi ESP32)
+   - Lub pełna dekompilacja U16 (GD32F303, FreeRTOS + cJSON) gdzie są handlery JSON command
+   - Lub empiryczne testowanie nieudokumentowanych komend
+
+### Pliki
+
+| Plik | Zawartość |
+|------|-----------|
+| `ota_0.bin` | Aplikacja ESP32 (partition ota_0) |
+| `esp32_dump.bin` | Pełny 4MB dump flash ESP32 |
+| `disasm.s` | 400k linii disassembly Xtensa (objdump) |
+| `ESP32.md` | Wstępna analiza (częściowo nieaktualna — błędny protokół binarny) |
+| `ESP32_GPIO_ANALYSIS.md` | Analiza pinów GPIO |
+| `1610-report.md` | Starszy raport o pinach wyświetlacza (błędne CLK=5, MOSI=32) |
