@@ -619,16 +619,21 @@ void SnkMower::loop() {
     }
   }
 
-  // ── Idle display cycling: "IdLE" ↔ battery ────────────────────
+  // ── State display cycling: text ↔ battery ─────────────────────
 
   if (!display_off_ && !shutdown_pending_ &&
-      (current_state_ == MowerState::IDLE || current_state_ == MowerState::DOCKED)) {
+      current_state_ != MowerState::UNKNOWN &&
+      current_state_ != MowerState::ERROR_STATE &&
+      current_state_ != MowerState::LOCKED) {
     uint32_t now = millis();
-    if (now >= idle_display_cycle_ms_) {
-      idle_display_cycle_ms_ = now + 5000;
-      idle_display_battery_ = !idle_display_battery_;
-      if (idle_display_battery_) {
-        set_display_battery(last_battery_percent_);
+    if (now >= state_display_cycle_ms_) {
+      state_display_cycle_ms_ = now + 5000;
+      state_show_alt_ = !state_show_alt_;
+      if (state_show_alt_) {
+        if (current_state_ == MowerState::CHARGING)
+          set_charging_display(last_battery_percent_);
+        else
+          set_display_battery(last_battery_percent_);
       } else {
         set_display_text(STATE_DISPLAY[static_cast<int>(current_state_)]);
       }
@@ -1055,8 +1060,12 @@ void SnkMower::publish_mower_state(MowerState state) {
 
   if (state == MowerState::MOWING) {
     set_display_battery(last_battery_percent_);
+    state_display_cycle_ms_ = millis() + 5000;
+    state_show_alt_ = false;
   } else if (state == MowerState::CHARGING) {
     set_charging_display(last_battery_percent_);
+    state_display_cycle_ms_ = millis() + 5000;
+    state_show_alt_ = false;
   } else if (state == MowerState::ERROR_STATE) {
     char buf[5];
     int err = std::max(0, std::min(error_code_, 999));
@@ -1073,10 +1082,8 @@ void SnkMower::publish_mower_state(MowerState state) {
     set_display_text(buf);
   } else {
     set_display_text(STATE_DISPLAY[idx]);
-    if (state == MowerState::IDLE || state == MowerState::DOCKED) {
-      idle_display_cycle_ms_ = millis() + 5000;
-      idle_display_battery_ = false;
-    }
+    state_display_cycle_ms_ = millis() + 5000;
+    state_show_alt_ = false;
   }
 }
 
