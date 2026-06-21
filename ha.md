@@ -475,21 +475,29 @@ Obserwacje z poprawną orientacją (przyciski na dole):
 - **`b1=0x01` i `b1=0x02` nie aktywują żadnych widocznych pozycji** — te bity nie są podłączone do tranzystorów cyfr.
 - **`b0` (U4) nie został jeszcze poprawnie zmapowany** — lewa strona (poz. 0 i 1) pozostała ciemna we wszystkich testach.
 
-### 4. Celowany test B0 SWEEP (2026-06-21) — wersja 2
-Celem jest znalezienie bitów `b0`, które aktywują lewe fizyczne pozycje (poz. 0 i 1).
+### 4. Celowany test B0 SWEEP (2026-06-21) — wersja 2 — WYNIK: LEWE NIGDY SIĘ NIE ZAŚWIECIŁY
+Celem było znalezienie bitów `b0`, które aktywują lewe fizyczne pozycje (poz. 0 i 1).
 
-**Poprawiona konstrukcja testu:**
-- **Prawa strona (referencja):** Stabilne `"12"` na pozycjach 2 i 3 przez `b1=0x04` i `b1=0x08`.
-- **Lewa strona — dwie fazy po 8 kroków (łącznie 16 × 5s = 80s cykl):**
-  - **Faza 0 (kroki 0-7):** Test pozycji 0 — cyfra `'3'` z `b0 = 1<<bit_idx`; pozycja 1 wyłączona (segment=0).
-  - **Faza 1 (kroki 8-15):** Test pozycji 1 — cyfra `'4'` z `b0 = 1<<bit_idx`; pozycja 0 wyłączona (segment=0).
-- **Logowanie:** `B0 SWEEP: phase=X bit=Y b0=0xZZ`
-- **Cel:** Gdy test trafi na właściwy bit, z lewej strony pojawi się cyfra `"3"` (faza 0) lub `"4"` (faza 1).
+**Wynik:** Mimo pełnego skanowania wszystkich 8 pojedynczych bitów `b0` (0x01–0x80) w dwóch fazach (dla pozycji 0 i 1), **żaden z bitów nie aktywował lewych segmentów wyświetlacza**. Przez cały czas widoczne było tylko stabilne `"21"` na dwóch prawych pozycjach (sterowane przez `b1=0x04/0x08`).
 
-**Obserwacje użytkownika:** Patrząc na wyświetlacz prawą stroną do góry:
-- Po prawej stronie widać stabilne `"12"` — to potwierdza działanie multipleksera.
-- W pewnym momencie po lewej stronie (fizycznie z dala od przycisków) pojawi się `"3"` lub `"4"`.
-- Należy zapisać, w którym kroku (0-7 dla '3', 8-15 dla '4') pojawia się cyfra.
+**Wnioski:**
+- Rejestr `U4` (bajt `b0`) **nie steruje tranzystorami lewych cyfr** — przynajmniej nie przez pojedyncze bity 0x01–0x80.
+- Możliwe, że `U4` steruje dwukropkiem, wskaźnikiem baterii, lub czymś innym.
+- Lewe pozycje fizyczne (0 i 1) mogą być sterowane przez **nieprzetestowane bity rejestru `U3`** (`b1` bity 4–7: 0x10, 0x20, 0x40, 0x80) — albo przez `b0` w odwróconej logice (active LOW).
+
+### 5. Kolejny test: LEFT SIDE SWEEP (2026-06-21)
+Testowanie alternatywnych hipotez dla lewych pozycji (fizyczne poz. 0 i 1):
+
+| Faza | Czas | Digit 2 ('3') | Digit 3 ('4') | Hipoteza |
+|------|------|---------------|---------------|----------|
+| 0 | 15s | b1=0x10, b0=0x00 | b1=0x20, b0=0x00 | Lewe na U3 bit 4/5 |
+| 1 | 15s | b1=0x40, b0=0x00 | b1=0x80, b0=0x00 | Lewe na U3 bit 6/7 |
+| 2 | 15s | b1=0x00, b0=0x00 | b1=0x00, b0=0x00 | U4 active LOW (oba wyjścia wyłączone) |
+| 3 | 15s | b1=0x00, b0=0xFF | b1=0x00, b0=0xFF | U4 all HIGH |
+
+- **Prawa strona (referencja):** Stabilne `"12"` przez `b1=0x04/0x08` (bez zmian).
+- **Logowanie:** `LEFT SWEEP: phase=X (hipoteza: ...)`
+- **Cel:** Znaleźć choć jedną kombinację, która zapali lewe segmenty. Gdy lewa strona się zaświeci, wiemy w którym kierunku szukać dalej.
 
 ## Key files
 

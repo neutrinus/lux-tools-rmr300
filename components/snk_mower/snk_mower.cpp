@@ -348,29 +348,23 @@ void SnkMower::refresh_display_impl() {
 
   uint32_t now = millis();
   
-  static uint32_t last_step_change_ms = 0;
-  static uint8_t diag_step = 0;
-  if (now - last_step_change_ms >= 5000) {
-    last_step_change_ms = now;
-    diag_step = (diag_step + 1) % 16;
-    uint8_t phase = diag_step / 8;
-    uint8_t bit_idx = diag_step % 8;
-    ESP_LOGI(TAG, "B0 SWEEP: phase=%d bit=%d b0=0x%02X", phase, bit_idx, 1 << bit_idx);
+  static uint32_t last_phase_change_ms = 0;
+  static uint8_t left_phase = 0;
+  if (now - last_phase_change_ms >= 15000) {
+    last_phase_change_ms = now;
+    left_phase = (left_phase + 1) % 4;
+    switch (left_phase) {
+      case 0: ESP_LOGI(TAG, "LEFT SWEEP: phase=0 (b1=0x10/0x20 for left)"); break;
+      case 1: ESP_LOGI(TAG, "LEFT SWEEP: phase=1 (b1=0x40/0x80 for left)"); break;
+      case 2: ESP_LOGI(TAG, "LEFT SWEEP: phase=2 (b0=0x00 for left — inverted LOW)"); break;
+      case 3: ESP_LOGI(TAG, "LEFT SWEEP: phase=3 (b0=0xFF for left — all HIGH)"); break;
+    }
   }
-
-  uint8_t phase = diag_step / 8;
-  uint8_t bit_idx = diag_step % 8;
-  uint8_t b0_bit = 1 << bit_idx;
 
   display_segments_[0] = char_to_segments_('1');
   display_segments_[1] = char_to_segments_('2');
-  if (phase == 0) {
-    display_segments_[2] = char_to_segments_('3');
-    display_segments_[3] = 0;
-  } else {
-    display_segments_[2] = 0;
-    display_segments_[3] = char_to_segments_('4');
-  }
+  display_segments_[2] = char_to_segments_('3');
+  display_segments_[3] = char_to_segments_('4');
 
   uint8_t seg = display_segments_[current_digit_];
 
@@ -383,12 +377,26 @@ void SnkMower::refresh_display_impl() {
   } else if (current_digit_ == 1) {
     b0 = 0x00;
     b1 = 0x08 | display_colon_;
-  } else if (current_digit_ == 2) {
-    b0 = (display_segments_[2] != 0) ? b0_bit : 0x00;
+  } else if (current_digit_ >= 2) {
     b1 = 0x00;
-  } else if (current_digit_ == 3) {
-    b0 = (display_segments_[3] != 0) ? b0_bit : 0x00;
-    b1 = 0x00;
+    switch (left_phase) {
+      case 0:
+        b0 = 0x00;
+        if (current_digit_ == 2) b1 = 0x10;
+        else b1 = 0x20;
+        break;
+      case 1:
+        b0 = 0x00;
+        if (current_digit_ == 2) b1 = 0x40;
+        else b1 = 0x80;
+        break;
+      case 2:
+        b0 = 0x00;
+        break;
+      case 3:
+        b0 = 0xFF;
+        break;
+    }
   }
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
