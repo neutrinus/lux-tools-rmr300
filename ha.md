@@ -505,9 +505,20 @@ Wykonano pełny skan 16 kombinacji `b0` (wszystkie single bity + wybrane kombina
 Wykonano sweep wszystkich 8 bitów segmentu (0x01–0x80) na lewej cyfrze (`b1=0x20`, `b0=0x00`). Wynik:
 - **Bity 0-6:** Zapalają standardowe segmenty 7-segmentowego wyświetlacza (a=bit0, b=bit1, c=bit2, d=bit3, e=bit4, f=bit5, g=bit6).
 - **Bit 7 (0x80):** Nie zapalił żadnej kropki dziesiętnej.
-- **Wniosek:** DP nie jest na żadnym bicie segmentu (U1/b2). Kropki są sterowane przez U4 (b0). Rozpoczęto sweep b0 z wyświetloną cyfrą "8" (`seg=0x7F`) w celu znalezienia bitu DP na U4.
+- **Wniosek:** DP nie jest na żadnym bicie segmentu (U1/b2).
 
-### 8. RESTORE NORMAL DISPLAY — PEŁNA KONTROLA (2026-06-21)
+### 8. DP B0 SWEEP — WYNIK: KROPKA NIE NA U4 (2026-06-21)
+Wykonano sweep wszystkich bitów b0 (0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0xFF) z wyświetloną cyfrą "8" (`seg=0x7F`) na lewej cyfrze (`b1=0x20`). Wynik:
+- **"8" paliła się cały czas przez cały test** — standardowa multipleksacja działa.
+- **Żaden bit b0 nie zapalił kropki dziesiętnej** — ani jako pojedynczy bit, ani jako 0xFF.
+- **Wniosek:** DP nie jest sterowany przez U4 (b0). Możliwe wyjaśnienia:
+  1. Wyświetlacz nie ma fizycznych kropek dziesiętnych (brak połączeń na PCB)
+  2. DP jest na U1 (b2) ale wymaga innego bitu niż 0x80 (sprawdzone 0x01–0x80 — brak)
+  3. DP jest sterowany przez inny układ spoza U1/U3/U4
+  4. Kropki są połączone szeregowo przez wszystkie cyfry i wymagają jednoczesnej aktywacji wszystkich cyfr + odpowiedniego bitu segmentu
+- **Dalsze kroki:** Opcjonalnie sprawdzić wariant (4) — wszystkie 4 cyfry + seg z bitem DP + różne b0. Na razie DP pozostaje nierozpoznany.
+
+### 9. RESTORE NORMAL DISPLAY — PEŁNA KONTROLA (2026-06-21)
 Przywrócono normalną logikę wyświetlania:
 - `DIGIT_B1_MAP = {0x20, 0x10, 0x08, 0x04}` (lewa→prawa: bit5, bit4, bit3, bit2)
 - `DIGIT_B0_MAP = {0x00, 0x00, 0x00, 0x00}` (U4 wyłączony dla cyfr)

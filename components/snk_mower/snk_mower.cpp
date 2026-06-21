@@ -346,25 +346,17 @@ void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
 
-  // DP SWEEP: show "8" on leftmost digit + sweep b0 to find DP bit on U4
-  static const uint8_t B0_BITS[] = {0x00,0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0xFF};
-  static const uint8_t B0_LABELS[][8] = {
-    "none","bit0","bit1","bit2","bit3","bit4","bit5","bit6","bit7","all"};
+  static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
   static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
+  // Physical positions: 0 (leftmost)=b1 bit5, 1=b1 bit4, 2=b1 bit3, 3(rightmost)=b1 bit2
+  // U4 (b0) reserved for colon / peripherals (not digit select)
+  // Decimal point bit not yet identified (not on seg bit7, not on b0)
 
-  static uint32_t last_sw_ms = 0;
-  static uint8_t sw_idx = 0;
-  uint32_t now = millis();
-  if (now - last_sw_ms >= 3000) {
-    last_sw_ms = now;
-    sw_idx = (sw_idx + 1) % (sizeof(B0_BITS)/sizeof(B0_BITS[0]));
-    ESP_LOGI(TAG, "DP SWEEP: digit=leftmost b0=%s=0x%02X seg=0x7F(8)",
-             B0_LABELS[sw_idx], B0_BITS[sw_idx]);
-  }
+  uint8_t seg = display_segments_[current_digit_];
+  uint8_t b0 = DIGIT_B0_MAP[current_digit_];
+  uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
 
-  uint8_t seg = 0x7F;  // "8" (all 7 segments)
-  uint8_t b0 = B0_BITS[sw_idx];
-  uint8_t b1 = DIGIT_B1_MAP[0];  // leftmost digit only
+  current_digit_ = (current_digit_ + 1) % DIGITS;
 
   shift24(display_clk_, display_mosi_, display_cs_, b0, b1, seg);
 }
