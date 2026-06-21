@@ -349,7 +349,7 @@ void SnkMower::refresh_display_impl() {
   uint32_t now = millis();
   uint8_t seg = display_segments_[current_digit_];
 
-  if (current_state_ == MowerState::CHARGING && current_digit_ == 0) {
+  if (current_state_ == MowerState::CHARGING && current_digit_ == 1) {
     if (now - last_charging_frame_ms_ >= CHG_FRAME_MS) {
       last_charging_frame_ms_ = now;
       charging_frame_ = (charging_frame_ + 1) % 3;
@@ -367,39 +367,47 @@ void SnkMower::refresh_display_impl() {
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
-  for (uint8_t i = 0; i < DIGITS; i++) {
-    char c = text[i] ? text[i] : ' ';
-    display_segments_[i] = char_to_segments_(c);
-  }
+  display_segments_[1] = char_to_segments_(text[0] ? text[0] : ' ');
+  display_segments_[2] = char_to_segments_(text[1] ? text[1] : ' ');
+  display_segments_[3] = char_to_segments_(text[2] ? text[2] : ' ');
+  display_segments_[0] = char_to_segments_(text[3] ? text[3] : ' ');
   display_colon_ = colon ? 0b00110000 : 0;
 }
 
 void SnkMower::set_display_battery(int percent) {
   percent = std::min(100, std::max(0, percent));
-  display_segments_[0] = 0;
+  display_segments_[1] = 0;
   if (percent == 100) {
-    display_segments_[1] = char_to_segments_('1');
-    display_segments_[2] = char_to_segments_('0');
+    display_segments_[2] = char_to_segments_('1');
     display_segments_[3] = char_to_segments_('0');
+    display_segments_[0] = char_to_segments_('0');
+  } else if (percent >= 10) {
+    display_segments_[2] = char_to_segments_(' ');
+    display_segments_[3] = char_to_segments_('0' + (percent / 10));
+    display_segments_[0] = char_to_segments_('0' + (percent % 10));
   } else {
-    display_segments_[1] = char_to_segments_('0' + (percent / 10));
-    display_segments_[2] = char_to_segments_('0' + (percent % 10));
+    display_segments_[2] = char_to_segments_(' ');
     display_segments_[3] = char_to_segments_(' ');
+    display_segments_[0] = char_to_segments_('0' + percent);
   }
   display_colon_ = 0;
 }
 
 void SnkMower::set_charging_display(int percent) {
-  display_segments_[0] = 0;
   percent = std::min(100, std::max(0, percent));
+  display_segments_[1] = 0;
   if (percent == 100) {
-    display_segments_[1] = char_to_segments_('1');
-    display_segments_[2] = char_to_segments_('0');
+    display_segments_[2] = char_to_segments_('1');
     display_segments_[3] = char_to_segments_('0');
+    display_segments_[0] = char_to_segments_('0');
+  } else if (percent >= 10) {
+    display_segments_[2] = char_to_segments_(' ');
+    display_segments_[3] = char_to_segments_('0' + (percent / 10));
+    display_segments_[0] = char_to_segments_('0' + (percent % 10));
   } else {
-    display_segments_[1] = char_to_segments_('0' + (percent / 10));
-    display_segments_[2] = char_to_segments_('0' + (percent % 10));
+    display_segments_[2] = char_to_segments_(' ');
     display_segments_[3] = char_to_segments_(' ');
+    display_segments_[0] = char_to_segments_('0' + percent);
   }
 }
 
