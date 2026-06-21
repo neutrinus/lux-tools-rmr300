@@ -57,4 +57,3 @@ snk_mower:
   buzzer_pin: 27
   rain_pin: 36
   boot_delay: 30
-  lcd_sweep: false

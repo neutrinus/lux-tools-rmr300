@@ -1030,6 +1030,7 @@ void SnkMower::return_to_dock() {
 }
 
 void SnkMower::publish_mower_state(MowerState state) {
+  bool state_changed = state != current_state_;
   current_state_ = state;
   last_activity_ms_ = millis();
   display_off_ = false;
@@ -1041,10 +1042,10 @@ void SnkMower::publish_mower_state(MowerState state) {
     is_charging_sensor_->publish_state(state == MowerState::CHARGING);
   if (is_docked_sensor_)
     is_docked_sensor_->publish_state(state == MowerState::DOCKED ||
-                                      state == MowerState::CHARGING);
+                                    state == MowerState::CHARGING);
   if (has_error_sensor_)
     has_error_sensor_->publish_state(state == MowerState::ERROR_STATE ||
-                                      state == MowerState::LOCKED);
+                                    state == MowerState::LOCKED);
   if (is_returning_sensor_)
     is_returning_sensor_->publish_state(state == MowerState::RETURNING);
 
@@ -1058,15 +1059,7 @@ void SnkMower::publish_mower_state(MowerState state) {
       return;
   }
 
-  if (state == MowerState::MOWING) {
-    set_display_battery(last_battery_percent_);
-    state_display_cycle_ms_ = millis() + 5000;
-    state_show_alt_ = false;
-  } else if (state == MowerState::CHARGING) {
-    set_charging_display(last_battery_percent_);
-    state_display_cycle_ms_ = millis() + 5000;
-    state_show_alt_ = false;
-  } else if (state == MowerState::ERROR_STATE) {
+  if (state == MowerState::ERROR_STATE) {
     char buf[5];
     int err = std::max(0, std::min(error_code_, 999));
     if (err >= 100) {
@@ -1080,8 +1073,18 @@ void SnkMower::publish_mower_state(MowerState state) {
     }
     buf[4] = '\0';
     set_display_text(buf);
-  } else {
-    set_display_text(STATE_DISPLAY[idx]);
+    if (state_changed) {
+      state_display_cycle_ms_ = millis() + 5000;
+      state_show_alt_ = false;
+    }
+  } else if (state_changed) {
+    if (state == MowerState::MOWING) {
+      set_display_battery(last_battery_percent_);
+    } else if (state == MowerState::CHARGING) {
+      set_charging_display(last_battery_percent_);
+    } else {
+      set_display_text(STATE_DISPLAY[idx]);
+    }
     state_display_cycle_ms_ = millis() + 5000;
     state_show_alt_ = false;
   }
