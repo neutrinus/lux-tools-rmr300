@@ -346,8 +346,9 @@ void SnkMower::refresh_display_impl() {
   if (display_clk_ == GPIO_NUM_NC) return;
   if (display_off_) return;
 
-  // COLON/B0 SWEEP: show 8888, sweep b0 bits to find colon
-  static const uint8_t B0_TEST[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x00,0xFF};
+  // COLON/B0 SWEEP v2: blank segments + sweep b0 combos to find colon clearly
+  static const uint8_t B0_TEST[] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,
+                                     0x03,0x30,0xC0,0x0C,0x50,0xA0,0x00,0xFF};
   static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
 
   static uint32_t last_sw_ms = 0;
@@ -356,13 +357,13 @@ void SnkMower::refresh_display_impl() {
   if (now - last_sw_ms >= 3000) {
     last_sw_ms = now;
     sw_idx = (sw_idx + 1) % (sizeof(B0_TEST)/sizeof(B0_TEST[0]));
-    ESP_LOGI(TAG, "COLON SWEEP: b0=0x%02X", B0_TEST[sw_idx]);
+    ESP_LOGI(TAG, "COLON BLANK SWEEP: b0=0x%02X", B0_TEST[sw_idx]);
   }
 
-  display_segments_[0] = char_to_segments_('8');
-  display_segments_[1] = char_to_segments_('8');
-  display_segments_[2] = char_to_segments_('8');
-  display_segments_[3] = char_to_segments_('8');
+  display_segments_[0] = 0x80;  // just DP
+  display_segments_[1] = 0x80;
+  display_segments_[2] = 0x80;
+  display_segments_[3] = 0x80;
 
   uint8_t seg = display_segments_[current_digit_];
   uint8_t b0 = B0_TEST[sw_idx];
