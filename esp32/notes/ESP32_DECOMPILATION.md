@@ -307,3 +307,25 @@ Znaleziona w DROM tablica mapująca ID komend na nazwy string (używana do logow
 | `ESP32.md` | Wstępna analiza (częściowo nieaktualna — błędny protokół binarny) |
 | `ESP32_GPIO_ANALYSIS.md` | Analiza pinów GPIO |
 | `1610-report.md` | Starszy raport o pinach wyświetlacza (błędne CLK=5, MOSI=32) |
+
+### UART Capture Analysis Summary (2026-06-21)
+
+Trzy nagrania LA (fx2lafw, 4MHz) potwierdziły protokół i ujawniły pełną komunikację:
+
+| Plik | Opis |
+|------|------|
+| `captures/2026-06-21/pierwszy.sr` | Boot + PIN entry (pwd=9633) |
+| `captures/2026-06-21/drugi.sr` | Boot + PIN + START → error 16 (out of wire) |
+| `captures/2026-06-21/trzeci.sr` | Pełny cykl: START→MOW→STOP→HOME→RETURN→STOP |
+
+**Kluczowe odkrycia:**
+
+1. **Format ramki potwierdzony**: `&{json}<CRC>##`
+2. **START/STOP/HOME to fizyczne przyciski → U16** — nie ma UART command do startu koszenia
+3. **ESP wysyła tylko ACK**: `0x41000020` (START_ACK), `0x41000003` (EXEC_ACTION), `0x41000006` (HOME_ACK)
+4. **Stany MB**: 0=idle, 1=ready, 2=mowing, 6=stop, 7=error, 9=returning to dock
+5. **CMD 0x41000005** (=PIN_SEND) pojawia się też bez `pwd` — może wieloznaczny
+6. **CMD 0x41000006** (=nieznany) = **HOME/RETURN_TO_DOCK** — ESP wysyła po fizycznym HOME
+7. **`action:0`** wysyłany raz przy boot — `action:1` lub `action:2` nie zaobserwowano
+
+**Dla ESPHome**: nie ma możliwości wysłania komendy "start mowing" przez UART. Konieczne jest podłączenie GPIO do linii przycisków (START pin J2.6, HOME?) lub dalsze badania.
