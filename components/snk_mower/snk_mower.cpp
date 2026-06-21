@@ -115,11 +115,11 @@ static void shift24(gpio_num_t clk, gpio_num_t mosi, gpio_num_t cs,
   for (int b = 0; b < 3; b++) {
     for (int i = 7; i >= 0; i--) {
       gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
       gpio_set_level(clk, 1);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
       gpio_set_level(clk, 0);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
     }
   }
   delayMicroseconds(2);
@@ -132,11 +132,11 @@ static void shift24_nocs(gpio_num_t clk, gpio_num_t mosi,
   for (int b = 0; b < 3; b++) {
     for (int i = 7; i >= 0; i--) {
       gpio_set_level(mosi, (bytes[b] >> i) & 1);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
       gpio_set_level(clk, 1);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
       gpio_set_level(clk, 0);
-      delayMicroseconds(2);
+      delayMicroseconds(1);
     }
   }
   delayMicroseconds(2);
