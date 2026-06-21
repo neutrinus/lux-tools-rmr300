@@ -789,6 +789,20 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
+    // Send POLL/keepalive even during boot_delay — watchdog expects UART traffic
+    if (now - last_poll_ > 30) {
+      last_poll_ = now;
+      send_poll();
+    }
+    if (now - last_keepalive_ > 1000) {
+      last_keepalive_ = now;
+      send_keepalive();
+    }
+    if (now - last_wifi_status_ > 5000) {
+      last_wifi_status_ = now;
+      send_wifi_status();
+    }
+
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ >= boot_delay_ms_) {
         ESP_LOGI(TAG, "Boot delay expired — starting handshake");
@@ -804,20 +818,6 @@ void SnkMower::loop() {
         last_boot_ms_ = now;
       }
       return;
-    }
-
-    // Before DEVICE_INFO received: POLL rapidly, KEEPALIVE occasionally, WIFI/BT periodically
-    if (now - last_poll_ > 30) {
-      last_poll_ = now;
-      send_poll();
-    }
-    if (now - last_keepalive_ > 1000) {
-      last_keepalive_ = now;
-      send_keepalive();
-    }
-    if (now - last_wifi_status_ > 5000) {
-      last_wifi_status_ = now;
-      send_wifi_status();
     }
   }
 
