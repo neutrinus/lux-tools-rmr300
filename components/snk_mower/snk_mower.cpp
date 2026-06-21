@@ -348,12 +348,12 @@ void SnkMower::refresh_display_impl() {
 
   uint32_t now = millis();
   
-  static uint32_t last_approach_change_ms = 0;
-  static uint8_t approach = 0;
-  if (now - last_approach_change_ms >= 5000) {
-    last_approach_change_ms = now;
-    approach = (approach + 1) % 5;
-    ESP_LOGI(TAG, "DISPLAY TEST: Approach %d (showing 1234 multiplexed)", approach);
+  static uint32_t last_step_change_ms = 0;
+  static uint8_t diag_step = 0;
+  if (now - last_step_change_ms >= 5000) {
+    last_step_change_ms = now;
+    diag_step = (diag_step + 1) % 8;
+    ESP_LOGI(TAG, "B0 SWEEP: Step %d (Digit 2/3 active on b0 = 0x%02X)", diag_step, 1 << diag_step);
   }
 
   display_segments_[0] = char_to_segments_('1');
@@ -365,29 +365,19 @@ void SnkMower::refresh_display_impl() {
 
   uint8_t b0 = 0;
   uint8_t b1 = 0;
-  uint8_t dig = 1 << current_digit_;
 
-  if (approach == 0) {
+  if (current_digit_ == 0) {
     b0 = 0x00;
-    b1 = display_colon_ | dig;
-  } else if (approach == 1) {
-    b0 = display_colon_ | dig;
+    b1 = 0x04 | display_colon_;
+  } else if (current_digit_ == 1) {
+    b0 = 0x00;
+    b1 = 0x08 | display_colon_;
+  } else if (current_digit_ == 2) {
+    b0 = 1 << diag_step;
     b1 = 0x00;
-  } else if (approach == 2) {
-    static const uint8_t B0_MAP[] = {0x00, 0x00, 0x02, 0x04};
-    static const uint8_t B1_MAP[] = {0x02, 0x04, 0x00, 0x00};
-    b0 = B0_MAP[current_digit_];
-    b1 = B1_MAP[current_digit_] | display_colon_;
-  } else if (approach == 3) {
-    static const uint8_t B0_MAP[] = {0x00, 0x00, 0x04, 0x08};
-    static const uint8_t B1_MAP[] = {0x04, 0x08, 0x00, 0x00};
-    b0 = B0_MAP[current_digit_];
-    b1 = B1_MAP[current_digit_] | display_colon_;
-  } else if (approach == 4) {
-    static const uint8_t B0_MAP[] = {0x00, 0x00, 0x01, 0x02};
-    static const uint8_t B1_MAP[] = {0x02, 0x04, 0x00, 0x00};
-    b0 = B0_MAP[current_digit_];
-    b1 = B1_MAP[current_digit_] | display_colon_;
+  } else if (current_digit_ == 3) {
+    b0 = 1 << diag_step;
+    b1 = 0x00;
   }
 
   current_digit_ = (current_digit_ + 1) % DIGITS;

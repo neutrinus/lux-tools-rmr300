@@ -459,17 +459,19 @@ Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświ
 - **Format Baterii:** Poziom baterii i ładowania wyświetla się teraz perfekcyjnie wyrównany na trzech prawych cyfrach (Digit 1, 2, 3), a pierwszy segment (Digit 0) jest zarezerwowany dla animacji ładowania (uruchamianej na `current_digit_ == 0`).
 
 ### 3. Eksperyment Diagnostyczny: Bezpieczne Skanowanie Multipleksowe (2026-06-21)
-Zaimplementowaliśmy bezpieczny test dynamiczny `DISPLAY TEST` bezpośrednio w `refresh_display_impl()` w celu uniknięcia przeciążenia linii zasilania (stałe włączenie wszystkich segmentów na 100% duty cycle mogło wywołać spadek napięcia lub watchdog reset).
-- **Działanie:** Test co 5 sekund przełącza podejście (`Approach 0` do `4`), stale wyświetlając cyfry `"1234"` w trybie multipleksowanym (4ms).
-- **Logowanie:** ESPHome loguje aktualne podejście:
-  `DISPLAY TEST: Approach X (showing 1234 multiplexed)`
-- **Podejścia:**
-  - **Approach 0:** `b0=0x00`, `b1=dig` (tylko rejestr `U3` aktywny)
-  - **Approach 1:** `b0=dig`, `b1=0x00` (tylko rejestr `U4` aktywny)
-  - **Approach 2:** Sometryczne mapowanie A (`b0={0x02,0x04}`, `b1={0x02,0x04}`)
-  - **Approach 3:** Sometryczne mapowanie B (`b0={0x04,0x08}`, `b1={0x04,0x08}`)
-  - **Approach 4:** Podział C (`b0={0x01,0x02}`, `b1={0x02,0x04}`)
-- **Cel:** Pozwala to naocznie i bezbłędnie zidentyfikować optymalne mapowanie wszystkich 4 cyfr.
+Zaimplementowaliśmy bezpieczny test dynamiczny `DISPLAY TEST` bezpośrednio w `refresh_display_impl()`.
+- **Wyniki:**
+  - **Approach 3** (Symmetric B: `b1={0x04, 0x08}`) wyświetlił poprawnie cyfry **`"1"`** i **`"2"`** na lewych dwóch segmentach (Digit 0 i Digit 1).
+  - Potwierdza to ostatecznie, że **Digit 0 jest aktywowany przez `b1 = 0x04` (bit 2)**, a **Digit 1 przez `b1 = 0x08` (bit 3)**.
+  - Prawa strona (Digit 2 i Digit 3) pozostała ciemna, co wskazuje, że bity sterujące na rejestrze `U4` (`b0`) są zmapowane na inne pozycje niż bit 2 i 3.
+
+### 4. Celowany test B0 SWEEP (2026-06-21)
+Aby precyzyjnie namierzyć, które bity rejestru `U4` (`b0`) aktywują Digit 2 i Digit 3:
+- **Działanie:** Lewa strona wyświetlacza mruga stabilnie `"12"` w trybie multipleksowanym na poprawnych bitach (`b1 = 0x04` i `0x08`).
+- **Taktowanie prawej strony:** Dla Digit 2 i Digit 3, bajt `b0` jest co 5 sekund ustawiany na kolejny pojedynczy bit `1 << diag_step` (od bitu 0 do 7).
+- **Logowanie:** ESPHome loguje aktualny krok:
+  `B0 SWEEP: Step X (Digit 2/3 active on b0 = 0xXX)`
+- **Cel:** Gdy test osiągnie poprawny krok, z prawej strony obok `"12"` zapalą się cyfry `"3"` lub `"4"`. Kroki te jednoznacznie określą fizyczne mapowanie prawych cyfr!
 
 ## Key files
 
