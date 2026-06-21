@@ -19,3 +19,28 @@ tools/bridge_compile/
 tools/bridge_compile_test/
 *.class
 .esphome/
+
+# Build artifacts
+esp32/
+
+# Decompilation / exploration artifacts
+class_scripts/
+u13/decomp/
+
+# Temp working files
+callers_output.txt
+one_output.txt
+extra_decomp.txt
+find_lcd.txt
+gpio_search_output.txt
+xrefs_output*.txt
+decomp*.txt
+
+# Reports
+report-*.md
+
+# Virtual environment
+.venv/
+
+# Sensitive
+.allegro_cookies.json
