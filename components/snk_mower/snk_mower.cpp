@@ -558,10 +558,6 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
-    if (now - last_wifi_status_ > 5000) {
-      last_wifi_status_ = now;
-      send_wifi_status();
-    }
 
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ >= boot_delay_ms_) {
@@ -614,7 +610,11 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::DONE) {
-    // Normal operation: KEEPALIVE at ~1s interval (matches original)
+    // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s (matches original)
+    if (now - last_poll_ > 30) {
+      last_poll_ = now;
+      send_poll();
+    }
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
