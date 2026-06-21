@@ -195,6 +195,12 @@ OEM MB→ESP (to co musimy ODBIERAĆ):
 | 9 | **RETURNING TO DOCK** |
 | 10 | **CHARGING** |
 
+### Uwagi hardware'owe
+
+1. **ON (J2 pin 2) — wrażliwy na pojemność sondy.** Podłączenie sondy LA lub oscyloskopu do pinu ON powoduje że kosiarka startuje w trybie "USB" (wyświetlacz pokazuje "USB", nie uruchamia się normalnie). Dzieje się tak nawet bez podłączonej masy — sama pojemność sondy (kilkadziesiąt pF) wystarcza by zakłócić sygnał. ON jest bezpośrednim GPIO do U16 (GD32F303) i prawdopodobnie jest używany do wykrywania trybu programowania (pull-down przy starcie = USB IAP?). Po odpięciu sondy kosiarka uruchamia się normalnie.
+
+2. **START (J2 pin 6) i OK (J2 pin 7)** — również bezpośrednie GPIO do U16, ale nie są wrażliwe na pojemność sondy. OK jest dodatkowo zbuforowany przez R27 do ESP32 GPIO19 (sygnał ADC?).
+
 ### Co jest źle w obecnym ESPHome firmware
 
 Na podstawie porównania z LA capture:
