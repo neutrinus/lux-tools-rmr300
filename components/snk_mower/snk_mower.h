@@ -168,6 +168,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool display_off_{false};
 
   uint32_t boot_delay_ms_{0};
+  bool shutdown_pending_{false};
+  uint32_t shutdown_start_ms_{0};
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];

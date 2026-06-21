@@ -978,6 +978,8 @@ void SnkMower::handle_exec_action(const JsonDocument &doc) {
 void SnkMower::handle_shutdown(const JsonDocument &doc) {
   ESP_LOGI(TAG, "Shutdown requested");
   set_display_text("byE ");
+  shutdown_pending_ = true;
+  shutdown_start_ms_ = millis();
 }
 
 void SnkMower::handle_start_time_query(const JsonDocument &doc) {
@@ -1027,6 +1029,13 @@ void SnkMower::publish_mower_state(MowerState state) {
 
   if (mower_state_sensor_)
     mower_state_sensor_->publish_state(STATE_NAMES[idx]);
+
+  if (shutdown_pending_) {
+    if (millis() - shutdown_start_ms_ > 3000)
+      shutdown_pending_ = false;
+    else
+      return;
+  }
 
   if (state == MowerState::MOWING) {
     set_display_battery(last_battery_percent_);
