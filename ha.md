@@ -440,38 +440,56 @@ Wgrano oprogramowanie w trybie normalnym (`lcd_sweep: false`):
 
 W wyniku dalszych eksperymentów i analizy zachowania wyświetlacza oraz komunikacji UART po ostatnich aktualizacjach oprogramowania, dokonaliśmy następujących przełomowych odkryć:
 
+### ⚠️ KOREKTA ORIENTACJI WYŚWIETLACZA (2026-06-21)
+Użytkownik zorientował się, że przez cały czas patrzył na kosiarkę **do góry nogami** (przyciski są pod ekranem, a nie nad). Wszystkie wcześniejsze obserwacje "lewa/prawa strona" są odwrócone.
+- **Poprawione rozumienie:** To, co nazywaliśmy "lewymi dwoma segmentami" (Digit 0, 1) to w rzeczywistości **prawe dwa segmenty wyświetlacza** (fizyczne pozycje 2, 3).
+- **Konsekwencja:** Cyfry `"1"` i `"2"` w Approach 3 pojawiły się na **prawej** stronie wyświetlacza — blisko przycisków.
+- **`b1=0x04` i `b1=0x08` sterują PRAWĄ stroną** wyświetlacza (fizyczne pozycje 2 i 3).
+- **Lewa strona (fizyczne pozycje 0 i 1) NIGDY się nie zaświeciła** w żadnym teście — musi być sterowana przez `b0` (rejestr U4), ale nie znamy jeszcze właściwych bitów.
+
 ### 1. Rozwiązanie blokady UART RX
 Wprowadzone wcześniej wysyłanie ramek `POLL` podczas startowego opóźnienia (`boot_delay`) w celu uniknięcia watchdog-cuta z płyty głównej zawierało błąd logiki: pętla `loop()` wykonywała wczesny powrót (`return;`), całkowicie omijając odczytywanie portu UART RX.
 - **Problem:** ESP32 wysyłał zapytania, płyta główna na nie odpowiadała, a nieodczytywany bufor RX ESP32 ulegał całkowitemu przepełnieniu (overflow). Powodowało to stałe zablokowanie procesu handshake w fazie `BootPhase::PRE`.
 - **Rozwiązanie:** Usunięto wczesny powrót (`return;`) podczas oczekiwania startowego. Bufor RX jest teraz odczytywany na bieżąco od samego początku, a handshake przebiega natychmiast i bezbłędnie. Zwiększono domyślny `boot_delay` w `snk-mower.yaml` do 30 sekund w celu zapewnienia bardzo bezpiecznego okna dla OTA.
 
-### 2. Smetryczne sterowanie 4 segmentami (Split Digit Select)
-Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświetlacza (działały tylko dwa lewe segmenty Digit 0 i 1). 
-- **Odkrycie:** Tranzystory sterujące wspólnymi katodami/anodami cyfr są fizycznie rozdzielone na dwa różne rejestry przesuwne w kaskadzie ze względu na trasowanie ścieżek na PCB:
-  - **Lewa strona (Digit 0 i Digit 1):** Sterowane przez rejestr **`U3`** (bajt danych `b1`).
-  - **Prawa strona (Digit 2 i Digit 3):** Sterowane przez rejestr **`U4`** (bajt danych `b0`).
-- **Seryjna Symetria:** Wzorce aktywacji cyfr są idealnie symetryczne na obu rejestrach:
-  - **Digit 0** (skrajnie lewy): active on `b1` bit 2 (`0x04`)
-  - **Digit 1** (drugi od lewej): active on `b1` bit 3 (`0x08`)
-  - **Digit 2** (trzeci od lewej): active on `b0` bit 2 (`0x04`)
-  - **Digit 3** (skrajnie prawy): active on `b0` bit 3 (`0x08`)
-- **Implementacja:** Zaimplementowano tablice mapowania `DIGIT_B0_MAP` oraz `DIGIT_B1_MAP` w `refresh_display_impl()`. Wygaszanie nieaktywnych cyfr na drugim rejestrze odbywa się automatycznie poprzez wzajemne wykluczenie (gdy `b0` steruje prawą stroną, `b1` jest wygaszony i na odwrót), co eliminuje powidoki (ghosting).
-- **Format Baterii:** Poziom baterii i ładowania wyświetla się teraz perfekcyjnie wyrównany na trzech prawych cyfrach (Digit 1, 2, 3), a pierwszy segment (Digit 0) jest zarezerwowany dla animacji ładowania (uruchamianej na `current_digit_ == 0`).
+### 2. Podział sterowania wyświetlaczem (U3 = prawa strona, U4 = lewa strona)
+Wcześniejsze próby wyświetlania kończyły się ciemną prawą stroną wyświetlacza. Po korekcie orientacji:
+- **Ustalono:** Rejestr `U3` (bajt `b1`) steruje **prawymi dwoma fizycznymi pozycjami** (poz. 2 i 3).
+- **Fakty:** `b1=0x04` → pozycja fizyczna 2 (druga od prawej), `b1=0x08` → pozycja fizyczna 3 (skrajnie prawa).
+- Rejestr `U4` (bajt `b0`) musi sterować **lewymi dwoma fizycznymi pozycjami** (poz. 0 i 1).
+- Bity `0x01`, `0x02`, `0x04`, `0x08` na `b0` (testowane w Approach 1) **nie aktywują żadnych pozycji** — lewa strona potrzebuje innych bitów.
 
-### 3. Eksperyment Diagnostyczny: Bezpieczne Skanowanie Multipleksowe (2026-06-21)
-Zaimplementowaliśmy bezpieczny test dynamiczny `DISPLAY TEST` bezpośrednio w `refresh_display_impl()`.
-- **Wyniki:**
-  - **Approach 3** (Symmetric B: `b1={0x04, 0x08}`) wyświetlił poprawnie cyfry **`"1"`** i **`"2"`** na lewych dwóch segmentach (Digit 0 i Digit 1).
-  - Potwierdza to ostatecznie, że **Digit 0 jest aktywowany przez `b1 = 0x04` (bit 2)**, a **Digit 1 przez `b1 = 0x08` (bit 3)**.
-  - Prawa strona (Digit 2 i Digit 3) pozostała ciemna, co wskazuje, że bity sterujące na rejestrze `U4` (`b0`) są zmapowane na inne pozycje niż bit 2 i 3.
+### 3. Eksperyment Diagnostyczny: DISPLAY TEST — wyniki po korekcie orientacji (2026-06-21)
+Obserwacje z poprawną orientacją (przyciski na dole):
 
-### 4. Celowany test B0 SWEEP (2026-06-21)
-Aby precyzyjnie namierzyć, które bity rejestru `U4` (`b0`) aktywują Digit 2 i Digit 3:
-- **Działanie:** Lewa strona wyświetlacza mruga stabilnie `"12"` w trybie multipleksowanym na poprawnych bitach (`b1 = 0x04` i `0x08`).
-- **Taktowanie prawej strony:** Dla Digit 2 i Digit 3, bajt `b0` jest co 5 sekund ustawiany na kolejny pojedynczy bit `1 << diag_step` (od bitu 0 do 7).
-- **Logowanie:** ESPHome loguje aktualny krok:
-  `B0 SWEEP: Step X (Digit 2/3 active on b0 = 0xXX)`
-- **Cel:** Gdy test osiągnie poprawny krok, z prawej strony obok `"12"` zapalą się cyfry `"3"` lub `"4"`. Kroki te jednoznacznie określą fizyczne mapowanie prawych cyfr!
+| Approach | `b0` (U4) | `b1` (U3) | Wynik (poprawna orientacja) |
+|----------|-----------|-----------|-----------------------------|
+| 0 (b1=dig) | 0x00 | dig=1<<i | **Dwa prawe: "4 3"** (poz.3='4' b1=0x08, poz.2='3' b1=0x04) |
+| 1 (b0=dig) | dig=1<<i | 0x00 | **Nic** — b0 nie zawiera właściwych bitów |
+| 2 (sym A) | {0,0,0x02,0x04} | {0x02,0x04,0,0} | **Skrajny prawy: "2"** (poz.2='2' b1=0x04, poz.3 ciemna) |
+| 3 (sym B) | {0,0,0x04,0x08} | {0x04,0x08,0,0} | **Dwa prawe: "2 1"** (poz.3='2' b1=0x08, poz.2='1' b1=0x04) |
+| 4 (sym C) | {0,0,0x01,0x02} | {0x02,0x04,0,0} | **Skrajny prawy: "2"** (poz.2='2' b1=0x04) |
+
+**Wnioski:**
+- **Potwierdzone mapowanie b1 (U3):** `0x04` → poz.2, `0x08` → poz.3 (prawe pozycje).
+- **`b1=0x01` i `b1=0x02` nie aktywują żadnych widocznych pozycji** — te bity nie są podłączone do tranzystorów cyfr.
+- **`b0` (U4) nie został jeszcze poprawnie zmapowany** — lewa strona (poz. 0 i 1) pozostała ciemna we wszystkich testach.
+
+### 4. Celowany test B0 SWEEP (2026-06-21) — wersja 2
+Celem jest znalezienie bitów `b0`, które aktywują lewe fizyczne pozycje (poz. 0 i 1).
+
+**Poprawiona konstrukcja testu:**
+- **Prawa strona (referencja):** Stabilne `"12"` na pozycjach 2 i 3 przez `b1=0x04` i `b1=0x08`.
+- **Lewa strona — dwie fazy po 8 kroków (łącznie 16 × 5s = 80s cykl):**
+  - **Faza 0 (kroki 0-7):** Test pozycji 0 — cyfra `'3'` z `b0 = 1<<bit_idx`; pozycja 1 wyłączona (segment=0).
+  - **Faza 1 (kroki 8-15):** Test pozycji 1 — cyfra `'4'` z `b0 = 1<<bit_idx`; pozycja 0 wyłączona (segment=0).
+- **Logowanie:** `B0 SWEEP: phase=X bit=Y b0=0xZZ`
+- **Cel:** Gdy test trafi na właściwy bit, z lewej strony pojawi się cyfra `"3"` (faza 0) lub `"4"` (faza 1).
+
+**Obserwacje użytkownika:** Patrząc na wyświetlacz prawą stroną do góry:
+- Po prawej stronie widać stabilne `"12"` — to potwierdza działanie multipleksera.
+- W pewnym momencie po lewej stronie (fizycznie z dala od przycisków) pojawi się `"3"` lub `"4"`.
+- Należy zapisać, w którym kroku (0-7 dla '3', 8-15 dla '4') pojawia się cyfra.
 
 ## Key files
 

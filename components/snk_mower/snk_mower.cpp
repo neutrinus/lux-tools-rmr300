@@ -352,14 +352,25 @@ void SnkMower::refresh_display_impl() {
   static uint8_t diag_step = 0;
   if (now - last_step_change_ms >= 5000) {
     last_step_change_ms = now;
-    diag_step = (diag_step + 1) % 8;
-    ESP_LOGI(TAG, "B0 SWEEP: Step %d (Digit 2/3 active on b0 = 0x%02X)", diag_step, 1 << diag_step);
+    diag_step = (diag_step + 1) % 16;
+    uint8_t phase = diag_step / 8;
+    uint8_t bit_idx = diag_step % 8;
+    ESP_LOGI(TAG, "B0 SWEEP: phase=%d bit=%d b0=0x%02X", phase, bit_idx, 1 << bit_idx);
   }
+
+  uint8_t phase = diag_step / 8;
+  uint8_t bit_idx = diag_step % 8;
+  uint8_t b0_bit = 1 << bit_idx;
 
   display_segments_[0] = char_to_segments_('1');
   display_segments_[1] = char_to_segments_('2');
-  display_segments_[2] = char_to_segments_('3');
-  display_segments_[3] = char_to_segments_('4');
+  if (phase == 0) {
+    display_segments_[2] = char_to_segments_('3');
+    display_segments_[3] = 0;
+  } else {
+    display_segments_[2] = 0;
+    display_segments_[3] = char_to_segments_('4');
+  }
 
   uint8_t seg = display_segments_[current_digit_];
 
@@ -373,10 +384,10 @@ void SnkMower::refresh_display_impl() {
     b0 = 0x00;
     b1 = 0x08 | display_colon_;
   } else if (current_digit_ == 2) {
-    b0 = 1 << diag_step;
+    b0 = (display_segments_[2] != 0) ? b0_bit : 0x00;
     b1 = 0x00;
   } else if (current_digit_ == 3) {
-    b0 = 1 << diag_step;
+    b0 = (display_segments_[3] != 0) ? b0_bit : 0x00;
     b1 = 0x00;
   }
 
