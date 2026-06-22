@@ -613,7 +613,7 @@ void SnkMower::loop() {
       init_burst_count_++;
       ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
     }
-    if (init_burst_count_ >= 6 || burst_elapsed > 2000) {
+    if (init_burst_count_ >= 6) {
       boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = now;
       ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
@@ -907,12 +907,6 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     }
     if (doc.containsKey("bat_name") && battery_name_sensor_) {
       battery_name_sensor_->publish_state(doc["bat_name"] | "");
-    }
-
-    // DEVICE_INFO from MB — send PIN proactively if needed
-    if (boot_phase_ == BootPhase::PRE && !pin_sent_ && pwd_en) {
-      ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN proactively");
-      send_pin();
     }
   }
 
