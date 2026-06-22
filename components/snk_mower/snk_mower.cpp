@@ -559,9 +559,10 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // If boot_delay active, wait before sending any MB traffic
+    // If boot_delay active, wait before sending boot sequence
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ < boot_delay_ms_) {
+        // Send POLL during delay to keep MB watchdog happy
         if (now - last_poll_ > 200) {
           last_poll_ = now;
           send_poll();
@@ -573,9 +574,12 @@ void SnkMower::loop() {
         return;
       }
       boot_delay_ms_ = 0;
+      phase_start_ms_ = now;
+      send_boot_sequence();
+      return;
     }
 
-    // Poll + keepalive while waiting for MB to initiate boot (send DEVICE_INFO)
+    // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -584,11 +588,25 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
+
+    // Timeout: if DEVICE_INFO not received within 2s, enter DONE anyway
+    if (now - phase_start_ms_ > 2000) {
+      if (!device_info_received_) {
+        ESP_LOGW(TAG, "DEVICE_INFO not received — entering DONE anyway");
+      }
+      boot_phase_ = BootPhase::DONE;
+      phase_start_ms_ = now;
+    }
   }
 
-  // When DEVICE_INFO arrives in PRE, handle_device_info() transitions to DONE.
-  // DONE: poll + keepalive + rain
   if (boot_phase_ == BootPhase::DONE) {
+    // Send PIN on first DONE entry if not already sent
+    if (!pin_sent_) {
+      ESP_LOGI(TAG, "Sending PIN to mainboard");
+      send_pin();
+    }
+
+    // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -882,11 +900,10 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
       }
     }
 
-    // On first DEVICE_INFO in PRE phase: respond with boot sequence, then DONE
+    // On first DEVICE_INFO in PRE phase: transition to DONE, send PIN if needed
     if (boot_phase_ == BootPhase::PRE) {
       device_info_received_ = true;
-      ESP_LOGI(TAG, "DEVICE_INFO received — responding with boot sequence");
-      send_boot_sequence();
+      ESP_LOGI(TAG, "DEVICE_INFO received — entering DONE phase");
       if (!pin_sent_ && pwd_en) {
         ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN");
         send_pin();
