@@ -76,7 +76,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   std::string pin_;
 
   void send_json(const JsonDocument &doc);
-  void send_boot_sequence_next();
   void send_boot();
   void send_init();
   void send_pin();
@@ -126,13 +125,16 @@ class SnkMower : public Component, public uart::UARTDevice {
   void read_rain_sensor();
 
   enum class BootPhase : uint8_t {
-    PRE,   // boot_delay → send boot_seq → wait for DEVICE_INFO
-    DONE,  // DEVICE_INFO received (or timeout), PIN sent, normal op
+    PRE,   // waiting for DEVICE_INFO from MB
+    SYNC,  // DEVICE_INFO received, sending ESP_INFO/INIT burst
+    DONE,  // handshake complete, normal keepalive operation
   };
 
   BootPhase boot_phase_{BootPhase::PRE};
   uint32_t phase_start_ms_{0};
-  uint8_t boot_seq_step_{0xFF};  // 0xFF=idle, 0..7=boot sequence progress
+  uint32_t device_info_arrived_ms_{0};
+  int info_burst_count_{0};
+  int init_burst_count_{0};
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
@@ -141,12 +143,12 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
-  uint32_t last_boot_send_ms_{0};
-  uint32_t last_wifi_status_ms_{0};
-  uint32_t last_esp_info_ms_{0};
-
+  uint32_t last_wifi_status_{0};
+  uint32_t last_esp_info_{0};
+  uint32_t last_esp_state_{0};
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
+  uint32_t last_boot_ms_{0};
 
   int state_{0};
   int error_code_{0};
@@ -168,13 +170,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool station_{false};
   int lock_{0};
 
-  char device_name_[64]{};
-  char device_model_[64]{};
-  char device_sn_[64]{};
-  int device_version_{0};
-  char device_bat_name_[32]{};
-  char hw_ver_str_[128]{};
-
   gpio_num_t buzzer_pin_{GPIO_NUM_NC};
   gpio_num_t rain_pin_{GPIO_NUM_NC};
 
@@ -184,7 +179,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t boot_delay_ms_{0};
   bool shutdown_pending_{false};
   uint32_t shutdown_start_ms_{0};
-  bool compat_mode_{false};  // original firmware compatibility (wifi=0, str=0)
+  bool compat_mode_{false};
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];
@@ -204,7 +199,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   static uint8_t char_to_segments_(char c);
 
   static constexpr uint8_t DIGITS = 4;
-  static constexpr uint8_t DISPLAY_REFRESH_MS = 8;
+  static constexpr uint8_t DISPLAY_REFRESH_MS = 2;
 
   spi_device_handle_t spi_dev_{nullptr};
 
