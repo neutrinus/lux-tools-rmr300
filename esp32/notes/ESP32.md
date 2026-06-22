@@ -1,5 +1,14 @@
 # ESP32 Firmware Analysis — SNK Display Board
 
+> **⚠️ KOREKTA 2026-06-22**: Sekcje "UART Communication Protocol" poniżej opisują
+> protokół **binarny** (`0xAA 0x55` @115200) — to jest **NIEPRAWIDŁOWE**.
+>
+> Rzeczywisty protokół to **JSON @230400 8N1** z formatem ramki `&{json}<CRC>#`.
+> Szczegóły: [../../PROTOCOLS.md](../../PROTOCOLS.md) i [ESP32_DECOMPILATION.md](ESP32_DECOMPILATION.md).
+>
+> Ta analiza powstała przed nagraniem captures analizatorem logicznym (2026-06-18).
+> Kierunki komend w sekcjach poniżej mogą być odwrócone — patrz PROTOCOLS.md dla poprawnych kierunków.
+
 ## Overview
 
 The display board (`SNK_DISPLAY_CP_V11`) contains an **ESP32-WROOM-32UE** module (U5) that serves as the primary user interface controller. Despite the mower being sold without any advertised wireless connectivity, the ESP32 ships with a full ESP-IDF firmware (project `Display_esp32`, version `3.02.02`) containing functional Wi-Fi, Bluetooth, and MQTT stacks — strongly suggesting a "smart" variant exists on the same platform.

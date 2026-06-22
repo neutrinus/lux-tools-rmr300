@@ -48,17 +48,23 @@ python3 tools/decode_capture.py captures/XX-scenario/capture.vcd
 
 ## Protocol summary
 
-### Command ID structure (from observed prefixes)
+### Command ID structure (from observed prefixes — directions cross-verified)
 
 | Prefix | Prefix (hex) | Source | Description |
 |--------|-------------|--------|-------------|
-| `0x20xxxxxx` | 0x20xxxxxx | MB→ESP | Power/action commands |
-| `0x22xxxxxx` | 0x22xxxxxx | ESP→MB | Sensor data (rain) |
-| `0x30xxxxxx` | 0x30xxxxxx | ESP→MB | ESP status/requests |
-| `0x33xxxxxx` | 0x33xxxxxx | MB→ESP | Configuration & state |
-| `0x40xxxxxx` | 0x40xxxxxx | Both | System/heartbeat |
-| `0x41xxxxxx` | 0x41xxxxxx | MB→ESP | Lock status |
-| `0x50xxxxxx` | 0x50xxxxxx | MB→ESP | Battery info |
+| `0x10xxxxxx` | 0x10000000 | ESP→MB | Error acknowledges |
+| `0x20xxxxxx` | 0x20000000 | MB→ESP | Power/action notifications |
+| `0x22xxxxxx` | 0x22000000 | ESP→MB | Sensor data (rain — sensor on display board) |
+| `0x30xxxxxx` | 0x30000000 | ESP→MB | Settings, keepalive, WiFi/BT status, config |
+| `0x31xxxxxx` | 0x31000000 | ESP→MB | Settings menu control |
+| `0x33xxxxxx` | 0x33000000 | MB→ESP | Configuration, state reports, device info |
+| `0x40xxxxxx` | 0x40000000 | Both | System/heartbeat — direction zależy od sub-ID |
+| `0x41xxxxxx` | 0x41000000 | MB→ESP | Lock, exec_action, error, shutdown, start_ack, home, docked |
+| `0x50xxxxxx` | 0x50000000 | MB→ESP | Battery info |
+
+> **UWAGA**: Powyższe kierunki zostały zweryfikowane krzyżowo z captures 01-06 (D0=MB→ESP, D1=ESP→MB)
+> i captures 2026-06-21 (D1=ESP TX, D2=MB TX — etykiety w README w tym katalogu były odwrócone).
+> Pełna dokumentacja: [PROTOCOLS.md](../PROTOCOLS.md)
 
 ### Key command IDs
 
