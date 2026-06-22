@@ -563,7 +563,7 @@ void SnkMower::loop() {
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ < boot_delay_ms_) {
         // Send POLL during delay to keep MB watchdog happy
-        if (now - last_poll_ > 30) {
+        if (now - last_poll_ > 200) {
           last_poll_ = now;
           send_poll();
         }
@@ -580,7 +580,7 @@ void SnkMower::loop() {
     }
 
     // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
-    if (now - last_poll_ > 30) {
+    if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
     }
@@ -602,7 +602,7 @@ void SnkMower::loop() {
 
   if (boot_phase_ == BootPhase::SYNC) {
     // Brief SYNC burst while waiting for PIN result
-    if (now - last_poll_ > 30) {
+    if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
     }
@@ -621,7 +621,7 @@ void SnkMower::loop() {
     }
 
     // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s (matches original)
-    if (now - last_poll_ > 30) {
+    if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
     }
