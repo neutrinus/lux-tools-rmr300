@@ -555,6 +555,11 @@ void SnkMower::loop() {
 
   // ── Boot phase state machine ──────────────────────────────────
 
+  // Refresh 'now' — handle_json() may have been called during UART read
+  // above, which can change boot_phase_ and timer values. Using stale 'now'
+  // causes uint32_t underflow in time diffs (now < last_*_ms_).
+  now = millis();
+
   if (boot_phase_ == BootPhase::PRE) {
     // Phase 1: boot_delay window — poll at 200ms, no boot traffic
     if (boot_delay_ms_ > 0) {
@@ -628,10 +633,6 @@ void SnkMower::loop() {
     if (now - last_wifi_status_ms_ > 5000) {
       last_wifi_status_ms_ = now;
       send_wifi_status();
-    }
-    if (now - last_esp_info_ms_ > 30000) {
-      last_esp_info_ms_ = now;
-      send_esp_info();
     }
     if (now - last_rain_read_ > 60000) {
       last_rain_read_ = now;
