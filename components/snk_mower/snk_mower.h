@@ -76,6 +76,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   std::string pin_;
 
   void send_json(const JsonDocument &doc);
+  void send_boot_sequence();
   void send_boot();
   void send_init();
   void send_pin();
@@ -129,9 +130,6 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   BootPhase boot_phase_{BootPhase::PRE};
   uint32_t phase_start_ms_{0};
-  uint32_t device_info_arrived_ms_{0};
-  int info_burst_count_{0};
-  int init_burst_count_{0};
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
@@ -140,12 +138,9 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
-  uint32_t last_wifi_status_{0};
-  uint32_t last_esp_info_{0};
 
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
-  uint32_t last_boot_ms_{0};
 
   int state_{0};
   int error_code_{0};

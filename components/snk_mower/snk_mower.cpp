@@ -122,26 +122,15 @@ void SnkMower::finish_setup() {
 
   set_display_text("boot");
 
+  boot_phase_ = BootPhase::PRE;
+  phase_start_ms_ = millis();
+
   if (boot_delay_ms_ > 0) {
     ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
-    boot_phase_ = BootPhase::PRE;
-    phase_start_ms_ = millis();
     return;
   }
 
-  ESP_LOGI(TAG, "Boot phase PRE: sending BOOT + KEEPALIVE + STATE + RAIN");
-  send_boot();
-  delay(15);
-  send_keepalive();
-  delay(15);
-  send_esp_state(0);
-  delay(15);
-  send_rain_status(1);
-
-  boot_phase_ = BootPhase::PRE;
-  phase_start_ms_ = millis();
-  last_boot_ms_ = phase_start_ms_;
-  ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
+  send_boot_sequence();
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -510,6 +499,26 @@ void SnkMower::read_rain_sensor() {
   send_rain_status(rain);
 }
 
+void SnkMower::send_boot_sequence() {
+  ESP_LOGI(TAG, "Boot: sending BOOT + KEEPALIVE + STATE + RAIN");
+  send_boot();
+  delay(10);
+  send_keepalive();
+  delay(10);
+  send_esp_state(0);
+  delay(10);
+  send_rain_status(1);
+
+  delay(30);
+  send_wifi_status();
+  delay(15);
+  send_esp_info();
+  delay(15);
+  send_init();
+
+  ESP_LOGI(TAG, "Boot sequence sent — waiting for DEVICE_INFO from mainboard");
+}
+
 void SnkMower::loop() {
   uint32_t now = millis();
 
@@ -550,7 +559,27 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // Send POLL/keepalive even during boot_delay — watchdog expects UART traffic
+    // If boot_delay active, wait before sending boot sequence
+    if (boot_delay_ms_ > 0) {
+      if (now - phase_start_ms_ < boot_delay_ms_) {
+        // Send POLL during delay to keep MB watchdog happy
+        if (now - last_poll_ > 30) {
+          last_poll_ = now;
+          send_poll();
+        }
+        if (now - last_keepalive_ > 1000) {
+          last_keepalive_ = now;
+          send_keepalive();
+        }
+        return;
+      }
+      boot_delay_ms_ = 0;
+      phase_start_ms_ = now;
+      send_boot_sequence();
+      return;
+    }
+
+    // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -560,52 +589,27 @@ void SnkMower::loop() {
       send_keepalive();
     }
 
-    if (boot_delay_ms_ > 0) {
-      if (now - phase_start_ms_ >= boot_delay_ms_) {
-        ESP_LOGI(TAG, "Boot delay expired — starting handshake");
-        send_boot();
-        delay(1);
-        send_keepalive();
-        delay(1);
-        send_esp_state(0);
-        delay(1);
-        send_rain_status(1);
-        boot_delay_ms_ = 0;
-        phase_start_ms_ = now;
-        last_boot_ms_ = now;
-
-        if (!device_info_received_) {
-          ESP_LOGW(TAG, "DEVICE_INFO not received during delay — entering SYNC anyway");
-        }
-        boot_phase_ = BootPhase::SYNC;
-        device_info_arrived_ms_ = now;
-        info_burst_count_ = 0;
-        init_burst_count_ = 0;
+    // Timeout: if DEVICE_INFO not received within 2s, enter SYNC anyway
+    if (now - phase_start_ms_ > 2000) {
+      if (!device_info_received_) {
+        ESP_LOGW(TAG, "DEVICE_INFO not received — entering SYNC anyway");
       }
+      boot_phase_ = BootPhase::SYNC;
+      phase_start_ms_ = now;
+      info_burst_count_ = 0;
     }
   }
 
   if (boot_phase_ == BootPhase::SYNC) {
-    // Send ESP_INFO/INIT burst (matches original firmware behavior)
-    uint32_t burst_elapsed = now - device_info_arrived_ms_;
-    if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
-      send_esp_info();
-      info_burst_count_++;
-      ESP_LOGI(TAG, "Boot SYNC: ESP_INFO #%d", info_burst_count_);
-    }
-    if (info_burst_count_ >= 5 && init_burst_count_ < 6 && burst_elapsed > 250 + (uint32_t)init_burst_count_ * 40) {
-      send_init();
-      init_burst_count_++;
-      ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
-    }
-    if (init_burst_count_ >= 6 || burst_elapsed > 2000) {
-      boot_phase_ = BootPhase::DONE;
-      phase_start_ms_ = now;
-      ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
-    }
+    // Brief SYNC burst while waiting for PIN result
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
+    }
+    if (now - phase_start_ms_ > 500) {
+      boot_phase_ = BootPhase::DONE;
+      phase_start_ms_ = now;
+      ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
     }
   }
 
@@ -624,14 +628,6 @@ void SnkMower::loop() {
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
-    }
-    if (now - last_wifi_status_ > 5000) {
-      last_wifi_status_ = now;
-      send_wifi_status();
-    }
-    if (now - last_esp_info_ > 30000) {
-      last_esp_info_ = now;
-      send_esp_info();
     }
     if (now - last_rain_read_ > 60000) {
       last_rain_read_ = now;
@@ -865,6 +861,10 @@ void SnkMower::handle_rtc(const JsonDocument &doc) {
   }
 }
 
+static bool device_info_changed(const char *old, const char *val) {
+  return !val || !old || strcmp(old, val) != 0;
+}
+
 void SnkMower::handle_device_info(const JsonDocument &doc) {
   if (doc.containsKey("name")) {
     const char *name = doc["name"];
@@ -873,41 +873,58 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     int version = doc["version"] | 0;
     int pwd_en = doc["pwd_en"] | 0;
 
-    ESP_LOGI(TAG, "Device: %s (%s) S/N=%s v=%d pwd_en=%d",
-             name, model, sn, version, pwd_en);
+    bool changed = device_info_changed(device_name_, name) ||
+                   strcmp(device_model_, model) != 0 ||
+                   strcmp(device_sn_, sn) != 0 ||
+                   device_version_ != version;
+    if (changed) {
+      ESP_LOGI(TAG, "Device: %s (%s) S/N=%s v=%d pwd_en=%d",
+               name, model, sn, version, pwd_en);
+    }
 
-    if (device_name_sensor_)
-      device_name_sensor_->publish_state(name);
-    if (model_sensor_)
-      model_sensor_->publish_state(model);
-    if (serial_sensor_)
-      serial_sensor_->publish_state(sn);
-    if (firmware_version_sensor_) {
-      char ver_str[16];
-      snprintf(ver_str, sizeof(ver_str), "%d", version);
-      firmware_version_sensor_->publish_state(ver_str);
+    if (device_info_changed(device_name_, name)) {
+      snprintf(device_name_, sizeof(device_name_), "%s", name);
+      if (device_name_sensor_)
+        device_name_sensor_->publish_state(name);
     }
-    if (doc.containsKey("bat_name") && battery_name_sensor_) {
-      battery_name_sensor_->publish_state(doc["bat_name"] | "");
+    if (device_info_changed(device_model_, model)) {
+      snprintf(device_model_, sizeof(device_model_), "%s", model);
+      if (model_sensor_)
+        model_sensor_->publish_state(model);
     }
-  }
+    if (device_info_changed(device_sn_, sn)) {
+      snprintf(device_sn_, sizeof(device_sn_), "%s", sn);
+      if (serial_sensor_)
+        serial_sensor_->publish_state(sn);
+    }
+    if (version != device_version_) {
+      device_version_ = version;
+      if (firmware_version_sensor_) {
+        char ver_str[16];
+        snprintf(ver_str, sizeof(ver_str), "%d", version);
+        firmware_version_sensor_->publish_state(ver_str);
+      }
+    }
+    if (doc.containsKey("bat_name")) {
+      const char *bat_name = doc["bat_name"] | "";
+      if (strcmp(device_bat_name_, bat_name) != 0) {
+        snprintf(device_bat_name_, sizeof(device_bat_name_), "%s", bat_name);
+        if (battery_name_sensor_)
+          battery_name_sensor_->publish_state(bat_name);
+      }
+    }
 
-  // DEVICE_INFO from MB — send PIN proactively and prepare for SYNC
-  if (boot_phase_ == BootPhase::PRE) {
-    device_info_received_ = true;
-    if (!pin_sent_ && doc["pwd_en"] | 0) {
-      ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN proactively");
-      send_pin();
-    }
-    if (boot_delay_ms_ == 0) {
-      ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
+    // On first DEVICE_INFO in PRE phase: send PIN if pwd_enabled, transition to SYNC
+    if (boot_phase_ == BootPhase::PRE) {
+      device_info_received_ = true;
+      if (!pin_sent_ && pwd_en) {
+        ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN proactively");
+        send_pin();
+      }
+      ESP_LOGI(TAG, "DEVICE_INFO received — entering SYNC");
       boot_phase_ = BootPhase::SYNC;
       phase_start_ms_ = millis();
-      device_info_arrived_ms_ = phase_start_ms_;
       info_burst_count_ = 0;
-      init_burst_count_ = 0;
-    } else {
-      ESP_LOGI(TAG, "DEVICE_INFO received during boot delay — will transition after delay");
     }
   }
 }
@@ -921,8 +938,14 @@ void SnkMower::handle_hw_versions(const JsonDocument &doc) {
   int db_sv = doc["db_sv"] | 0;
   int mblt_sv = doc["mblt_sv"] | 0;
 
-  ESP_LOGI(TAG, "HW: MB hv=%d sv=%d, BB hv=%d sv=%d, DB hv=%d sv=%d, MBLT sv=%d",
+  char buf[128];
+  snprintf(buf, sizeof(buf), "%d/%d %d/%d %d/%d %d",
            mb_hv, mb_sv, bb_hv, bb_sv, db_hv, db_sv, mblt_sv);
+  if (strcmp(hw_ver_str_, buf) != 0) {
+    snprintf(hw_ver_str_, sizeof(hw_ver_str_), "%s", buf);
+    ESP_LOGI(TAG, "HW: MB hv=%d sv=%d, BB hv=%d sv=%d, DB hv=%d sv=%d, MBLT sv=%d",
+             mb_hv, mb_sv, bb_hv, bb_sv, db_hv, db_sv, mblt_sv);
+  }
 }
 
 void SnkMower::handle_battery_info(const JsonDocument &doc) {
