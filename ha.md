@@ -5,6 +5,7 @@
 | Data | Autor | Opis |
 |------|-------|------|
 | 2026-06-22 | Marek | Kompleksowa dokumentacja reverse-engineeringu |
+| 2026-06-22 | Marek | Wyniki eksperymentów watchdog (logi 12-22) |
 
 ---
 
@@ -792,3 +793,85 @@ PRE ──→ DONE
 3. Jeśli nie: zbadać czy brak `CMD_BATTERY` powoduje SUPERVISION
 4. Znaleźć bit colona na wyświetlaczu (b0, U4)
 5. Zrozumieć format godzinowy RTC (0x40000011) — synchronizacja czasu
+
+---
+
+## 10. Eksperymenty watchdog (logi 12-22, 2026-06-22)
+
+### Kontekst
+
+Po sflashowaniu nowej wersji komponentu ESPHome (z poprawionym mapowaniem stanów i handlerami), MB odcinał zasilanie (watchdog) w ciągu kilku-kilkudziesięciu sekund. Seria eksperymentów (logi 12-22) pozwoliła zidentyfikować przyczyny.
+
+### Wyniki poszczególnych logów
+
+| Log | Commit | Wynik | Przyczyna problemu |
+|-----|--------|-------|--------------------|
+| 12 | `956ae67` | ❌ Watchdog ~8s po PIN | Burst WIFI+BT+ESP_INFO natychmiast po PIN (timery przeterminowane) |
+| 13 | `85e9416` | ❌ Watchdog ~4s po PIN | Ten sam burst + ESP_TRIM w boot sequence |
+| 14 | `d597775` | ❌ Watchdog ~2s po boot seq | uint32_t underflow: `now` sprzed UART read, timery resetowane wewnątrz |
+| 15 | `24b7991` | ❌ Watchdog <1s | BOOT wysłany po boot_delay — watchdog MB ~30s od włączenia |
+| 16 | `5480356` | ✅ **Stabilny >1min** | Powrót do stabilnej bazy 5be3712 + poprawki protokołu |
+| 17 | `0a1bc44` | ❌ BOOT_INIT flood + SUPERVISION | Proactive PIN przed SYNC + SYNC timeout 2s (przerwał burst) |
+| 18 | `204ccb2` | ❌ DEVICE_INFO flood | Display CS fix (gpio_set_level w timer) zakłócał timing |
+| 19 | `aea0004` | ❌ DEVICE_INFO flood 68× | Burst ESP_INFO+ESP_STATE po PIN (timery nie zresetowane) |
+| 20 | `029086b` | ❌ DEVICE_INFO flood 198× | POLL co 200ms w DONE → MB re-sends DEVICE_INFO |
+| 21 | `fe90293` | ❌ DEVICE_INFO flood 138× | POLL co 30ms w DONE → ten sam efekt |
+| 22 | `e74b56c` | ✅ **Stabilny** | Usunięcie POLL z DONE — tylko KEEPALIVE co 1s |
+
+### Kluczowe odkrycia
+
+#### 1. POLL w DONE powoduje flood DEVICE_INFO
+
+**Problem:** `CMD_ESP_POLL` (`0x300000A1`) wysyłany cyklicznie w fazie DONE powoduje, że MB interpretuje to jako "ESP prosi o device info" i odsyła `DEVICE_INFO` + `HW_VERSIONS` w kółko (68-198 powtórzeń w ~20s).
+
+**Rozwiązanie:** POLL ma być wysyłany **tylko w fazach PRE i SYNC** (do wykrycia DEVICE_INFO podczas boot). W fazie DONE tylko `KEEPALIVE` (`0x30000005`) co 1s.
+
+**Dowód:** Log 16 (bez POLL w DONE) — 12 powtórzeń DEVICE_INFO. Log 21 (POLL@30ms w DONE) — 138 powtórzeń. Log 20 (POLL@200ms) — 198 powtórzeń (MB jeszcze bardziej zdezorientowany).
+
+#### 2. Burst komend po PIN dezorientuje MB
+
+**Problem:** Jeśli po wysłaniu PIN (`0x41000005`) ESP natychmiast wysyła `ESP_INFO` (`0x40000006`) i/lub `ESP_STATE` (`0x30000028`), MB wpada w pętlę re-inicjalizacji (BOOT_INIT flood) i ostatecznie triggeruje watchdog (`0x20000002` SUPERVISION).
+
+**Rozwiązanie:** Reset timerów okresowych (`last_wifi_status_`, `last_esp_info_`, `last_esp_state_`) przy przejściu SYNC→DONE, aby pierwsze cykliczne wysyłki nastąpiły po pełnym interwale (5s/30s/10s), nie natychmiast.
+
+**Mechanizm:** Timery są inicjalizowane w `finish_setup()` (początek). SYNC trwa ~1s. Bez resetu, `now - last_esp_info_ > 30000` jest true natychmiast po wejściu w DONE → burst.
+
+#### 3. Proactive PIN przed SYNC psuje handshake
+
+**Problem:** Wysyłanie PIN (`0x41000005`) zaraz po odebraniu DEVICE_INFO, ale **przed** zakończeniem SYNC burst (5×ESP_INFO + 6×INIT), powoduje że MB nie zdąży przetworzyć pełnej sekwencji boot → re-init flood.
+
+**Rozwiązanie:** PIN wysyłany dopiero po zakończeniu SYNC (`init_burst_count_ >= 6`), w fazie DONE.
+
+#### 4. Watchdog MB ~30s od włączenia zasilania
+
+**Problem:** MB ma watchdog ~30s od power-on. Jeśli ESP nie wyśle `BOOT` (`0x40000004`) w tym oknie, MB odcina zasilanie.
+
+**Rozwiązanie:** `boot_delay` (30s) powoduje wysłanie POLL+KEEPALIVE podczas opóźnienia, ale BOOT jest wysyłany po wygaśnięciu delay. Przy `boot_delay: 30` watchdog odpalał się równocześnie.
+
+**Status:** Rozwiązane w stabilnej bazie 5be3712 — BOOT+KEEPALIVE+STATE+RAIN wysyłane natychmiast w `finish_setup()`, przed boot_delay. Podczas boot_delay wysyłane POLL+KEEPALIVE co 200ms/1s.
+
+#### 5. Display CS fix zakłóca komunikację
+
+**Problem:** Ręczne sterowanie CS (`gpio_set_level` w timer callback co 2ms) zakłóca timing UART, destabilizując komunikację z MB.
+
+**Rozwiązanie:** Powrót do SPI-managed CS (`spics_io_num = display_cs_`). Flicker wyświetlacza to problem kosmetyczny — stabilność MB jest krytyczna.
+
+### Stabilna konfiguracja (commit `e74b56c`)
+
+```
+Boot sequence:
+  finish_setup(): BOOT + KEEPALIVE + STATE(0) + RAIN(1) (natychmiast)
+  boot_delay (30s): POLL@200ms + KEEPALIVE@1s + WIFI/BT@5s
+  Po boot_delay: BOOT + KEEPALIVE + STATE(0) + RAIN(1) (ponownie)
+  PRE→SYNC: po DEVICE_INFO od MB
+  SYNC: 5×ESP_INFO + 6×INIT (burst ~1s)
+  SYNC→DONE: reset timerów (WIFI/ESP_INFO/ESP_STATE)
+  DONE: PIN(1×) + KEEPALIVE@1s + WIFI/BT@5s + ESP_INFO@30s + ESP_STATE@10s + RAIN@60s
+  DONE: BRAK POLL (tylko KEEPALIVE)
+```
+
+### Otwarte pytania
+
+1. **Czy MB przestanie wysyłać PIN_RESULT cyklicznie?** — W logu 22 PIN accepted pojawia się co 5s. To może być normalne (MB odsyła wynik przy każdym WIFI/BT status) ale warto zweryfikować.
+2. **Czy `send_esp_state(state_)` z `state:1` jest poprawne?** — Oryginał wysyłał `state:0` przy boot, potem aktualny stan. Sprawdzić w captures.
+3. **Czy brak ESP_TRIM w boot jest OK?** — Oryginał wysyłał `0x300000A6` po INIT. MB może nie wysłać pełnego SCHEDULE bez tego, ale log 22 działa bez niego.
