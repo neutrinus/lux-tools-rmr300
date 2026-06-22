@@ -127,10 +127,10 @@ void SnkMower::finish_setup() {
 
   if (boot_delay_ms_ > 0) {
     ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
-    return;
+  } else {
+    boot_seq_step_ = 0;
+    last_boot_send_ms_ = millis();
   }
-
-  send_boot_sequence();
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -377,7 +377,11 @@ void SnkMower::send_json(const JsonDocument &doc) {
     size_t total_len = n + 3;
     write_array((const uint8_t *)tx_buf_, total_len);
     tx_buf_[n + 1] = '\0';
-    ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
+    uint32_t cmd = doc["cmd"] | 0;
+    if (cmd == CMD_ESP_POLL || cmd == CMD_ESP_KEEPALIVE)
+      ESP_LOGV(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
+    else
+      ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
   }
 }
 
@@ -499,24 +503,20 @@ void SnkMower::read_rain_sensor() {
   send_rain_status(rain);
 }
 
-void SnkMower::send_boot_sequence() {
-  ESP_LOGI(TAG, "Boot: sending BOOT + KEEPALIVE + STATE + RAIN");
-  send_boot();
-  delay(10);
-  send_keepalive();
-  delay(10);
-  send_esp_state(0);
-  delay(10);
-  send_rain_status(1);
-
-  delay(30);
-  send_wifi_status();
-  delay(15);
-  send_esp_info();
-  delay(15);
-  send_init();
-
-  ESP_LOGI(TAG, "Boot sequence sent — waiting for DEVICE_INFO from mainboard");
+void SnkMower::send_boot_sequence_next() {
+  if (boot_seq_step_ >= 8) return;
+  switch (boot_seq_step_) {
+    case 0: send_boot(); ESP_LOGD(TAG, "Boot seq [1/7]: BOOT"); break;
+    case 1: send_keepalive(); ESP_LOGD(TAG, "Boot seq [2/7]: KEEPALIVE"); break;
+    case 2: send_esp_state(0); ESP_LOGD(TAG, "Boot seq [3/7]: STATE"); break;
+    case 3: send_rain_status(1); ESP_LOGD(TAG, "Boot seq [4/7]: RAIN"); break;
+    case 4: send_wifi_status(); ESP_LOGD(TAG, "Boot seq [5/7]: WIFI"); break;
+    case 5: send_esp_info(); ESP_LOGD(TAG, "Boot seq [6/7]: ESP_INFO"); break;
+    case 6: send_init();
+            ESP_LOGI(TAG, "Boot sequence sent — waiting for DEVICE_INFO");
+            break;
+  }
+  boot_seq_step_++;
 }
 
 void SnkMower::loop() {
@@ -559,10 +559,9 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // If boot_delay active, wait before sending boot sequence
+    // Phase 1: boot_delay window — poll at 200ms, no boot traffic
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ < boot_delay_ms_) {
-        // Send POLL during delay to keep MB watchdog happy
         if (now - last_poll_ > 200) {
           last_poll_ = now;
           send_poll();
@@ -573,13 +572,32 @@ void SnkMower::loop() {
         }
         return;
       }
+      // boot_delay expired — kick off non-blocking boot sequence
       boot_delay_ms_ = 0;
-      phase_start_ms_ = now;
-      send_boot_sequence();
+      boot_seq_step_ = 0;
+      last_boot_send_ms_ = now;
+      ESP_LOGI(TAG, "Boot delay over — starting boot sequence");
+    }
+
+    // Phase 2: send boot sequence messages one per loop() iteration
+    if (boot_seq_step_ < 8) {
+      if (now - last_boot_send_ms_ >= 8) {
+        send_boot_sequence_next();
+        last_boot_send_ms_ = now;
+        if (boot_seq_step_ >= 8) {
+          // Boot sequence done — start DEVICE_INFO timeout
+          phase_start_ms_ = now;
+        }
+      }
+      // Keep sending keepalive even during boot sequence
+      if (now - last_keepalive_ > 1000) {
+        last_keepalive_ = now;
+        send_keepalive();
+      }
       return;
     }
 
-    // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
+    // Phase 3: wait for DEVICE_INFO (poll at 30ms, timeout 10s)
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -588,11 +606,9 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
-
-    // Timeout: if DEVICE_INFO not received within 2s, enter DONE anyway
-    if (now - phase_start_ms_ > 2000) {
+    if (now - phase_start_ms_ > 10000) {
       if (!device_info_received_) {
-        ESP_LOGW(TAG, "DEVICE_INFO not received — entering DONE anyway");
+        ESP_LOGW(TAG, "DEVICE_INFO not received in 10s — entering DONE anyway");
       }
       boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = now;
@@ -600,13 +616,10 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::DONE) {
-    // Send PIN on first DONE entry if not already sent
     if (!pin_sent_) {
       ESP_LOGI(TAG, "Sending PIN to mainboard");
       send_pin();
     }
-
-    // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();

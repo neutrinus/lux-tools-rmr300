@@ -76,7 +76,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   std::string pin_;
 
   void send_json(const JsonDocument &doc);
-  void send_boot_sequence();
+  void send_boot_sequence_next();
   void send_boot();
   void send_init();
   void send_pin();
@@ -123,14 +123,13 @@ class SnkMower : public Component, public uart::UARTDevice {
   void read_rain_sensor();
 
   enum class BootPhase : uint8_t {
-    PRE,   // waiting for DEVICE_INFO from MB
-    SYNC,  // DEVICE_INFO received, sending ESP_INFO/INIT burst
-    DONE,  // handshake complete, normal keepalive operation
+    PRE,   // boot_delay → send boot_seq → wait for DEVICE_INFO
+    DONE,  // DEVICE_INFO received (or timeout), PIN sent, normal op
   };
 
   BootPhase boot_phase_{BootPhase::PRE};
   uint32_t phase_start_ms_{0};
-  int info_burst_count_{0};
+  uint8_t boot_seq_step_{0xFF};  // 0xFF=idle, 0..7=boot sequence progress
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
@@ -139,6 +138,7 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
+  uint32_t last_boot_send_ms_{0};
 
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
