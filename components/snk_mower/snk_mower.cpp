@@ -616,6 +616,11 @@ void SnkMower::loop() {
     if (init_burst_count_ >= 6) {
       boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = now;
+      // Reset periodic timers to prevent burst of ESP_INFO/ESP_STATE
+      // right after PIN (which causes MB to re-init in a loop)
+      last_wifi_status_ = now;
+      last_esp_info_ = now;
+      last_esp_state_ = now;
       ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
     }
     // Keep sending POLLs during sync phase too
