@@ -128,10 +128,17 @@ void SnkMower::finish_setup() {
   boot_phase_ = BootPhase::PRE;
   phase_start_ms_ = millis();
 
+  // Send BOOT immediately — this tells MB "I'm alive" and resets its watchdog.
+  // Without this, MB's ~30s watchdog cuts power before boot_delay expires.
+  send_boot();
+  ESP_LOGI(TAG, "BOOT sent immediately (watchdog reset)");
+
   if (boot_delay_ms_ > 0) {
     ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
+    // Skip BOOT in boot sequence (already sent), start from step 1 (KEEPALIVE)
+    boot_seq_step_ = 1;
   } else {
-    boot_seq_step_ = 0;
+    boot_seq_step_ = 1;
     last_boot_send_ms_ = millis();
   }
 }
@@ -574,11 +581,10 @@ void SnkMower::loop() {
         }
         return;
       }
-      // boot_delay expired — kick off non-blocking boot sequence
+      // boot_delay expired — continue boot sequence (BOOT already sent in setup)
       boot_delay_ms_ = 0;
-      boot_seq_step_ = 0;
       last_boot_send_ms_ = now;
-      ESP_LOGI(TAG, "Boot delay over — starting boot sequence");
+      ESP_LOGI(TAG, "Boot delay over — continuing boot sequence from step %d", boot_seq_step_);
     }
 
     // Phase 2: send boot sequence messages one per loop() iteration
