@@ -474,22 +474,10 @@ void SnkMower::send_return_home() {
 }
 
 void SnkMower::send_trim() {
+  // During boot, original ESP sends empty ESP_TRIM (just cmd, no fields)
+  // MB responds with full SCHEDULE (0x330000A6)
   JsonDocument doc;
   doc["cmd"] = CMD_ESP_TRIM;
-  doc["auto"] = 1;
-  doc["trim"] = 120;
-  time_t now = time(nullptr);
-  struct tm *t = localtime(&now);
-  int st = t->tm_hour * 60 + t->tm_min;
-  const char *days[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
-  for (int i = 0; i < 7; i++) {
-    char st_key[8];
-    snprintf(st_key, sizeof(st_key), "%s_st", days[i]);
-    doc[st_key] = st;
-    char len_key[8];
-    snprintf(len_key, sizeof(len_key), "%s_len", days[i]);
-    doc[len_key] = 120;
-  }
   send_json(doc);
 }
 
@@ -514,17 +502,16 @@ void SnkMower::read_rain_sensor() {
 }
 
 void SnkMower::send_boot_sequence_next() {
-  if (boot_seq_step_ >= 8) return;
+  if (boot_seq_step_ >= 9) return;
   switch (boot_seq_step_) {
-    case 0: send_boot(); ESP_LOGD(TAG, "Boot seq [1/7]: BOOT"); break;
-    case 1: send_keepalive(); ESP_LOGD(TAG, "Boot seq [2/7]: KEEPALIVE"); break;
-    case 2: send_esp_state(0); ESP_LOGD(TAG, "Boot seq [3/7]: STATE"); break;
-    case 3: send_rain_status(0); ESP_LOGD(TAG, "Boot seq [4/7]: RAIN=0"); break;
-    case 4: send_wifi_status(); ESP_LOGD(TAG, "Boot seq [5/7]: WIFI"); break;
-    case 5: send_esp_info(); ESP_LOGD(TAG, "Boot seq [6/7]: ESP_INFO"); break;
-    case 6: send_init();
-            ESP_LOGI(TAG, "Boot sequence sent — waiting for DEVICE_INFO");
-            break;
+    case 0: send_boot(); ESP_LOGD(TAG, "Boot seq [1/8]: BOOT"); break;
+    case 1: send_keepalive(); ESP_LOGD(TAG, "Boot seq [2/8]: KEEPALIVE"); break;
+    case 2: send_esp_state(0); ESP_LOGD(TAG, "Boot seq [3/8]: STATE"); break;
+    case 3: send_rain_status(0); ESP_LOGD(TAG, "Boot seq [4/8]: RAIN=0"); break;
+    case 4: send_wifi_status(); ESP_LOGD(TAG, "Boot seq [5/8]: WIFI"); break;
+    case 5: send_esp_info(); ESP_LOGD(TAG, "Boot seq [6/8]: ESP_INFO"); break;
+    case 6: send_init(); ESP_LOGD(TAG, "Boot seq [7/8]: INIT"); break;
+    case 7: send_trim(); ESP_LOGI(TAG, "Boot seq [8/8]: ESP_TRIM — waiting for DEVICE_INFO"); break;
   }
   boot_seq_step_++;
 }
@@ -590,11 +577,11 @@ void SnkMower::loop() {
     }
 
     // Phase 2: send boot sequence messages one per loop() iteration
-    if (boot_seq_step_ < 8) {
+    if (boot_seq_step_ < 9) {
       if (now - last_boot_send_ms_ >= 8) {
         send_boot_sequence_next();
         last_boot_send_ms_ = now;
-        if (boot_seq_step_ >= 8) {
+        if (boot_seq_step_ >= 9) {
           // Boot sequence done — start DEVICE_INFO timeout
           phase_start_ms_ = now;
         }
@@ -941,12 +928,17 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     if (boot_phase_ == BootPhase::PRE) {
       device_info_received_ = true;
       ESP_LOGI(TAG, "DEVICE_INFO received — entering DONE phase");
+      // Reset periodic timers to prevent burst of WIFI/BT/ESP_INFO
+      // right after PIN (which confuses MB and triggers watchdog)
+      uint32_t now = millis();
+      last_wifi_status_ms_ = now;
+      last_esp_info_ms_ = now;
       if (!pin_sent_ && pwd_en) {
         ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN");
         send_pin();
       }
       boot_phase_ = BootPhase::DONE;
-      phase_start_ms_ = millis();
+      phase_start_ms_ = now;
     }
   }
 }
