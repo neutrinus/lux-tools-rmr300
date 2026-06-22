@@ -580,7 +580,14 @@ void SnkMower::loop() {
     }
 
     // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
-    if (now - last_poll_ > 200) {
+    // Fast burst (30ms × 10) after boot_seq, then back to 200ms
+    if (info_burst_count_ < 10) {
+      if (now - last_poll_ > 30) {
+        last_poll_ = now;
+        send_poll();
+        info_burst_count_++;
+      }
+    } else if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
     }
