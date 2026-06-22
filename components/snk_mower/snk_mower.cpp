@@ -56,6 +56,7 @@ static const uint32_t CMD_SHUTDOWN       = 0x41000008;
 static const uint32_t CMD_START_ACK      = 0x41000020;
 static const uint32_t CMD_BATTERY        = 0x50000021;
 static const uint32_t CMD_RETURN_HOME    = 0x41000006;
+static const uint32_t CMD_DOCKED_CHARGE  = 0x41000007;
 static const uint32_t CMD_ERR_ACK1       = 0x10000001;
 static const uint32_t CMD_ERR_ACK2       = 0x10000002;
 static const uint32_t CMD_ERR_ACK7       = 0x10000007;
@@ -68,8 +69,8 @@ static const char *const STATE_NAMES[] = {
 };
 
 static const char *const STATE_DISPLAY[] = {
-    "IdLE", "IdLE", "Mow ", "HoME",
-    "ChAr", "IdLE", "Err ", "LoCK",
+    "----", "IdLE", "Mow ", "HoME",
+    "ChAr", "dock", "Err ", "LoCK",
 };
 
 static const float VOLTAGE_LUT[101] = {
@@ -108,6 +109,8 @@ void SnkMower::setup() {
 
 void SnkMower::finish_setup() {
   last_activity_ms_ = millis();
+  last_wifi_status_ms_ = millis();
+  last_esp_info_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
     gpio_set_direction(buzzer_pin_, GPIO_MODE_OUTPUT);
@@ -452,7 +455,14 @@ void SnkMower::send_esp_info() {
 }
 
 void SnkMower::send_error_ack() {
+  // Original ESP sends all three error ACKs (confirmed by captures)
   JsonDocument doc;
+  doc["cmd"] = CMD_ERR_ACK1;
+  send_json(doc);
+  doc.clear();
+  doc["cmd"] = CMD_ERR_ACK2;
+  send_json(doc);
+  doc.clear();
   doc["cmd"] = CMD_ERR_ACK7;
   send_json(doc);
 }
@@ -628,6 +638,14 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
+    if (now - last_wifi_status_ms_ > 5000) {
+      last_wifi_status_ms_ = now;
+      send_wifi_status();
+    }
+    if (now - last_esp_info_ms_ > 30000) {
+      last_esp_info_ms_ = now;
+      send_esp_info();
+    }
     if (now - last_rain_read_ > 60000) {
       last_rain_read_ = now;
       read_rain_sensor();
@@ -699,6 +717,9 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case CMD_START_ACK:        handle_start_ack(doc); break;
     case CMD_EXEC_ACTION:      handle_exec_action(doc); break;
     case CMD_SHUTDOWN:         handle_shutdown(doc); break;
+    case CMD_RETURN_HOME:      handle_return_home(doc); break;
+    case CMD_DOCKED_CHARGE:    handle_docked_charge(doc); break;
+    case CMD_PIN_SEND:         handle_seek_wire(doc); break;
     case CMD_BOOT_ACK:         ESP_LOGD(TAG, "Boot ACK"); break;
     case CMD_START_TIME_Q:     handle_start_time_query(doc); break;
     case CMD_CUT_TIME_Q:       handle_cut_time_query(doc); break;
@@ -791,10 +812,13 @@ void SnkMower::handle_status(const JsonDocument &doc) {
   } else {
     switch (state_) {
       case 2:  s = MowerState::MOWING; break;
-      case 6:  s = MowerState::RETURNING; break;
+      case 8:  s = MowerState::RETURNING; break;   // seek wire
+      case 9:  s = MowerState::RETURNING; break;   // returning to dock
+      case 10: s = MowerState::CHARGING; break;     // charging
       case 7:  s = MowerState::ERROR_STATE; break;
-      case 11: s = MowerState::CHARGING; break;
-      default: s = MowerState::IDLE; break;
+      case 11: s = MowerState::UNKNOWN; break;      // shutdown — display handled by handle_shutdown
+      case 6:  s = MowerState::IDLE; break;         // stop/pause → treat as idle
+      default: s = MowerState::IDLE; break;         // 0=idle, 1=ready
     }
   }
 
@@ -1071,6 +1095,24 @@ void SnkMower::handle_shutdown(const JsonDocument &doc) {
   set_display_text("byE ");
   shutdown_pending_ = true;
   shutdown_start_ms_ = millis();
+}
+
+void SnkMower::handle_return_home(const JsonDocument &doc) {
+  ESP_LOGI(TAG, "Return home notification from MB");
+}
+
+void SnkMower::handle_docked_charge(const JsonDocument &doc) {
+  ESP_LOGI(TAG, "Docked / charge start notification from MB");
+}
+
+void SnkMower::handle_seek_wire(const JsonDocument &doc) {
+  // 0x41000005 from MB without "pwd" field = seek wire notification
+  // (with "pwd" field it would be PIN_SEND, but that's ESP→MB direction)
+  if (doc.containsKey("pwd")) {
+    ESP_LOGD(TAG, "PIN_SEND echoed back (ignoring)");
+  } else {
+    ESP_LOGI(TAG, "Seek wire notification from MB");
+  }
 }
 
 void SnkMower::handle_start_time_query(const JsonDocument &doc) {

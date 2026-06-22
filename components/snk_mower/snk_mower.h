@@ -112,6 +112,9 @@ class SnkMower : public Component, public uart::UARTDevice {
   void handle_start_ack(const JsonDocument &doc);
   void handle_exec_action(const JsonDocument &doc);
   void handle_shutdown(const JsonDocument &doc);
+  void handle_return_home(const JsonDocument &doc);
+  void handle_docked_charge(const JsonDocument &doc);
+  void handle_seek_wire(const JsonDocument &doc);
   void handle_pin_result2(const JsonDocument &doc);
   void handle_schedule_end(const JsonDocument &doc);
   void handle_setting_ack(const JsonDocument &doc, uint32_t cmd);
@@ -139,6 +142,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
   uint32_t last_boot_send_ms_{0};
+  uint32_t last_wifi_status_ms_{0};
+  uint32_t last_esp_info_ms_{0};
 
   uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
