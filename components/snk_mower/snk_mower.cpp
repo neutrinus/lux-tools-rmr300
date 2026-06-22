@@ -559,10 +559,9 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // If boot_delay active, wait before sending boot sequence
+    // If boot_delay active, wait before sending any MB traffic
     if (boot_delay_ms_ > 0) {
       if (now - phase_start_ms_ < boot_delay_ms_) {
-        // Send POLL during delay to keep MB watchdog happy
         if (now - last_poll_ > 200) {
           last_poll_ = now;
           send_poll();
@@ -574,12 +573,9 @@ void SnkMower::loop() {
         return;
       }
       boot_delay_ms_ = 0;
-      phase_start_ms_ = now;
-      send_boot_sequence();
-      return;
     }
 
-    // Send POLL + KEEPALIVE while waiting for DEVICE_INFO from MB
+    // Poll + keepalive while waiting for MB to initiate boot (send DEVICE_INFO)
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -588,39 +584,11 @@ void SnkMower::loop() {
       last_keepalive_ = now;
       send_keepalive();
     }
-
-    // Timeout: if DEVICE_INFO not received within 2s, enter SYNC anyway
-    if (now - phase_start_ms_ > 2000) {
-      if (!device_info_received_) {
-        ESP_LOGW(TAG, "DEVICE_INFO not received — entering SYNC anyway");
-      }
-      boot_phase_ = BootPhase::SYNC;
-      phase_start_ms_ = now;
-      info_burst_count_ = 0;
-    }
   }
 
-  if (boot_phase_ == BootPhase::SYNC) {
-    // Brief SYNC burst while waiting for PIN result
-    if (now - last_poll_ > 30) {
-      last_poll_ = now;
-      send_poll();
-    }
-    if (now - phase_start_ms_ > 500) {
-      boot_phase_ = BootPhase::DONE;
-      phase_start_ms_ = now;
-      ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
-    }
-  }
-
+  // When DEVICE_INFO arrives in PRE, handle_device_info() transitions to DONE.
+  // DONE: poll + keepalive + rain
   if (boot_phase_ == BootPhase::DONE) {
-    // Send PIN on first DONE entry if not already sent
-    if (!pin_sent_) {
-      ESP_LOGI(TAG, "Sending PIN to mainboard");
-      send_pin();
-    }
-
-    // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s (matches original)
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -914,17 +882,17 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
       }
     }
 
-    // On first DEVICE_INFO in PRE phase: send PIN if pwd_enabled, transition to SYNC
+    // On first DEVICE_INFO in PRE phase: respond with boot sequence, then DONE
     if (boot_phase_ == BootPhase::PRE) {
       device_info_received_ = true;
+      ESP_LOGI(TAG, "DEVICE_INFO received — responding with boot sequence");
+      send_boot_sequence();
       if (!pin_sent_ && pwd_en) {
-        ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN proactively");
+        ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN");
         send_pin();
       }
-      ESP_LOGI(TAG, "DEVICE_INFO received — entering SYNC");
-      boot_phase_ = BootPhase::SYNC;
+      boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = millis();
-      info_burst_count_ = 0;
     }
   }
 }
