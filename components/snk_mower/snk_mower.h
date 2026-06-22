@@ -130,6 +130,7 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   BootPhase boot_phase_{BootPhase::PRE};
   uint32_t phase_start_ms_{0};
+  int info_burst_count_{0};
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
@@ -161,6 +162,13 @@ class SnkMower : public Component, public uart::UARTDevice {
   int bat_min_temp_{0};
   bool station_{false};
   int lock_{0};
+
+  char device_name_[64]{};
+  char device_model_[64]{};
+  char device_sn_[64]{};
+  int device_version_{0};
+  char device_bat_name_[32]{};
+  char hw_ver_str_[128]{};
 
   gpio_num_t buzzer_pin_{GPIO_NUM_NC};
   gpio_num_t rain_pin_{GPIO_NUM_NC};
