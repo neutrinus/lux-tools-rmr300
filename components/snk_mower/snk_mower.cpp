@@ -55,7 +55,8 @@ static const uint32_t CMD_PIN_SEND       = 0x41000005;
 static const uint32_t CMD_SHUTDOWN       = 0x41000008;
 static const uint32_t CMD_START_ACK      = 0x41000020;
 static const uint32_t CMD_BATTERY        = 0x50000021;
-static const uint32_t CMD_RETURN_HOME    = 0x10000001;
+static const uint32_t CMD_RETURN_HOME    = 0x41000006;
+static const uint32_t CMD_ERR_ACK1       = 0x10000001;
 static const uint32_t CMD_ERR_ACK2       = 0x10000002;
 static const uint32_t CMD_ERR_ACK7       = 0x10000007;
 
@@ -573,19 +574,19 @@ void SnkMower::loop() {
         phase_start_ms_ = now;
         last_boot_ms_ = now;
 
-        if (device_info_received_) {
-          ESP_LOGI(TAG, "DEVICE_INFO already received — entering SYNC phase");
-          boot_phase_ = BootPhase::SYNC;
-          device_info_arrived_ms_ = now;
-          info_burst_count_ = 0;
-          init_burst_count_ = 0;
+        if (!device_info_received_) {
+          ESP_LOGW(TAG, "DEVICE_INFO not received during delay — entering SYNC anyway");
         }
+        boot_phase_ = BootPhase::SYNC;
+        device_info_arrived_ms_ = now;
+        info_burst_count_ = 0;
+        init_burst_count_ = 0;
       }
     }
   }
 
   if (boot_phase_ == BootPhase::SYNC) {
-    // Send ESP_INFO/INIT burst immediately (MB sends DEVICE_INFO every ~30ms)
+    // Send ESP_INFO/INIT burst (matches original firmware behavior)
     uint32_t burst_elapsed = now - device_info_arrived_ms_;
     if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
       send_esp_info();
@@ -597,12 +598,11 @@ void SnkMower::loop() {
       init_burst_count_++;
       ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
     }
-    if (init_burst_count_ >= 6) {
+    if (init_burst_count_ >= 6 || burst_elapsed > 2000) {
       boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = now;
       ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
     }
-    // Keep sending POLLs during sync phase too
     if (now - last_poll_ > 30) {
       last_poll_ = now;
       send_poll();
@@ -610,6 +610,12 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::DONE) {
+    // Send PIN on first DONE entry if not already sent
+    if (!pin_sent_) {
+      ESP_LOGI(TAG, "Sending PIN to mainboard");
+      send_pin();
+    }
+
     // Normal operation: POLL at ~30ms + KEEPALIVE at ~1s (matches original)
     if (now - last_poll_ > 30) {
       last_poll_ = now;
@@ -813,10 +819,10 @@ void SnkMower::handle_status(const JsonDocument &doc) {
 void SnkMower::handle_pin_result(const JsonDocument &doc) {
   bool ok = doc["result"] | false;
   if (ok) {
-    ESP_LOGI(TAG, "PIN needed — sending PIN to mainboard");
-    send_pin();
+    ESP_LOGI(TAG, "PIN accepted by mainboard");
     pin_ok_ = true;
     pin_retries_ = 0;
+    publish_mower_state(MowerState::IDLE);
   } else {
     ESP_LOGW(TAG, "PIN rejected (attempt %d/5)", pin_retries_);
     if (++pin_retries_ >= 5) {
@@ -886,9 +892,13 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
     }
   }
 
-  // DEVICE_INFO from MB — start SYNC burst
+  // DEVICE_INFO from MB — send PIN proactively and prepare for SYNC
   if (boot_phase_ == BootPhase::PRE) {
     device_info_received_ = true;
+    if (!pin_sent_ && doc["pwd_en"] | 0) {
+      ESP_LOGI(TAG, "DEVICE_INFO has pwd_en=1 — sending PIN proactively");
+      send_pin();
+    }
     if (boot_delay_ms_ == 0) {
       ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
       boot_phase_ = BootPhase::SYNC;

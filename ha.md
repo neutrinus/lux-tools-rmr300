@@ -6,12 +6,11 @@ All 4 digits driven by U3 (b1). Colon hardware-powered. Decimal points not prese
 
 | Phase | Trigger | ESP sends | MB sends |
 |-------|---------|-----------|----------|
-| PRE | 0ms | BOOT → KEEPALIVE → STATE → RAIN → POLL@30ms + KEEPALIVE@1s | — |
-| SYNC | `0x330000A1` (DEVICE_INFO) | ESP_INFO×5 + INIT×6 in ~465ms | DEVICE_INFO(name/SN), HW_VERSIONS |
-| DONE | INIT×6 sent | KEEPALIVE@1s + PIN once + periodic ESP_INFO@30s | HEARTBEAT, STATUS, RTC@1Hz, PIN_RESULT, LIGHT, MAP |
+| PRE | 0ms | POLL@30ms + KEEPALIVE@1s (during boot_delay) | DEVICE_INFO (first ~2s, often missed) |
+| SYNC | boot_delay expired OR `0x330000A1` received | BOOT → KEEPALIVE → STATE(0) → RAIN → ESP_INFO×5 + INIT×6 in ~465ms | — |
+| DONE | SYNC complete (or timeout) | PIN once → POLL@30ms + KEEPALIVE@1s + WIFI/BT@5s + ESP_INFO@30s | STATUS, RTC@1Hz, PIN_RESULT, LIGHT, MAP |
 
-Key insight: MB sends `0x330000A1` as a **request** for ESP identification.  
-When ESP has preemptively sent INFO, MB sends `0x330000A9` instead.
+Key insight: MB sends `0x330000A1` in the first ~2s after power-on. With `boot_delay: 30` (required for OTA safety), this window is typically missed. ESP handles this by entering DONE directly after boot_delay and sending PIN proactively.
 
 ## Protocol (confirmed by 4 LA captures on 2026-06-21 + CRC verification)
 
@@ -124,10 +123,13 @@ Mainboard U13 ma ~7-8s okno nadzoru: jeśli ESP nie odpowie (brak BOOT/KEEPALIVE
 
 **Mechanizm:** watchdog zaczyna się dopiero po handshaku. Jeśli ESP nie wyśle BOOT, MB nie wie o ESP i nie nadzoruje zasilania.
 
-**Workaround OTA:**
-- `boot_delay: 10` — opóźnia handshake o 10s po resecie, dając czas na OTA zanim watchdog wystartuje
+**Workaround OTA (boot_delay=30s):**
+- `boot_delay: 30` — opóźnia handshake o 30s po resecie, dając czas na OTA zanim watchdog wystartuje
+- **Dlaczego 30s?** Po pełnym handshaku (przejściu do fazy DONE) watchdog MB zaczyna nadzorować ESP — jeśli ESP przestanie wysyłać KEEPALIVE/POLL na >7-8s, MB odcina zasilanie. OTA trwa 10-20s, więc bez boot_delay watchdog zabiłby ESP podczas flashowania.
+- **Jak działa:** boot_delay=30s trzyma ESP w fazie PRE przez 30s od startu. W PRE ESP tylko wysyła POLL/KEEPALIVE, ale nie kończy handshaku → watchdog MB nie startuje (bo MB nie otrzymuje BOOT). W tym oknie OTA ma czas się połączyć i flashować bez ryzyka.
+- **Co po 30s:** boot_delay wygasa, ESP wysyła BOOT i przechodzi przez SYNC→DONE. Od tego momentu watchdog MB jest aktywny, ale ESP normalnie utrzymuje komunikację.
+- **Czy to przegapi DEVICE_INFO?** Tak — MB wysyła DEVICE_INFO tylko w pierwszych ~2s od włączenia. Po 30s DEVICE_INFO już nie ma. Kod radzi sobie z tym: po wygaśnięciu boot_delay przechodzi do DONE bez czekania na DEVICE_INFO. PIN jest wysyłany przy wejściu w DONE.
 - `safe_mode: disabled` — ESP musi wystartować normalnie, nie w safe mode, by handshake zadziałał (w safe mode nie ma komunikacji UART, watchdog ubija)
-- W oknie opóźnienia OTA może się połączyć i rozpocząć flashowanie bez ryzyka
 
 **Tryb pin_diag:** całkowicie pomija handshake → watchdog nie startuje → ESP bezpieczne nawet bez boot_delay. Przydatne do długich testów GPIO.
 

@@ -3,10 +3,9 @@ substitutions:
   friendly_name: Kosiarka
 
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://neutrinus/lux-tools-rmr300@main:components
     components: [snk_mower]
+    refresh: 10s
 
 esphome:
   name: ${name}
@@ -119,6 +118,39 @@ binary_sensor:
   - platform: gpio
     pin: GPIO19
     name: "${friendly_name} OK Button"
+    device_class: "connectivity"
+    filters:
+      - invert:
+      - delayed_on_off: 10ms
+
+  # Testowane piny z analiz firmware'u:
+  - platform: gpio
+    pin: GPIO13
+    name: "${friendly_name} GPIO13"
+    device_class: "connectivity"
+    filters:
+      - invert:
+      - delayed_on_off: 10ms
+
+  - platform: gpio
+    pin: GPIO15
+    name: "${friendly_name} GPIO15"
+    device_class: "connectivity"
+    filters:
+      - invert:
+      - delayed_on_off: 10ms
+
+  - platform: gpio
+    pin: GPIO20
+    name: "${friendly_name} GPIO20"
+    device_class: "connectivity"
+    filters:
+      - invert:
+      - delayed_on_off: 10ms
+
+  - platform: gpio
+    pin: GPIO22
+    name: "${friendly_name} GPIO22"
     device_class: "connectivity"
     filters:
       - invert:
