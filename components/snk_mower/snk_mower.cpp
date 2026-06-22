@@ -382,7 +382,11 @@ void SnkMower::send_json(const JsonDocument &doc) {
     size_t total_len = n + 3;
     write_array((const uint8_t *)tx_buf_, total_len);
     tx_buf_[n + 1] = '\0';
-    ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
+    uint32_t cmd = doc["cmd"] | 0;
+    if (cmd == CMD_ESP_POLL || cmd == CMD_ESP_KEEPALIVE)
+      ESP_LOGV(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
+    else
+      ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
   }
 }
 
@@ -550,8 +554,8 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // Send POLL/keepalive even during boot_delay — watchdog expects UART traffic
-    if (now - last_poll_ > 30) {
+    // Send POLL/keepalive during boot_delay — watchdog expects UART traffic
+    if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
     }
@@ -615,7 +619,11 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::DONE) {
-    // Normal operation: KEEPALIVE at ~1s interval (matches original)
+    // Normal operation: POLL at 200ms, KEEPALIVE at ~1s (matches original)
+    if (now - last_poll_ > 200) {
+      last_poll_ = now;
+      send_poll();
+    }
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
