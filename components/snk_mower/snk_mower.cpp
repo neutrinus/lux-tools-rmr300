@@ -509,7 +509,7 @@ void SnkMower::send_boot_sequence_next() {
     case 0: send_boot(); ESP_LOGD(TAG, "Boot seq [1/7]: BOOT"); break;
     case 1: send_keepalive(); ESP_LOGD(TAG, "Boot seq [2/7]: KEEPALIVE"); break;
     case 2: send_esp_state(0); ESP_LOGD(TAG, "Boot seq [3/7]: STATE"); break;
-    case 3: send_rain_status(1); ESP_LOGD(TAG, "Boot seq [4/7]: RAIN"); break;
+    case 3: send_rain_status(0); ESP_LOGD(TAG, "Boot seq [4/7]: RAIN=0"); break;
     case 4: send_wifi_status(); ESP_LOGD(TAG, "Boot seq [5/7]: WIFI"); break;
     case 5: send_esp_info(); ESP_LOGD(TAG, "Boot seq [6/7]: ESP_INFO"); break;
     case 6: send_init();
