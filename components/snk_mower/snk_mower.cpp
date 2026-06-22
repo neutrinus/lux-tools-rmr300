@@ -174,7 +174,7 @@ void SnkMower::setup_display() {
   spi_device_interface_config_t dev_cfg = {};
   dev_cfg.clock_speed_hz = 2000000;
   dev_cfg.mode = 0;
-  dev_cfg.spics_io_num = -1;
+  dev_cfg.spics_io_num = display_cs_;
   dev_cfg.queue_size = 1;
 
   ret = spi_bus_add_device(SPI2_HOST, &dev_cfg, &spi_dev_);
@@ -182,9 +182,6 @@ void SnkMower::setup_display() {
     ESP_LOGE(TAG, "SPI device add failed: %d", ret);
     return;
   }
-
-  gpio_set_direction(display_cs_, GPIO_MODE_OUTPUT);
-  gpio_set_level(display_cs_, 1);
 
   ESP_LOGI(TAG, "Display initialized (SPI2: CLK=%d, MOSI=%d, CS=%d, 1MHz)",
            (int)display_clk_, (int)display_mosi_, (int)display_cs_);
@@ -226,8 +223,6 @@ void SnkMower::refresh_display_impl() {
 
   current_digit_ = (current_digit_ + 1) % DIGITS;
 
-  gpio_set_level(display_cs_, 0);
-
   spi_transaction_t trans = {};
   trans.length = 24;
   trans.flags = SPI_TRANS_USE_TXDATA;
@@ -236,8 +231,6 @@ void SnkMower::refresh_display_impl() {
   trans.tx_data[2] = seg;
 
   spi_device_polling_transmit(spi_dev_, &trans);
-
-  gpio_set_level(display_cs_, 1);
 }
 
 void SnkMower::set_display_text(const char *text, bool colon) {
