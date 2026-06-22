@@ -624,11 +624,7 @@ void SnkMower::loop() {
   }
 
   if (boot_phase_ == BootPhase::DONE) {
-    // Normal operation: POLL at ~30ms, KEEPALIVE at ~1s (matches original)
-    if (now - last_poll_ > 30) {
-      last_poll_ = now;
-      send_poll();
-    }
+    // Normal operation: KEEPALIVE at ~1s interval (matches original)
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
