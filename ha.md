@@ -937,3 +937,68 @@ No evidence in any LA capture of an ESP→MB command that initiates mowing.
 - Mowing control from ESP is **impossible via UART** — the protocol has no such command
 - Physical buttons (START/STOP/HOME) are hardwired to U16 through J8, bypassing ESP entirely
 - Original firmware restored — mower operates normally
+
+---
+
+## 12. Contradictions & Open Hypotheses (2026-06-23)
+
+### The Core Contradiction
+
+| Observation | Implication |
+|-------------|-------------|
+| ESP32 decompilation shows **zero GPIO input reads** | Buttons are NOT read by ESP32 |
+| No UART message carries button-press info in any capture | MB does NOT tell ESP which button was pressed |
+| **Yet digits change on the display during PIN entry** | ESP32 **must** know which digit key was pressed |
+
+The display is driven entirely by ESP32 (SPI → 74HC595). There is no way for the digits to change without ESP32 knowing the button state. This means **at least one of the decompilation findings is wrong** or we missed something fundamental.
+
+### Hypotheses
+
+#### H1: Buttons ARE connected to ESP32 (but not found)
+- PCB lacquer prevented full trace routing
+- Decompilation may have missed GPIO reads via:
+  - **Timer ISR** — the display refresh callback (8ms, `esp_timer`) could read GPIOs. Static analysis of timer callbacks is notoriously easy to miss
+  - **Register-level access** — direct GPIO register reads (`GPIO.in` / `GPIO.in1`) bypass standard HAL functions
+  - **Xtensa-specific instructions** — Ghidra decompiler may not handle all addressing modes
+- **Test**: Rescan PCB without lacquer, or re-examine ESP32 firmware with focus on timer callbacks and register-level GPIO access
+
+#### H2: ESP32 must "enable" button path (GPIO as mux select)
+- A free ESP32 GPIO (e.g., GPIO14 or GPIO18 — connected but unknown function) might act as a **mux select** that routes button signals either to U16 (default) or to ESP32
+- Original firmware might set this pin HIGH/LOW at boot to "take over" buttons, then release it
+- **Test**: Check original firmware writes to all unknown GPIOs during boot; try cycling each unused GPIO while monitoring button response
+
+#### H3: START does not work on custom firmware because MB is in wrong state
+- Our boot sequence differs from original (e.g., missing `CMD_ESP_TRIM`, different timing, no `CMD_BATTERY` response)
+- U13/U16 state machine might have preconditions for START that aren't met
+- **Test**: Compare the full STATUS sequence (`0x330000A0`) between original capture (`drugi.sr`) and our firmware (log 23) — byte-for-byte, every field. Look for missing flags or different field values
+- **Test**: Replay the exact original firmware boot sequence command-by-command (including timing) from ESPHome to see if START starts working
+
+#### H4: STA/OK/ON lines carry additional signaling
+- These 3 button lines on J8 might be more than simple digital inputs:
+  - Pulse-width modulated signals
+  - I²C-like bidirectional protocol
+  - Daisy-chain with state encoding (like a shift register)
+- **Counter-evidence**: LA captures show clean UART without correlation to activity on D3/D4 (START/OK) lines. The lines appear static or just digital button states.
+
+#### H5: Too many unknown ESP32 pins — incomplete understanding
+| GPIO | Connection | Status |
+|------|-----------|--------|
+| GPIO4 | ? | Untraced (lacquer), present on PCB |
+| GPIO14 | ? | Untraced, mentioned in decompilation |
+| GPIO18 | ? | Untraced, candidate in display scan |
+| GPIO23 | VSPI MOSI? | Untraced |
+| GPIO26 | ? | Untraced |
+| GPIO34 | ? | Input-only, untraced |
+| GPIO35 | ? | Input-only, untraced |
+| GPIO39 | ? | Input-only, untraced |
+
+- **Test**: Full decompilation of all 3 MCUs (ESP32 + U16 + U13) with cross-referencing would reveal all peripheral interactions
+
+### Recommended Next Steps (if project is revisited)
+
+1. **Re-examine ESP32 firmware** — focus on ISRs, timer callbacks, and direct register access (`GPIO.in`, `GPIO.out`, `GPIO.enable`)
+2. **Compare STATUS frames** — original `drugi.sr` vs our log 23, look for any difference in `0x330000A0` fields
+3. **Replay original boot sequence** — send exact commands at exact timings from our firmware to isolate the state machine difference
+4. **Cycle unknown GPIOs** — write HIGH/LOW to each unknown pin on J8/display board while monitoring for button functionality change
+5. **Deep U16 decompilation** — the button routing logic is likely in U16 firmware (FreeRTOS, EasyLogger), which has 256 KB of code
+6. **Trace GPIO4/14/18/26 on PCB** — remove lacquer and trace to find hidden connections
