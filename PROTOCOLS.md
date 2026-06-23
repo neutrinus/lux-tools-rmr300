@@ -437,6 +437,55 @@ U13 OTA framing (from `FUN_08008cb8`):
 
 ---
 
+---
+
+## Project Status Summary
+
+### What Works (stable communication via ESPHome component)
+- ✅ **Protocol decoding** — JSON + CRC8-Dallas at 230400 8N1, full frame parsing
+- ✅ **Boot sequence** — BOOT→KEEPALIVE→STATE→RAIN→WIFI→ESP_INFO→INIT, non-blocking
+- ✅ **Handshake** — stable SYNC→DONE transition, PIN accepted → `state:1` (READY)
+- ✅ **Watchdog-safe communication** — 36+ s without watchdog (log 22), `safe_mode` counter resets
+- ✅ **Periodic reporting** — KEEPALIVE@1s, WIFI/BT@5s, ESP_INFO@30s, ESP_STATE@10s, RAIN@60s
+- ✅ **Error ACK** — all 3 commands (`0x10000001` / `0x10000002` / `0x10000007`)
+- ✅ **Display** — 4-digit 7-segment LED (SPI, 3× 74HC595, 2MHz, hardware timer)
+- ✅ **Sensors** — rain (GPIO36), light, battery, device-info, schedule parsing
+- ✅ **HA integration** — full sensor/binary_sensor/text_sensor publishing
+- ✅ **Boot delay (30s)** — OTA-safe window, configurable
+
+### What Does NOT Work
+- ❌ **START/STOP/HOME buttons** — physical buttons connect through J8 to U16, **not** to ESP32. ESP sees only `START_ACK`/`EXEC_ACTION` notifications. **No UART command exists to trigger mowing.**
+- ❌ **Software mowing start** — methods 1-5 (`send_action`, `CMD_EXEC_ACTION`, `CMD_RETURN_HOME`, `CMD_START_ACK`, `ESP_TRIM auto=1`, `ESP_STATE=2`) all ignored by MB. No evidence in any LA capture of an ESP→MB command that initiates mowing.
+- ❌ **`start_mowing()`** — MB ignores the TRIM schedule + error ACK + state=2 sequence
+- ❌ **`return_to_dock()`** — sends `CMD_RETURN_HOME` but mower stays in idle
+- ❌ **GPIO mowing trigger (method 6)** — untested. Would require a jumper wire from a free ESP32 pin to J8 pin 6 (START button line).
+- ❌ **PIN is NOT stored in original ESP32 firmware** — PIN is stored in U13 KV-store (EEPROM U22). Original ESP32 firmware only forwards user-entered PIN for verification; there is no `pwd` constant in the firmware binary.
+- ❌ **Physical START button** — does not trigger any MB response in log 23. Possible causes: J8 cable seating, GPIO interference, or MB state lock-out condition. Not resolved.
+- ❌ **Colon on display** — bit location not found (b0, U4)
+- ❌ **ESP not responding to MB queries** — `CMD_ESP_WIFI` / `CMD_ESP_BT` queries are sent by MB but ESP does not track/respond to them in time
+
+### Key Architectural Constraints
+1. **ESP cannot start mowing via UART** — no such command exists in the protocol. All physical actions (START/STOP/HOME) go directly to U16 through J8. ESP only receives notifications.
+2. **MB watchdog ~30s from power-on** — only `BOOT` (`0x40000004`) resets it. Boot_delay keeps MB alive with POLL/KEEPALIVE but does NOT reset the watchdog.
+3. **POLL in DONE causes DEVICE_INFO flood** — MB interprets periodic `CMD_ESP_POLL` as "ESP requests device info" and re-sends `DEVICE_INFO` + `HW_VERSIONS` indefinitely. POLL must be restricted to PRE/SYNC phases.
+4. **`0x41xxxxxx` commands are MB→ESP** — all except `PIN_SEND` (`0x41000005`). Sending them reverse (ESP→MB) has no effect.
+5. **U16 max 128 bytes/frame** — mport driver limitation.
+6. **PIN is stored in U13, not on ESP32** — ESP only forwards user-entered PIN.
+
+### Future Work (if continuing)
+1. **Method 6**: GPIO jumper wire from free ESP32 pin to J8 pin 6 (START) — only way to trigger mowing from ESP
+2. **Remove GPIO13/15/20/22 binary sensors** from YAML to rule out interference with J8 button circuits → done, commit pending
+3. **Investigate MB lock-out**: check `stop_state`, `border_state`, `rain_state` in STATUS when physical START fails
+4. **Re-test physical START with cover off** after GPIO sensor removal
+5. **Capture LA trace with original firmware + MQTT** to find any omitted UART command for mowing trigger
+6. **Find colon bit** on display (b0, U4)
+7. **Implement MB query tracking** — respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in DONE phase
+
+### Current Decision
+The project is being **wound down** after exhausting all software-based methods to trigger mowing. The only remaining approach (method 6, GPIO jumper) requires hardware modification. Original firmware has been restored to the mower — it mows normally with stock software.
+
+---
+
 ## Channel Mapping in Captures (Reference)
 
 > **Krytyczne**: Kanały analizatora logicznego były podłączane różnie w różnych sesjach!

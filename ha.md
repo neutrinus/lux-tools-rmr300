@@ -1,286 +1,286 @@
-# Dokumentacja reverse-engineeringu mainboardy (MB) kosiarki RMR300
+# Mainboard (MB) Reverse Engineering Documentation — RMR300 Lawn Mower
 
-## Historia dokumentu
+## Document History
 
-| Data | Autor | Opis |
-|------|-------|------|
-| 2026-06-22 | Marek | Kompleksowa dokumentacja reverse-engineeringu |
-| 2026-06-22 | Marek | Wyniki eksperymentów watchdog (logi 12-22) |
+| Date | Author | Description |
+|------|--------|-------------|
+| 2026-06-22 | Marek | Comprehensive reverse-engineering documentation |
+| 2026-06-22 | Marek | Watchdog experiment results (logs 12-22) |
 
 ---
 
-## 1. Konfiguracja sprzętowa
+## 1. Hardware Configuration
 
-### Płyta główna (MB)
-- **MCU (U16)**: GD32F303CGT6 (ARM Cortex-M4F) — komunikacja z ESP32
-- **MCU (U13)**: GD32F305AGT6 (ARM Cortex-M4F) — sterowanie silnikami, KV-store, PIN
-- U16 działa jako pomost JSON między ESP32 a U13 na FreeRTOS
+### Mainboard (MB)
+- **MCU (U16)**: GD32F303CGT6 (ARM Cortex-M4F) — communicates with ESP32
+- **MCU (U13)**: GD32F305AGT6 (ARM Cortex-M4F) — motor control, KV-store, PIN
+- U16 acts as a JSON bridge between ESP32 and U13 running FreeRTOS
 
-### ESP32-WROOM-32UE (płyta wyświetlacza)
-- **Fizyczne piny**:
-  - `GPIO17` — TX (UART do MB)
-  - `GPIO16` — RX (UART z MB)
-  - `GPIO33` — CLK (SPI, wyświetlacz 7-segmentowy)
-  - `GPIO25` — MOSI (SPI, wyświetlacz 7-segmentowy)
-  - `GPIO32` — CS (SPI, wyświetlacz / latch 74HC595)
-  - `GPIO27` — Buzzer (PWM cyfrowy)
-  - `GPIO36` — Czujnik deszczu (GPIO36 = ADC1_CH0, wejście cyfrowe)
-  - `GPIO19` — Przycisk OK (do U16, aktywny LOW)
-- **UART**: 230400 8N1, standardowa polaryzacja
-- **Wbudowany czujnik światła**: na ADC
-- **Miejsce na czujnik Wi-Fi/BT**: niepopulowane (piny przypisane do UART)
+### ESP32-WROOM-32UE (Display Board)
+- **Physical pins**:
+  - `GPIO17` — TX (UART to MB)
+  - `GPIO16` — RX (UART from MB)
+  - `GPIO33` — CLK (SPI, 7-segment display)
+  - `GPIO25` — MOSI (SPI, 7-segment display)
+  - `GPIO32` — CS (SPI, display / 74HC595 latch)
+  - `GPIO27` — Buzzer (digital PWM)
+  - `GPIO36` — Rain sensor (GPIO36 = ADC1_CH0, digital input)
+  - `GPIO19` — OK button (to U16, active LOW)
+- **UART**: 230400 8N1, standard polarity
+- **Built-in light sensor**: on ADC
+- **Wi-Fi/BT sensor pad**: unpopulated (pins assigned to UART)
 
-### Wyświetlacz
-- 4-cyfrowy 7-segmentowy LED (zegarowy)
-- Sterowany przez 3× 74HC595 (przesuwne rejestry)
-- Fake SPI: 24-bitowe ramki (`b0 + b1 + seg`)
-- Odświeżanie: hardware timer 8ms (125Hz)
-- `CS` pełni rolę `OE` (Output Enable) — trzymany HIGH, opuszczany na czas transmisji
-- Mapowanie segmentów: standardowe 7-segmentowe (bity: g, f, e, d, c, b, a, DP)
-- Adresowanie digtów: `b1 = {0x20, 0x10, 0x08, 0x04}` (dla digtów 0..3 od lewej)
-- Colon (dwukropek) — lokalizacja nieznaleziona (TODO)
+### Display
+- 4-digit 7-segment LED (clock-style)
+- Driven by 3× 74HC595 (shift registers)
+- Fake SPI: 24-bit frames (`b0 + b1 + seg`)
+- Refresh: hardware timer 8ms (125Hz)
+- `CS` acts as `OE` (Output Enable) — held HIGH, lowered during transmission
+- Segment mapping: standard 7-segment (bits: g, f, e, d, c, b, a, DP)
+- Digit addressing: `b1 = {0x20, 0x10, 0x08, 0x04}` (for digits 0..3 from left)
+- Colon — location not found (TODO)
 
-### Czujnik deszczu
-- Podpięty do GPIO36, aktywny LOW (0 = deszcz, 1 = brak deszczu)
-- W oryginalnym firmware ESP wysyła `{"cmd":570425344,"rain":0/1}` przy zmianie
+### Rain Sensor
+- Connected to GPIO36, active LOW (0 = rain, 1 = no rain)
+- Original firmware sends `{"cmd":570425344,"rain":0/1}` on change
 
 ### Buzzer
-- GPIO27, cyfrowy HIGH = włączony
-- Używany przy błędach (300ms) i starcie koszenia (100ms)
-- W oryginalnym firmware pojawia się też przy przyjęciu PIN (5 cykli)
+- GPIO27, digital HIGH = on
+- Used on errors (300ms) and mowing start (100ms)
+- Original firmware also triggers on PIN accepted (5 cycles)
 
 ---
 
-## 2. Odkrycia protokołu
+## 2. Protocol Discoveries
 
-### Format ramki
+### Frame Format
 
 ```
 &{json}<CRC>#
 ```
 
-- Prefiks: `0x26` (`&`)
-- JSON z polem `cmd` (32-bit integer)
-- CRC: Dallas/Maxim CRC-8 (poly 0x31, init 0x00, ref_in=true, ref_out=true) — liczony tylko z bajtów JSON (bez `&` i `#`)
-- Terminator: `0x23` (`#` — **pojedynczy**, nie `##`)
-- Ograniczenie: max 128 bajtów na ramkę (ograniczenie drivera mport U16)
+- Prefix: `0x26` (`&`)
+- JSON with `cmd` field (32-bit integer)
+- CRC: Dallas/Maxim CRC-8 (poly 0x31, init 0x00, ref_in=true, ref_out=true) — computed only over JSON bytes (excluding `&` and `#`)
+- Terminator: `0x23` (`#` — **single**, not `##`)
+- Limit: max 128 bytes per frame (U16 mport driver limitation)
 
-> **Korekta 2026-06-22**: Poprzednia wersja dokumentowała terminator `##` (dwa `0x23`).
-> Dekodowanie captures pokazuje pojedynczy `#` — np. `...7D A0 23 26...` = `}` CRC `#` `&`(next frame).
+> **Correction 2026-06-22**: Previous version documented terminator `##` (two `0x23`).
+> Capture decoding shows single `#` — e.g. `...7D A0 23 26...` = `}` CRC `#` `&`(next frame).
 
-### Wszystkie stałe CMD z kodu źródłowego
+### All CMD Constants from Source Code
 
-> **⚠️ KOREKTA 2026-06-22**: Poniższe tabele "ESP → MB" i "MB → ESP" zawierają **błędnie przypisane kierunki**
-> dla wielu komend. Tabele zostały wygenerowane z kodu źródłowego, który definiuje stałe CMD
-> niezależnie od kierunku — wiele komend jest obsługiwane po obu stronach (np. PIN_SEND jest wysyłane
-> przez ESP, ale PIN_RESULT jest odbierane od MB).
+> **⚠️ CORRECTION 2026-06-22**: The tables below "ESP → MB" and "MB → ESP" have **incorrect direction assignments**
+> for many commands. The tables were generated from source code that defines CMD constants
+> independently of direction — many commands are handled by both sides (e.g. PIN_SEND is sent
+> by ESP but PIN_RESULT is received from MB).
 >
-> **Autorytatywna tabela kierunków**: [PROTOCOLS.md](PROTOCOLS.md) — sekcja "Complete Command Catalog".
-> Krótko: prefixy `0x20/0x33/0x50` = MB→ESP, `0x10/0x22/0x30/0x31` = ESP→MB, `0x41` = MB→ESP (z wyjątkiem 0x41000005 PIN_SEND = ESP→MB).
+> **Authoritative direction table**: [PROTOCOLS.md](PROTOCOLS.md) — section "Complete Command Catalog".
+> In short: prefixes `0x20/0x33/0x50` = MB→ESP, `0x10/0x22/0x30/0x31` = ESP→MB, `0x41` = MB→ESP (except 0x41000005 PIN_SEND = ESP→MB).
 
-#### ESP → MB (wysyłane przez ESP32)
+#### ESP → MB (sent by ESP32)
 
-| Stała | HEX | DEC | Opis |
-|-------|-----|-----|------|
-| `CMD_POWER_ON` | `0x20000001` | 536870913 | Power-on wake z `action:0` |
-| `CMD_POWER_READY` | `0x20000004` | 536870916 | Gotowość do pracy |
-| `CMD_SETTING_MODE` | `0x30000006` | 805306374 | Tryb ustawień |
-| `CMD_SETTING_APPLY` | `0x30000007` | 805306375 | Zastosuj ustawienia |
-| `CMD_ESP_STATE` | `0x30000028` | 805306408 | Raport stanu ESP |
-| `CMD_ESP_WIFI` | `0x30000021` | 805306401 | Status Wi-Fi z polami `wifi`, `str` |
-| `CMD_ESP_BT` | `0x30000022` | 805306402 | Status BT z polami `bt`, `str` |
-| `CMD_ESP_POLL` | `0x300000A1` | 805306529 | Poll/heartbeat (ciągły, co ~30ms) |
-| `CMD_ESP_TRIM` | `0x300000A6` | 805306534 | Harmonogram koszenia |
-| `CMD_ESP_RAIN_CFG` | `0x300000A7` | 805306535 | Konfiguracja deszczu |
-| `CMD_ESP_MULTIZONE` | `0x300000A8` | 805306536 | Konfiguracja multi-stref |
-| `CMD_SETTING_START` | `0x31000016` | 822083606 | Start ustawień |
-| `CMD_SETTING_SUB` | `0x31000017` | 822083607 | Sub-ustawienie |
-| `CMD_PIN_RESULT` | `0x33000021` | 855638177 | Wynik PIN (z DEVICE_INFO!) |
-| `CMD_PIN_RESULT2` | `0x33000022` | 855638050 | Wynik PIN (confirm) — w kodzie: `0x33000022` (!= 0x33000021) |
-| `CMD_STATUS` | `0x330000A0` | 855638176 | Stan kosiarki (bat, state, error, itp.) |
-| `CMD_DEVICE_INFO` | `0x330000A1` | 855638177 | Info o urządzeniu (name, sn, model, version) |
-| `CMD_HW_VERSIONS` | `0x330000A2` | 855638178 | Wersje sprzętowe (MB, BB, DB, MBLT) |
-| `CMD_SCHEDULE` | `0x330000A6` | 855638182 | Harmonogram |
-| `CMD_RAIN_CFG_RSP` | `0x330000A7` | 855638183 | Odpowiedź konfiguracji deszczu |
-| `CMD_MULTIZONE_RSP` | `0x330000A8` | 855638184 | Odpowiedź multi-stref |
+| Constant | HEX | DEC | Description |
+|----------|-----|-----|-------------|
+| `CMD_POWER_ON` | `0x20000001` | 536870913 | Power-on wake with `action:0` |
+| `CMD_POWER_READY` | `0x20000004` | 536870916 | Ready for operation |
+| `CMD_SETTING_MODE` | `0x30000006` | 805306374 | Settings mode |
+| `CMD_SETTING_APPLY` | `0x30000007` | 805306375 | Apply settings |
+| `CMD_ESP_STATE` | `0x30000028` | 805306408 | ESP state report |
+| `CMD_ESP_WIFI` | `0x30000021` | 805306401 | Wi-Fi status with `wifi`, `str` fields |
+| `CMD_ESP_BT` | `0x30000022` | 805306402 | BT status with `bt`, `str` fields |
+| `CMD_ESP_POLL` | `0x300000A1` | 805306529 | Poll/heartbeat (continuous, ~30ms) |
+| `CMD_ESP_TRIM` | `0x300000A6` | 805306534 | Mowing schedule |
+| `CMD_ESP_RAIN_CFG` | `0x300000A7` | 805306535 | Rain configuration |
+| `CMD_ESP_MULTIZONE` | `0x300000A8` | 805306536 | Multi-zone configuration |
+| `CMD_SETTING_START` | `0x31000016` | 822083606 | Settings start |
+| `CMD_SETTING_SUB` | `0x31000017` | 822083607 | Sub-setting |
+| `CMD_PIN_RESULT` | `0x33000021` | 855638177 | PIN result (collides with DEVICE_INFO!) |
+| `CMD_PIN_RESULT2` | `0x33000022` | 855638050 | PIN result (confirm) — in code: `0x33000022` (!= 0x33000021) |
+| `CMD_STATUS` | `0x330000A0` | 855638176 | Mower status (bat, state, error, etc.) |
+| `CMD_DEVICE_INFO` | `0x330000A1` | 855638177 | Device info (name, sn, model, version) |
+| `CMD_HW_VERSIONS` | `0x330000A2` | 855638178 | Hardware versions (MB, BB, DB, MBLT) |
+| `CMD_SCHEDULE` | `0x330000A6` | 855638182 | Schedule |
+| `CMD_RAIN_CFG_RSP` | `0x330000A7` | 855638183 | Rain config response |
+| `CMD_MULTIZONE_RSP` | `0x330000A8` | 855638184 | Multi-zone response |
 | `CMD_MB_DEVICE_INFO` | `0x330000A9` | 855638185 | MB device info (sw/hv/sv) |
-| `CMD_SCHEDULE_END` | `0x330000AA` | 855638186 | Koniec bloku harmonogramu |
-| `CMD_MAP_CFG` | `0x330000B0` | 855638192 | Konfiguracja mapy (area, map_sn) |
+| `CMD_SCHEDULE_END` | `0x330000AA` | 855638186 | End of schedule block |
+| `CMD_MAP_CFG` | `0x330000B0` | 855638192 | Map configuration (area, map_sn) |
 | `CMD_ESP_BOOT` | `0x40000004` | 1073741828 | BOOT handshake |
-| `CMD_ESP_INIT` | `0x40000001` | 1073741825 | INIT z `init:3` |
+| `CMD_ESP_INIT` | `0x40000001` | 1073741825 | INIT with `init:3` |
 | `CMD_ESP_INFO` | `0x40000006` | 1073741830 | ESP HW/SW info (hv, sv, mac) |
-| `CMD_BOOT_INIT` | `0x40000008` | 1073741832 | Init w toku |
+| `CMD_BOOT_INIT` | `0x40000008` | 1073741832 | Init in progress |
 | `CMD_BOOT_HEART` | `0x40000009` | 1073741833 | Boot heartbeat |
-| `CMD_RTC` | `0x40000011` | 1073741841 | Synchronizacja czasu RTC (co ~1s) |
-| `CMD_START_TIME_Q` | `0x40000012` | 1073741842 | Zapytanie o czas startu |
-| `CMD_CUT_TIME_Q` | `0x40000013` | 1073741843 | Zapytanie o czas koszenia |
-| `CMD_UNKNOWN_14` | `0x40000014` | 1073741844 | Nieznane |
-| `CMD_LIGHT` | `0x40000020` | 1073741856 | Poziom światła |
+| `CMD_RTC` | `0x40000011` | 1073741841 | RTC time sync (co ~1s) |
+| `CMD_START_TIME_Q` | `0x40000012` | 1073741842 | Start time query |
+| `CMD_CUT_TIME_Q` | `0x40000013` | 1073741843 | Cut time query |
+| `CMD_UNKNOWN_14` | `0x40000014` | 1073741844 | Unknown |
+| `CMD_LIGHT` | `0x40000020` | 1073741856 | Light level |
 | `CMD_BOOT_ACK` | `0x40000021` | 1073741857 | Boot ACK |
-| `CMD_LOCK` | `0x41000002` | 1090519042 | Lock z `lock:0/1` |
-| `CMD_EXEC_ACTION` | `0x41000003` | 1090519043 | Exec action (po STOP) |
-| `CMD_ERROR_NOTIFY` | `0x41000004` | 1090519044 | Notyfikacja błędu |
-| `CMD_PIN_SEND` | `0x41000005` | 1090519045 | Wysłanie PIN (z `pwd`) |
+| `CMD_LOCK` | `0x41000002` | 1090519042 | Lock with `lock:0/1` |
+| `CMD_EXEC_ACTION` | `0x41000003` | 1090519043 | Exec action (after STOP) |
+| `CMD_ERROR_NOTIFY` | `0x41000004` | 1090519044 | Error notification |
+| `CMD_PIN_SEND` | `0x41000005` | 1090519045 | Send PIN (with `pwd`) |
 | `CMD_RETURN_HOME` | `0x41000006` | 1090519046 | ★ Return to dock |
 | `CMD_SHUTDOWN` | `0x41000008` | 1090519048 | Shutdown |
-| `CMD_START_ACK` | `0x41000020` | 1090519072 | START ACK dla MB |
-| `CMD_BATTERY` | `0x50000021` | 1342177313 | Poziom baterii |
+| `CMD_START_ACK` | `0x41000020` | 1090519072 | START ACK for MB |
+| `CMD_BATTERY` | `0x50000021` | 1342177313 | Battery level |
 
-#### MB → ESP (otrzymywane przez ESP32)
+#### MB → ESP (received by ESP32)
 
-| Stała | HEX | DEC | Opis |
-|-------|-----|-----|------|
+| Constant | HEX | DEC | Description |
+|----------|-----|-----|-------------|
 | `CMD_POWER_ON` | `0x20000001` | 536870913 | Power-on (action:0) |
 | `CMD_POWER_READY` | `0x20000004` | 536870916 | Power ready |
-| `CMD_RAIN` | `0x22000000` | 570425344 | Stan czujnika deszczu (`rain:0/1`) |
-| `CMD_ESP_KEEPALIVE` | `0x30000005` | 805306373 | Keepalive (ciągły, ~1s) |
-| `CMD_ESP_WIFI` | `0x30000021` | 805306401 | Zapytanie o status Wi-Fi |
-| `CMD_ESP_BT` | `0x30000022` | 805306402 | Zapytanie o status BT |
-| `CMD_ESP_STATE` | `0x30000028` | 805306408 | Notyfikacja stanu |
+| `CMD_RAIN` | `0x22000000` | 570425344 | Rain sensor state (`rain:0/1`) |
+| `CMD_ESP_KEEPALIVE` | `0x30000005` | 805306373 | Keepalive (continuous, ~1s) |
+| `CMD_ESP_WIFI` | `0x30000021` | 805306401 | Wi-Fi status query |
+| `CMD_ESP_BT` | `0x30000022` | 805306402 | BT status query |
+| `CMD_ESP_STATE` | `0x30000028` | 805306408 | State notification |
 | `CMD_ESP_POLL` | `0x300000A1` | 805306529 | Poll MB → ESP (echo) |
-| `CMD_ESP_TRIM` | `0x300000A6` | 805306534 | Zapytanie o harmonogram |
-| `CMD_PIN_RESULT` | `0x33000021` | 855638177 | Wynik PIN (z `result:true/false`) |
-| `CMD_PIN_RESULT2` | `0x33000022` | 855638050 | Drugi wynik PIN |
-| `CMD_STATUS` | `0x330000A0` | 855638176 | Stan kosiarki (cykliczny) |
-| `CMD_DEVICE_INFO` | `0x330000A1` | 855638177 | Pełna konfiguracja urządzenia |
-| `CMD_HW_VERSIONS` | `0x330000A2` | 855638178 | Wersje sprzętowe |
-| `CMD_SCHEDULE` | `0x330000A6` | 855638182 | Harmonogram |
-| `CMD_RAIN_CFG_RSP` | `0x330000A7` | 855638183 | Konfiguracja deszczu |
-| `CMD_MULTIZONE_RSP` | `0x330000A8` | 855638184 | Multi-strefy |
-| `CMD_MAP_CFG` | `0x330000B0` | 855638192 | Mapa (area, map_sn) |
-| `CMD_SCHEDULE_END` | `0x330000AA` | 855638186 | Koniec harmonogramu |
-| `CMD_ESP_BOOT` | `0x40000004` | 1073741828 | BOOT od MB |
+| `CMD_ESP_TRIM` | `0x300000A6` | 805306534 | Schedule query |
+| `CMD_PIN_RESULT` | `0x33000021` | 855638177 | PIN result (with `result:true/false`) |
+| `CMD_PIN_RESULT2` | `0x33000022` | 855638050 | Second PIN result |
+| `CMD_STATUS` | `0x330000A0` | 855638176 | Mower status (periodic) |
+| `CMD_DEVICE_INFO` | `0x330000A1` | 855638177 | Full device configuration |
+| `CMD_HW_VERSIONS` | `0x330000A2` | 855638178 | Hardware versions |
+| `CMD_SCHEDULE` | `0x330000A6` | 855638182 | Schedule |
+| `CMD_RAIN_CFG_RSP` | `0x330000A7` | 855638183 | Rain configuration |
+| `CMD_MULTIZONE_RSP` | `0x330000A8` | 855638184 | Multi-zone |
+| `CMD_MAP_CFG` | `0x330000B0` | 855638192 | Map (area, map_sn) |
+| `CMD_SCHEDULE_END` | `0x330000AA` | 855638186 | End of schedule |
+| `CMD_ESP_BOOT` | `0x40000004` | 1073741828 | BOOT from MB |
 | `CMD_ESP_INIT` | `0x40000001` | 1073741825 | INIT confirm |
-| `CMD_ESP_INFO` | `0x40000006` | 1073741830 | Zapytanie o ESP info |
-| `CMD_BOOT_INIT` | `0x40000008` | 1073741832 | Init w toku |
+| `CMD_ESP_INFO` | `0x40000006` | 1073741830 | ESP info query |
+| `CMD_BOOT_INIT` | `0x40000008` | 1073741832 | Init in progress |
 | `CMD_BOOT_HEART` | `0x40000009` | 1073741833 | Boot heartbeat |
 | `CMD_RTC` | `0x40000011` | 1073741841 | RTC heartbeat |
-| `CMD_LIGHT` | `0x40000020` | 1073741856 | Poziom światła |
+| `CMD_LIGHT` | `0x40000020` | 1073741856 | Light level |
 | `CMD_BOOT_ACK` | `0x40000021` | 1073741857 | Boot ACK |
 | `CMD_LOCK` | `0x41000002` | 1090519042 | Lock state |
 | `CMD_EXEC_ACTION` | `0x41000003` | 1090519043 | Exec action |
 | `CMD_ERROR_NOTIFY` | `0x41000004` | 1090519044 | Error notify |
-| `CMD_PIN_SEND` | `0x41000005` | 1090519045 | PIN send (od MB!) |
+| `CMD_PIN_SEND` | `0x41000005` | 1090519045 | PIN send (from MB!) |
 | `CMD_START_ACK` | `0x41000020` | 1090519072 | START ACK |
 | `CMD_ERR_ACK1` | `0x10000001` | 268435457 | Error ACK |
 | `CMD_ERR_ACK2` | `0x10000002` | 268435458 | Error ACK |
-| `CMD_ERR_ACK7` | `0x10000007` | 268435463 | Error ACK (wysyłany przez ESP) |
-| `CMD_SUPERVISION` | `0x20000002` | 536870914 | ★ Supervision — MB wyłącza zasilanie |
-| `CMD_FRAME_ERROR` | `0x15000001` | 352321537 | Błąd ramki (U16 zgłasza złe CRC) |
+| `CMD_ERR_ACK7` | `0x10000007` | 268435463 | Error ACK (sent by ESP) |
+| `CMD_SUPERVISION` | `0x20000002` | 536870914 | ★ Supervision — MB cuts power |
+| `CMD_FRAME_ERROR` | `0x15000001` | 352321537 | Frame error (U16 reports bad CRC) |
 
-### Katalog komend wg prefiksu (kierunki zweryfikowane krzyżowo)
+### Command Catalog by Prefix (directions cross-verified)
 
-| Prefiks | Kierunek | Opis |
-|---------|----------|------|
+| Prefix | Direction | Description |
+|--------|-----------|-------------|
 | `0x10xxxxxx` | ESP→MB | Error ACK |
-| `0x15xxxxxx` | MB→ESP | Błąd ramki (U16 zgłasza złe CRC) |
+| `0x15xxxxxx` | MB→ESP | Frame error (U16 reports bad CRC) |
 | `0x20xxxxxx` | **MB→ESP** | Power/action notifications (power-on, ready) |
-| `0x22xxxxxx` | **ESP→MB** | Czujnik deszczu (sensor na display board J4→ESP32 GPIO36) |
+| `0x22xxxxxx` | **ESP→MB** | Rain sensor (sensor on display board J4→ESP32 GPIO36) |
 | `0x30xxxxxx` | **ESP→MB** | Keepalive, WiFi/BT status, settings, poll |
 | `0x31xxxxxx` | ESP→MB | Settings menu control |
-| `0x33xxxxxx` | **MB→ESP** | Device info, status, wersje, harmonogram, wyniki PIN |
-| `0x40xxxxxx` | Oba | System: 0x40000001/04/06 = ESP→MB, 0x40000008+ = MB→ESP |
-| `0x41xxxxxx` | **MB→ESP** | Lock, exec_action, error, shutdown, start_ack, home, docked — **z wyjątkiem 0x41000005 (PIN_SEND = ESP→MB)** |
-| `0x50xxxxxx` | **MB→ESP** | Bateria |
+| `0x33xxxxxx` | **MB→ESP** | Device info, status, versions, schedule, PIN results |
+| `0x40xxxxxx` | Both | System: 0x40000001/04/06 = ESP→MB, 0x40000008+ = MB→ESP |
+| `0x41xxxxxx` | **MB→ESP** | Lock, exec_action, error, shutdown, start_ack, home, docked — **except 0x41000005 (PIN_SEND = ESP→MB)** |
+| `0x50xxxxxx` | **MB→ESP** | Battery |
 
-> **Korekta**: Poprzednia wersja tej tabeli miała odwrócone kierunki dla `0x20`, `0x22`, `0x30`, `0x33`, `0x41`, `0x50`.
-> Patrz PROTOCOLS.md dla pełnej dokumentacji z krzyżowym potwierdzeniem z captures i firmware.
+> **Correction**: Previous version of this table had reversed directions for `0x20`, `0x22`, `0x30`, `0x33`, `0x41`, `0x50`.
+> See PROTOCOLS.md for full documentation with cross-verification from captures and firmware.
 
-### Stany MB (pole `state` w `0x330000A0`)
+### MB States (field `state` in `0x330000A0`)
 
-| Wartość | Znaczenie |
-|---------|-----------|
-| 0 | Idle (przed PIN) |
-| 1 | Ready (po PIN) |
-| 2 | MOWING (lub jazda) |
-| 6 | Stop / pauza |
+| Value | Meaning |
+|-------|---------|
+| 0 | Idle (before PIN) |
+| 1 | Ready (after PIN) |
+| 2 | MOWING (or driving) |
+| 6 | Stop / pause |
 | 7 | Error |
 | 9 | RETURNING TO DOCK |
 | 10 | CHARGING |
-| 11 | CHARGING (alternatywny) |
+| 11 | CHARGING (alternative) |
 
-### Dodatkowe pola w statusie
+### Additional Status Fields
 
-- `station` — wykryto stację ładującą (bool)
-- `border_state` — kabel ograniczający (0/1)
-- `stop_state` — przycisk STOP (0/1)
-- `rain_state` — deszcz (0/1)
-- `bat_per` — poziom baterii (0-100)
-- `bat_lv` — poziom baterii (0-3)
-- `error` — kod błędu
-- `work_area`, `cut_area` — powierzchnia
-- `total_minutes`, `on_minutes` — czasy
-- `bat_health` — zdrowie baterii
-- `bat_ctime`, `bat_dtime` — czasy ładowania
-- `rain_delay` — opóźnienie deszczu
+- `station` — docking station detected (bool)
+- `border_state` — boundary wire (0/1)
+- `stop_state` — STOP button (0/1)
+- `rain_state` — rain (0/1)
+- `bat_per` — battery level (0-100)
+- `bat_lv` — battery level (0-3)
+- `error` — error code
+- `work_area`, `cut_area` — area
+- `total_minutes`, `on_minutes` — times
+- `bat_health` — battery health
+- `bat_ctime`, `bat_dtime` — charging times
+- `rain_delay` — rain delay
 
 ---
 
-## 3. Ewolucja sekwencji bootowania
+## 3. Boot Sequence Evolution
 
 ### Log 1 (`kosiarka-logs (1).txt`)
 
-**Data**: 2026-06-21 16:33
+**Date**: 2026-06-21 16:33
 
-**Co testowano**: Pierwsze uruchomienie z komponentem `snk_mower`. ESP wysyła tylko `CMD_ESP_POLL` (0x300000A1) co ~30ms i `CMD_ESP_KEEPALIVE` (0x30000005) co ~1s. Brak sekwencji bootowej.
+**Tested**: First run with `snk_mower` component. ESP sends only `CMD_ESP_POLL` (0x300000A1) every ~30ms and `CMD_ESP_KEEPALIVE` (0x30000005) every ~1s. No boot sequence.
 
-**Wynik**: ESP wysyła, ale MB nie odpowiada (cisza). Brak reakcji MB. Log zawiera 1583 linii TX.
+**Result**: ESP sends, but MB does not respond (silence). No MB reaction. Log contains 1583 TX lines.
 
-**Wnioski**: Potrzebna jest sekwencja bootowa — samo POLL nie wystarcza.
+**Conclusions**: A boot sequence is needed — POLL alone is not enough.
 
 ### Log 2 (`kosiarka-logs (2).txt`)
 
-**Data**: 2026-06-22 ~09:52
+**Date**: 2026-06-22 ~09:52
 
-**Co testowano**: Dodano sekwencję bootową (BOOT → KEEPALIVE → STATE → RAIN → INIT). ESP czeka 5s, potem wysyła boot_seq.
+**Tested**: Added boot sequence (BOOT → KEEPALIVE → STATE → RAIN → INIT). ESP waits 5s, then sends boot_seq.
 
-**Wynik**: Brak wyraźnych odpowiedzi MB w logu.
+**Result**: No clear MB responses in log.
 
 ### Log 5 (`kosiarka-logs (5).txt`)
 
-**Data**: 2026-06-22 ~11:50
+**Date**: 2026-06-22 ~11:50
 
-**Co testowano**: Kolejne iteracje sekwencji bootowej.
+**Tested**: More iterations of boot sequence.
 
-**Wynik**: Nadal brak odpowiedzi MB.
+**Result**: Still no MB response.
 
 ### Log 6 (`kosiarka-logs (6).txt`)
 
-**Data**: 2026-06-22 19:02
+**Date**: 2026-06-22 19:02
 
-**Co testowano**: Pierwsza udana komunikacja! Sekwencja:
+**Tested**: First successful communication! Sequence:
 1. boot delay (200ms POLL)
 2. Boot seq: BOOT → KEEPALIVE → STATE → RAIN=1 → INIT
-3. Czekanie na DEVICE_INFO przez ~2s
-4. DONE → wysłanie PIN
-5. Odebrano `RX: 0x300000A1` — MB zaczyna wysyłać POLL!
-6. Odebrano `Boot ACK` (0x40000021)
-7. Odebrano `Power ON (action=0)` (0x20000001)
-8. Odebrano DEVICE_INFO
+3. Wait for DEVICE_INFO ~2s
+4. DONE → send PIN
+5. Received `RX: 0x300000A1` — MB starts sending POLL!
+6. Received `Boot ACK` (0x40000021)
+7. Received `Power ON (action=0)` (0x20000001)
+8. Received DEVICE_INFO
 
-**Kluczowe zdarzenia** (timestamp):
+**Key events** (timestamp):
 ```
 19:02:57.079 Boot: sending BOOT + KEEPALIVE + STATE + RAIN
 19:02:57.195 Boot sequence sent — waiting for DEVICE_INFO
-19:02:57.203 Power ON (action=0)          ← MB odpowiada!
-19:02:58.841 RX: 0x300000A1               ← MB wysyła POLL
+19:02:57.203 Power ON (action=0)          ← MB responds!
+19:02:58.841 RX: 0x300000A1               ← MB sends POLL
 19:02:59.084 DEVICE_INFO not received — entering SYNC anyway
 19:02:59.588 Boot DONE — switching to keepalive mode
 19:02:59.591 Sending PIN to mainboard
-19:03:01.166 Boot ACK                     ← MB potwierdza
+19:03:01.166 Boot ACK                     ← MB confirms
 19:03:01.240 Boot ACK
-19:03:01.295 Device: MyMower (...)        ← DEVICE_INFO odebrany!
+19:03:01.295 Device: MyMower (...)        ← DEVICE_INFO received!
 ```
 
-**Problem**: Watchdog (ESP32 component watchdog) zabija ESP. Pętla `loop()` trwa ~119ms z powodu `delay()` w `send_boot_sequence_next()` (wysyłanie wszystkich 7 wiadomości naraz w jednym wywołaniu loop). Limit ESPHome to 50ms.
+**Problem**: Watchdog (ESPHome component watchdog) kills ESP. Loop `loop()` takes ~119ms because of `delay()` in `send_boot_sequence_next()` (sending all 7 messages at once in a single loop invocation). ESPHome limit is 50ms.
 
 ### Log 7 (`kosiarka-logs (7).txt`)
 
-**Data**: 2026-06-22 19:07
+**Date**: 2026-06-22 19:07
 
-**Co zmieniono**: Zwiększono interwał POLL z 30ms na 200ms podczas boot_delay, żeby watchdog nie zabił ESP.
+**Changed**: Increased POLL interval from 30ms to 200ms during boot_delay to prevent watchdog kill.
 
-**Wynik**: Watchdog nie zabija (POLL co 200ms zamiast 30ms = mniej TX), ale MB wyłącza się po ~6s:
+**Result**: Watchdog does not kill (POLL every 200ms instead of 30ms = less TX), but MB shuts off after ~6s:
 ```
 19:07:37.762 Boot sequence sent
 19:07:41.796 Boot ACK
@@ -290,15 +290,15 @@
 19:07:44.010 SUPERVISION: MB sent 0x20000002 — power may be cut soon
 ```
 
-**Wnioski**: POLL co 200ms jest za wolne — MB ma timer nadzoru (supervision timer) który wymaga odpowiedzi co ~30-50ms. MB wysyła `0x20000002` (SUPERVISION) i wyłącza zasilanie.
+**Conclusions**: POLL every 200ms is too slow — MB has a supervision timer that requires responses every ~30-50ms. MB sends `0x20000002` (SUPERVISION) and cuts power.
 
 ### Log 8 (`kosiarka-logs (8).txt`)
 
-**Data**: 2026-06-22 19:30
+**Date**: 2026-06-22 19:30
 
-**Co zmieniono**: Dodano 10× POLL w burst (co 30ms) po boot_seq, żeby MB nie uznało że ESP padł.
+**Changed**: Added 10× POLL burst (every 30ms) after boot_seq so MB doesn't think ESP is dead.
 
-**Wynik**: Nadal SUPERVISION. Ustalono że problem to nie watchdog (zasilanie MB jest odcinane, nie reboot ESP):
+**Result**: Still SUPERVISION. Determined that problem is not watchdog (MB power is cut, not ESP reboot):
 ```
 19:31:00.069 Boot sequence sent
 19:31:04.015 Boot ACK
@@ -310,136 +310,136 @@
 
 ### Log 9 (`kosiarka-logs (9).txt`)
 
-**Data**: 2026-06-22 19:48
+**Date**: 2026-06-22 19:48
 
-**Co zmieniono**: Zmieniono kolejność bootowania — ESP czeka aż MB zainicjuje komunikację (zgodnie z PROTOCOLS.md). ESP wysyła tylko KEEPALIVE i POLL, nie wysyła boot_seq dopóki MB nie zacznie.
+**Changed**: Changed boot order — ESP waits for MB to initiate (per PROTOCOLS.md). ESP only sends KEEPALIVE and POLL, does not send boot_seq until MB starts.
 
-**Wynik**: MB całkowicie cicha — nie wysyła nic. Po 15s boot_delay ESP i tak wysyła boot_seq, MB odpowiada, ale potem znowu SUPERVISION po ~3s.
+**Result**: MB completely silent — sends nothing. After 15s boot_delay ESP sends boot_seq anyway, MB responds, then SUPERVISION again after ~3s.
 
 ### Log 10 (`kosiarka-logs (10).txt`)
 
-**Data**: 2026-06-22 19:55
+**Date**: 2026-06-22 19:55
 
-**Co zmieniono**: Cofnięto do wersji ESP-inicjującej (tak jak działało w log 6-8). ESP wysyła boot_seq od razu po boot_delay.
+**Changed**: Reverted to ESP-initiated order (same as logs 6-8). ESP sends boot_seq immediately after boot_delay.
 
-**Wynik**: **MB całkowicie cicha** — zero odpowiedzi, zero RX. ESP wysyła POLL co 200ms przez cały 30s boot_delay, potem boot_seq — i nic. Log ma 2467 linii — wszystkie to TX.
+**Result**: **MB completely silent** — zero responses, zero RX. ESP sends POLL every 200ms throughout 30s boot_delay, then boot_seq — and nothing. Log has 2467 lines — all TX.
 
-**Hipoteza**: Coś się zepsuło w komunikacji między programowalnymi uploadami — może ESP było programowane podczas gdy MB była włączona i zresetowała się, lub rejestry UART się rozjechały.
+**Hypothesis**: Something broke in communication between programmable uploads — maybe ESP was being programmed while MB was powered on and reset, or UART registers got out of sync.
 
 ### Log 11 (`kosiarka-logs (11).txt`)
 
-**Data**: 2026-06-22 20:06
+**Date**: 2026-06-22 20:06
 
-**Co zmieniono**: Powrót do ESP-inicjującej kolejności. Zablokowano wysyłanie RAIN w boot_seq (usunięto) i zmieniono `rain=1` na `rain=0`. Non-blocking boot sequence (jedna wiadomość na loop). Timeout DEVICE_INFO zwiększony do 10s.
+**Changed**: Returned to ESP-initiated order. Blocked RAIN sending in boot_seq (removed) and changed `rain=1` to `rain=0`. Non-blocking boot sequence (one message per loop). DEVICE_INFO timeout increased to 10s.
 
-**Wynik**: **MB odpowiada!** Sekwencja:
-1. 15s boot_delay (POLL co 200ms)
-2. Boot seq wysłana (z `rain=1`) — ale tym razem jedna wiadomość na iterację loop (non-blocking)
-3. Warning: `component took 121ms, max is 50ms` — mimo non-blocking, nadal problem z czasem
+**Result**: **MB responds!** Sequence:
+1. 15s boot_delay (POLL every 200ms)
+2. Boot seq sent (with `rain=1`) — but one message per loop iteration (non-blocking)
+3. Warning: `component took 121ms, max is 50ms` — still timing issues despite non-blocking
 4. DEVICE_INFO timeout (2s)
-5. PIN wysłany (`pwd:9633`)
-6. RX od MB: POLL echo (0x300000A1)
+5. PIN sent (`pwd:9633`)
+6. RX from MB: POLL echo (0x300000A1)
 7. Boot ACK ×2
-8. DEVICE_INFO odebrany (MyMower, RMC300E20V-ECDNSS, S/N=..., v=31018, pwd_en=1)
+8. DEVICE_INFO received (MyMower, RMC300E20V-ECDNSS, S/N=..., v=31018, pwd_en=1)
 9. HW versions: MB hv=22500 sv=31315, BB hv=230500 sv=50003, DB hv=60400 sv=30202, MBLT sv=50517
 10. Battery bars: 3
 
-**Log kończy się po ~10s normalnej pracy** — tylko TX POLL. Brak SUPERVISION 0x20000002 w logu 11! Log jest ucięty (449 linii).
+**Log ends after ~10s normal operation** — only TX POLL. No SUPERVISION 0x20000002 in log 11! Log is truncated (449 lines).
 
-**Obserwacja**: Sekwencja bootowa nadal zawiera `rain:1` (linia 180). W commitach widzę że później zmieniono na `rain:0` (commit `13f98d4` — "Send rain=0 in boot sequence instead of rain=1").
+**Observation**: Boot sequence still contains `rain:1` (line 180). Commits show it was later changed to `rain:0` (commit `13f98d4` — "Send rain=0 in boot sequence instead of rain=1").
 
-**Problem 121ms**: Non-blocking boot sequence (jedna wiadomość na loop) dalej robiła `delay(5)` w `send_boot_sequence_next` dla ESP_INFO (wysyła jedno, potem zapis do flash), albo blokada pochodziła z `send_pin()` z `delay()`.
+**Problem 121ms**: Non-blocking boot sequence (one message per loop) still did `delay(5)` in `send_boot_sequence_next` for ESP_INFO (sends one, then flash write), or the blocking came from `send_pin()` with `delay()`.
 
-### Aktualny stan (po log 11)
+### Current state (after log 11)
 
-W najnowszym kodzie (po commitach):
-- Non-blocking boot sequence (jedna wiadomość na `loop()`)
-- 30s boot_delay dla bezpieczeństwa OTA
-- POLL co 200ms podczas boot_delay
-- POLL co 30ms po przejściu do DONE
+In latest code (after commits):
+- Non-blocking boot sequence (one message per `loop()`)
+- 30s boot_delay for OTA safety
+- POLL every 200ms during boot_delay
+- POLL every 30ms after transitioning to DONE
 - DEVICE_INFO timeout: 10s
-- `rain=0` w boot sequence (commit `13f98d4`)
-- `compat_mode` — wysyła `wifi=0`, `str=0` (zgodnie z oryginalnym firmware)
-- Znacznie zredukowany log spam
+- `rain=0` in boot sequence (commit `13f98d4`)
+- `compat_mode` — sends `wifi=0`, `str=0` (matching original firmware)
+- Significantly reduced log spam
 
 ---
 
-## 4. Zagadka wyłączania zasilania MB
+## 4. MB Power-off Mystery
 
-### Objawy
-MB wysyła `0x20000002` (SUPERVISION) i odcina zasilanie ~3-6s po wysłaniu PIN/odebraniu DEVICE_INFO. Dzieje się to we wszystkich logach 6-9.
+### Symptoms
+MB sends `0x20000002` (SUPERVISION) and cuts power ~3-6s after PIN send / DEVICE_INFO reception. This happens in all logs 6-9.
 
-### Możliwe przyczyny
+### Possible Causes
 
-#### A. Zbyt wolny POLL (najbardziej prawdopodobne)
-MB wymaga `CMD_ESP_POLL` (0x300000A1) co ~30-50ms. Gdy interwał wynosi 200ms, timer nadzoru MB wyzwala SUPERVISION:
-- Log 6-7: POLL 200ms → ESP działa (watchdog OK), ale MB wyłącza
-- Log 8: dodano 30ms burst po boot_seq → nadal wyłącza
+#### A. POLL too slow (most likely)
+MB requires `CMD_ESP_POLL` (0x300000A1) every ~30-50ms. When interval is 200ms, the MB supervision timer triggers SUPERVISION:
+- Log 6-7: POLL 200ms → ESP works (watchdog OK), but MB shuts down
+- Log 8: added 30ms burst after boot_seq → still shuts down
 
-**Kontrargument**: W log 8/9, nawet po przejściu na 30ms POLL w DONE, MB się wyłącza. Może chodzi o przerwę między bodźcem a odpowiedzią — MB wysyła POLL, ESP odpowiada swoim POLL. Jeśli odpowiedź ESP przyjdzie za późno, MB uznaje że ESP nie żyje.
+**Counterargument**: In log 8/9, even after switching to 30ms POLL in DONE, MB shuts down. Maybe it's about the response latency — MB sends POLL, ESP responds with its own POLL. If ESP response is too late, MB thinks ESP is dead.
 
-#### B. `rain=1` w boot sequence
-W boot_seq_ ESP wysyła `{"cmd":570425344,"rain":1}`. To może być odebrane jako "jest deszcz" → MB wyłącza się (oszczędność baterii przy deszczu). W oryginalnym firmware deszcz jest raportowany przez MB do ESP, nie na odwrót.
+#### B. `rain=1` in boot sequence
+In boot_seq_, ESP sends `{"cmd":570425344,"rain":1}`. This might be interpreted as "it's raining" → MB shuts down (battery saving in rain). In original firmware, rain is reported by the MB to ESP, not the other way.
 
-**Commit `13f98d4`**: zmieniono na `rain:0` — to może rozwiązać problem.
+**Commit `13f98d4`**: changed to `rain:0` — this may solve the problem.
 
-#### C. Odrzucenie PIN
-Jeśli PIN jest niepoprawny, MB może się wyłączyć po 3-5 próbach. W logach:
-- PIN wysłany (`{"cmd":1090519045,"pwd":9633}`)
-- Brak odpowiedzi `PIN_RESULT` (0x33000021) w logach 6-8 — dopiero w log 11 widać DEVICE_INFO po PIN
-- PIN może być sprawdzany asynchronicznie, a MB może wyłączyć jeśli PIN nie przejdzie
+#### C. PIN rejection
+If PIN is incorrect, MB may shut down after 3-5 attempts. In logs:
+- PIN sent (`{"cmd":1090519045,"pwd":9633}`)
+- No `PIN_RESULT` (0x33000021) response in logs 6-8 — only in log 11 is DEVICE_INFO visible after PIN
+- PIN might be checked asynchronously, and MB may shut down if PIN doesn't pass
 
-**Kontrargument**: W log 7 widać że PIN_RESULT (0x33000021) nie pojawia się, ale MB i tak wyłącza. W log 11 MB nie wyłącza się w czasie logowania.
+**Counterargument**: In log 7, PIN_RESULT (0x33000021) does not appear but MB still shuts down. In log 11 MB does not shut down during logging.
 
-#### D. Brak odpowiedzi na zapytania MB
-MB wysyła zapytania (WiFi/BT status, ESP info), a ESP może nie odpowiadać w odpowiednim czasie. W oryginalnym firmware:
-- `CMD_ESP_WIFI` i `CMD_ESP_BT` są wysyłane przez MB → ESP odpowiada
-- Jeśli ESP nie odpowie, MB może uznać że ESP jest martwy
+#### D. No response to MB queries
+MB sends queries (WiFi/BT status, ESP info) and ESP may not respond in time. In original firmware:
+- `CMD_ESP_WIFI` and `CMD_ESP_BT` are sent by MB → ESP responds
+- If ESP does not respond, MB may consider ESP dead
 
 #### E. CMD_BATTERY
-MB oczekuje `CMD_BATTERY` (0x50000021) od ESP. Kod wysyła go tylko przy starcie w boot_seq (w oryginalnym firmware MB wysyła `bat:x`, a ESP odpowiada). W implementacji ESP nie wysyła `CMD_BATTERY` podczas normalnej pracy.
+MB expects `CMD_BATTERY` (0x50000021) from ESP. The code sends it only at boot in boot_seq (in original firmware MB sends `bat:x`, and ESP responds). In the implementation, ESP does not send `CMD_BATTERY` during normal operation.
 
-### Stan: Nierozwiązane
+### Status: Unresolved
 
-Aktualna hipoteza: **rain=1** w boot sequence jest najbardziej podejrzane. Zostało zmienione na `rain=0` w commicie `13f98d8`. Kolejne testy powinny zweryfikować czy to rozwiązuje problem.
+Current hypothesis: **rain=1** in boot sequence is the most suspicious. It was changed to `rain=0` in commit `13f98d8`. Further testing should verify whether this solves the problem.
 
 ---
 
-## 5. Aktualny stan implementacji
+## 5. Current Implementation Status
 
-### Działa
+### Working
 - ✅ Boot sequence: BOOT → KEEPALIVE → STATE(0) → RAIN(0) → WIFI → ESP_INFO → INIT
-- ✅ DEVICE_INFO — pełny parsing (name, model, sn, version, bat_name, pwd_en)
+- ✅ DEVICE_INFO — full parsing (name, model, sn, version, bat_name, pwd_en)
 - ✅ HW versions — parsing (mb_hv, mb_sv, bb_hv, bb_sv, db_hv, db_sv, mblt_sv)
 - ✅ PIN sending (`pwd:9633`)
-- ✅ POLL/KEEPALIVE w normalnej pracy (30ms / 1s)
-- ✅ RX parser — obsługa JSON z `{`..`}`, string state, CRC verification
-- ✅ CRC8-Dallas — poprawny dla ramek `&{json}<CRC>##`
-- ✅ Wyświetlacz — 4-digit 7-segment (SPI, 3× 74HC595, 2MHz, hardware timer)
-- ✅ Display auto-off po czasie bezczynności
-- ✅ State display cycling: text ↔ battery co 5s
+- ✅ POLL/KEEPALIVE in normal operation (30ms / 1s)
+- ✅ RX parser — JSON handling with `{`..`}`, string state, CRC verification
+- ✅ CRC8-Dallas — correct for `&{json}<CRC>##` frames
+- ✅ Display — 4-digit 7-segment (SPI, 3× 74HC595, 2MHz, hardware timer)
+- ✅ Display auto-off after idle timeout
+- ✅ State display cycling: text ↔ battery every 5s
 - ✅ Shutdown display ("byE ")
-- ✅ Error display ("E" + kod)
+- ✅ Error display ("E" + code)
 - ✅ Buzzer (GPIO27)
-- ✅ Czujnik deszczu (GPIO36) z wysyłaniem `0x22000000` co 60s
+- ✅ Rain sensor (GPIO36) with `0x22000000` send every 60s
 - ✅ Rain config, schedule, multizone, map_cfg parsing
 - ✅ Compat mode (wifi=0, str=0)
-- ✅ sensor/binary_sensor/text_sensor publikacja do HA
-- ✅ Boot delay (30s domyślnie, configurowalny)
-- ✅ Non-blocking boot sequence (jedna wiadomość na loop)
-- ✅ 10s timeout na DEVICE_INFO
+- ✅ sensor/binary_sensor/text_sensor publishing to HA
+- ✅ Boot delay (30s default, configurable)
+- ✅ Non-blocking boot sequence (one message per loop)
+- ✅ 10s timeout for DEVICE_INFO
 
-### Nie działa / problematyczne
-- ❌ **MB wyłącza się po boot_seq** (SUPERVISION 0x20000002) — prawdopodobnie przez `rain=1`, weryfikacja po zmianie na `rain=0`
-- ❌ **Normalna operacja** — ESP nie może osiągnąć stanu "ustabilizowanej komunikacji" na tyle długo by MB przeszło w normalny tryb
-- ❌ `start_mowing()` — wysyła TRIM schedule + error ACK + state=2, ale MB ignoruje (brak komendy do fizycznego startu — START jest tylko przez przycisk na U16)
-- ❌ `return_to_dock()` — wysyła CMD_RETURN_HOME, ale mower pozostaje w idle
-- ❌ Colon na wyświetlaczu — bit nieznaleziony (TODO w `set_display_text`)
-- ❌ ESP nie odpowiada na `CMD_ESP_WIFI` / `CMD_ESP_BT` w odpowiednim czasie bo nie trackuje zapytań MB
+### Not Working / Problematic
+- ❌ **MB shuts down after boot_seq** (SUPERVISION 0x20000002) — likely caused by `rain=1`, to be verified after change to `rain=0`
+- ❌ **Normal operation** — ESP cannot reach "stable communication" state long enough for MB to enter normal mode
+- ❌ `start_mowing()` — sends TRIM schedule + error ACK + state=2, but MB ignores (no software command exists for physical start — START only through U16 button)
+- ❌ `return_to_dock()` — sends CMD_RETURN_HOME, but mower stays in idle
+- ❌ Colon on display — bit not found (TODO in `set_display_text`)
+- ❌ ESP does not respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in time because it doesn't track MB queries
 
 ---
 
-## 6. Kluczowe szczegóły techniczne
+## 6. Key Technical Details
 
 ### CRC8-Dallas (MAXIM)
 
@@ -449,49 +449,49 @@ Polynomial: `0x31` (x⁸ + x⁵ + x⁴ + 1)
 python3 -c "import crcmod; c=crcmod.mkCrcFun(0x131); print(hex(c(b'{\"cmd\":1073741828}')))"
 ```
 
-W kodzie: tablica lookup 256 elementów, funkcja `dallas_crc8(data, len)`.
+In code: 256-entry lookup table, `dallas_crc8(data, len)` function.
 
-CRC liczony jest z bajtów JSON (pomiędzy `&` a `<CRC>`). Nie obejmuje prefiksu `&` ani suffixu `##`.
+CRC is computed from JSON bytes (between `&` and `<CRC>`). Does NOT include prefix `&` or suffix `#`.
 
-### Framing JSON
+### JSON Framing
 
 ```
-&{json}<CRC>##
+&{json}<CRC>#
 ```
 
-- Prefiks: `0x26` (`&`) — oznajmia początek ramki
-- JSON: dowolny JSON z polem `cmd` (uint32)
-- CRC: 1 bajt
-- Terminator: `0x23 0x23` (`##`) — dwa znaki `#`
+- Prefix: `0x26` (`&`) — signals frame start
+- JSON: arbitrary JSON with `cmd` field (uint32)
+- CRC: 1 byte
+- Terminator: `0x23` (`#`) — single `#`
 
 RX parser:
-- Szuka `{` aby rozpocząć buforowanie JSON
-- Śledzi `rx_in_string_` dla prawidłowej obsługi cudzysłowów w stringach
-- Na `}` kończy JSON i deserializuje
-- Nie sprawdza CRC w RX (bufory LA pokazują że U16 już zweryfikowało i odrzuciło błędne ramki)
+- Searches for `{` to start buffering JSON
+- Tracks `rx_in_string_` for proper handling of quotes in strings
+- On `}` ends JSON and deserializes
+- Does not verify CRC on RX (LA buffers show U16 already verified and rejected bad frames)
 
-### Wyświetlacz
+### Display
 
-- 3× 74HC595 w kaskadzie (24-bit shift register)
+- 3× 74HC595 in cascade (24-bit shift register)
 - SPI bit-banging → hardware SPI (ESP-IDF SPI2, 2MHz)
-- Format: 24 bity na digt: `[b0: 8b] [b1: 8b] [segments: 8b]`
-- Adresowanie digtów (`b1`): `{0x20, 0x10, 0x08, 0x04}` (digty 0-3 od lewej)
-- Segmenty: standardowa mapa bitów dla 7-segment (dp, g, f, e, d, c, b, a)
-- `b0`: zawsze `0x00` (może odpowiadać za colon/DP dolnych digtów — TODO)
-- CS (GPIO32) pełni rolę OE — trzeba go opuścić na czas transmisji, podnieść po
-- Timer: hardware timer esp_timer, callback co 8ms (125 Hz odświeżania)
-- Każdy digt świeci przez 2ms (8ms / 4 digty)
-- Sekwencja startowa: `8888` → `boot` → stan
+- Format: 24 bits per digit: `[b0: 8b] [b1: 8b] [segments: 8b]`
+- Digit addressing (`b1`): `{0x20, 0x10, 0x08, 0x04}` (digits 0-3 from left)
+- Segments: standard bit map for 7-segment (dp, g, f, e, d, c, b, a)
+- `b0`: always `0x00` (possibly responsible for colon/DP on lower digits — TODO)
+- CS (GPIO32) acts as OE — must be lowered during transmission, raised after
+- Timer: hardware timer esp_timer, callback every 8ms (125 Hz refresh)
+- Each digit lit for 2ms (8ms / 4 digits)
+- Startup sequence: `8888` → `boot` → state
 
-### BootPhase state machine
+### BootPhase State Machine
 
 ```
 PRE ──→ DONE
 ```
 
 **PRE**:
-1. **boot_delay** (jeśli > 0): tylko POLL co 200ms + KEEPALIVE co 1s — czeka na OTA
-2. **boot_seq**: jedna wiadomość na loop (non-blocking, co 8ms):
+1. **boot_delay** (if > 0): only POLL every 200ms + KEEPALIVE every 1s — waits for OTA
+2. **boot_seq**: one message per loop (non-blocking, every 8ms):
    - 0: BOOT (0x40000004)
    - 1: KEEPALIVE (0x30000005)
    - 2: STATE (0x30000028, state=0)
@@ -499,36 +499,36 @@ PRE ──→ DONE
    - 4: WIFI + BT (0x30000021 / 0x30000022)
    - 5: ESP_INFO (0x40000006, hv=60400, sv=30202, mac)
    - 6: INIT (0x40000001, init=3)
-3. **wait for DEVICE_INFO**: POLL co 30ms, timeout 10s
+3. **wait for DEVICE_INFO**: POLL every 30ms, timeout 10s
 
 **DONE**:
-- PIN (jeśli nie wysłany i pwd_en)
-- POLL co 30ms (wymóg MB supervision)
-- KEEPALIVE co 1s
-- Rain read co 60s
+- PIN (if not sent and pwd_en)
+- POLL every 30ms (MB supervision requirement)
+- KEEPALIVE every 1s
+- Rain read every 60s
 
-### Wymagania MB supervision
+### MB Supervision Requirements
 
-- MB oczekuje `CMD_ESP_POLL` (0x300000A1) co ~30-50ms
-- Jeśli POLL nie przyjdzie w czasie ~50-100ms, MB wysyła `0x20000002` (SUPERVISION) i wyłącza zasilanie
-- Podobnie dla KEEPALIVE (0x30000005) co ~1s
-- MB monitoruje też odpowiedzi na swoje zapytania (WiFi, BT, ESP_INFO)
+- MB expects `CMD_ESP_POLL` (0x300000A1) every ~30-50ms
+- If POLL does not arrive within ~50-100ms, MB sends `0x20000002` (SUPERVISION) and cuts power
+- Similarly for KEEPALIVE (0x30000005) every ~1s
+- MB also monitors responses to its queries (WiFi, BT, ESP_INFO)
 
-### Boot delay (30s)
+### Boot Delay (30s)
 
-- Skonfigurowany na 30s w YAML (`boot_delay: 30`)
-- W tym czasie ESP wysyła tylko POLL i KEEPALIVE, nie boot_seq
-- Celem jest umożliwienie OTA — flashowanie ESP podczas gdy MB jest włączona
-- MB może się wyłączyć w czasie boot_delay (brak szybkiego POLL), ale to akceptowalne ryzyko
+- Configured to 30s in YAML (`boot_delay: 30`)
+- During this time ESP sends only POLL and KEEPALIVE, not boot_seq
+- Purpose is to enable OTA — flashing ESP while MB is powered on
+- MB may shut down during boot_delay (no fast POLL), but this is acceptable risk
 
 ---
 
-## 7. Wszystkie commity git
+## 7. All Git Commits
 
-### Faza 1: Reverse-engineering i dokumentacja sprzętu
+### Phase 1: Reverse Engineering and Hardware Documentation
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `3121e1f` | Complete hardware & firmware documentation for Lux Tools A-RMR-300-24 |
 | `82bc517` | Add firmware dumps (U13 512KB, U16 256KB) |
 | `ec38024` | Add ESP32 firmware dump (4 MB) and analysis |
@@ -550,16 +550,16 @@ PRE ──→ DONE
 | `9a84118` | Add PROTOCOLS.md: inter-chip communication cross-validation |
 | `3d7ceb0` | doc: add schedule configuration guide from manual (PL) |
 | `781b69c` | Add PCB docking station photo |
-| `95dd2e4` | Verifikowana mapa GPIO ESP32 na podstawie analizy ścieżek PCB |
+| `95dd2e4` | Verified ESP32 GPIO map based on PCB trace analysis |
 | `59f7072` | Xtensa disassembly: full objdump listing, GPIO pin mapping confirmed |
 | `f9848db` | ESP32 GPIO analysis: confirmed MOSI=12 SCLK=10 MISO=NC |
 | `e598d93` | ESPHome custom component + HA design + sniffing plan |
 | `22e68f6` | ha.md: add schedule/data-availability section, final KV-store confirmation |
 
-### Faza 2: Pierwsze próby ESPHome component
+### Phase 2: First ESPHome Component Attempts
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `171ed4e` | snk-mower.yaml: add wifi_signal and uptime sensors |
 | `de34e6c` | switch to external_components, drop unused spi dependency |
 | `d47426f` | remove text_sensor dependency (not available in ESPHome 2026.6.0) |
@@ -573,10 +573,10 @@ PRE ──→ DONE
 | `2c1042d` | fix: use ESPHome json component and ArduinoJson v7 API |
 | `3e432d7` | fix: compilation errors - use ESPHome APIs and correct types |
 
-### Faza 3: UART i boot sequence
+### Phase 3: UART and Boot Sequence
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `6f031cd` | minimal config: wifi + ota + api only |
 | `ce590c4` | add uart (rx tx) without custom component |
 | `96fd9eb` | full config with snk_mower, web_server, ota |
@@ -595,7 +595,7 @@ PRE ──→ DONE
 | `6134038` | fix: match original ESP boot order: BOOT→KEEPALIVE→STATE, send INFO at 5s |
 | `b3a6150` | fixed frame format: &JSON{CRC}#, CRC-8 MAXIM, boot sequence cleanup |
 | `fc5378f` | fix: remove VERBOSE RX byte log, limit 256 bytes/loop |
-| `827a064` | fix: RX parser tracks string state, POLL co 200ms |
+| `827a064` | fix: RX parser tracks string state, POLL every 200ms |
 | `0e0e873` | reorganize repo: per-processor dirs, clean root, English docs |
 | `5897b94` | fix: U16 is not a simple UART bridge, update descriptions |
 | `927cc8a` | add note about hidden WiFi/BT in all SNK mowers |
@@ -606,10 +606,10 @@ PRE ──→ DONE
 | `21e4c3f` | fix: correct CMD_DEVICE_INFO (0x330000A1→0x330000A9), add KEEPALIVE |
 | `446a6a4` | update YAML header comments with verified PCB wiring |
 
-### Faza 4: Wyświetlacz i buzzer
+### Phase 4: Display and Buzzer
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `3a3bbd9` | boot handshake works! system stable 30s+. cleanup, GPIO27 buzzer |
 | `50b1c55` | temp: test GPIO2 as buzzer |
 | `1025b10` | fix: cast buzzer_pin/rain_pin to gpio_num_t |
@@ -643,10 +643,10 @@ PRE ──→ DONE
 | `fe7c5a7` | HARDWARE: OK button confirmed on GPIO19 |
 | `d695f60` | HARDWARE: remove unconfirmed button GPIO mappings |
 
-### Faza 5: Display optimization
+### Phase 5: Display Optimization
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `615afc5` | snk_mower: expand pin_diag scan — add GPIO0 |
 | `48a5100` | snk_mower: display pattern test |
 | `942c865` | ha.md: update with pattern test results |
@@ -698,10 +698,10 @@ PRE ──→ DONE
 | `9e4e008` | ha.md: update experiment results |
 | `30e4e22` | ha.md: return_to_dock result |
 
-### Faza 6: Akcje i komendy (dodatkowe eksperymenty)
+### Phase 6: Actions and Commands (Additional Experiments)
 
-| Hash | Opis |
-|------|------|
+| Hash | Description |
+|------|-------------|
 | `644e9d2` | compat_mode + fix compile errors + capture 04 analysis |
 | `1ad3c2b` | remove periodic send_esp_state entirely |
 | `94a38de` | add POLL in DONE phase; remove wifi/bt from PRE phase |
@@ -725,153 +725,153 @@ PRE ──→ DONE
 
 ---
 
-## 8. Schemat architektury
+## 8. Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ ESP32-WROOM-32UE (płyta wyświetlacza)                               │
-│                                                                      │
+│ ESP32-WROOM-32UE (Display Board)                                    │
+│                                                                     │
 │  GPIO17 ──TX──┐                                          ┌────────┐ │
-│  GPIO16 ──RX──┤  UART 230400 8N1                        │Wyświet.│ │
+│  GPIO16 ──RX──┤  UART 230400 8N1                        │Display │ │
 │                │  JSON &{cmd}<CRC>##                      │ 7-seg  │ │
 │  GPIO33 ──CLK─┤  SPI (2MHz)  ────────────────────────────┤ 4-digt │ │
 │  GPIO25 ──MOSI┤                                            │ 74HC595│ │
 │  GPIO32 ──CS──┤                                            └────────┘ │
 │  GPIO27 ──────┤ Buzzer                                                │
-│  GPIO36 ──────┤ Czujnik deszczu                                      │
-│  GPIO19 ──────┤ Przycisk OK (do U16)                                 │
+│  GPIO36 ──────┤ Rain sensor                                          │
+│  GPIO19 ──────┤ OK button (to U16)                                   │
 │                                                                      │
 └──────────────────┬───────────────────────────────────────────────────┘
                    │ JSON @ 230400
                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ U16: GD32F303CGT6 (FreeRTOS)                                        │
-│  → Pomost JSON ESP32 ↔ U13                                          │
-│  → Obsługuje przyciski (START/STOP/HOME)                            │
-│  → Czujniki własne (deszcz, border coil, światło)                   │
-│  → max 128 bajtów/ramkę                                             │
+│  → JSON bridge ESP32 ↔ U13                                          │
+│  → Handles buttons (START/STOP/HOME)                                │
+│  → Own sensors (rain, border coil, light)                           │
+│  → max 128 bytes/frame                                              │
 │  → EasyLogger v2.2.99                                               │
 └──────────────────┬───────────────────────────────────────────────────┘
                    │ JSON @ 230400
                    ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │ U13: GD32F305AGT6                                                    │
-│  → Sterowanie silnikami                                             │
-│  → KV-store (EEPROM U22 — PIN, konfiguracja)                        │
+│  → Motor control                                                     │
+│  → KV-store (EEPROM U22 — PIN, configuration)                       │
 │  → cJSON parser                                                     │
-│  → RTC (tylko do wyświetlania, nie harmonogramu)                    │
+│  → RTC (display only, not schedule)                                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Uwagi architektoniczne
+### Architectural Notes
 
-- **ESP nie może fizycznie uruchomić koszenia** — nie ma komendy UART do START. START/STOP/HOME to fizyczne przyciski podpięte do U16. ESP tylko otrzymuje notyfikacje stanu.
-- **U16 nie jest prostym pomostem UART** — dodaje własne wiadomości (czujniki), agreguje dane z U13, ma własną logikę.
-- **U13 paruje JSON przez cJSON** — potwierdzone w stringach firmware.
-- **OTA**: Cloud → ESP32 → U16 → U13 (ten sam kanał UART, inne ramkowanie: `[2B length LE][N bytes][1B XOR checksum]`).
-
----
-
-## 9. Wnioski i dalsze kroki
-
-### Co wiemy na pewno
-1. Protokół to JSON z CRC8-Dallas, `&` prefix, `##` suffix, 230400 8N1
-2. Sekwencja bootowa jest wymagana aby MB zaczęła odpowiadać
-3. MB wymaga POLL co ~30ms — timer nadzoru
-4. PIN (4-cyfrowy) jest przechowywany w EEPROM U22, weryfikowany przez U13
-5. Wyświetlacz to 3× 74HC595, SPI, 24-bit na digt
-
-### Co jest niepewne
-1. **Dlaczego MB wyłącza się po boot_seq** — hipoteza: `rain=1` w boot sequence. Zmieniono na `rain=0`.
-2. **Czy po `rain=0` MB zostanie włączona** — do zweryfikowania w kolejnym teście.
-3. **Czy potrzebne są dodatkowe odpowiedzi na zapytania MB** — WiFi/BT status, ESP_INFO.
-4. **Czy MB oczekuje CMD_BATTERY od ESP** — w LA widać że MB wysyła `bat:x`, ESP odpowiada.
-
-### Priorytet dalszych prac
-1. Przetestować z `rain=0` w boot sequence (commit `13f98d4`) — czy MB pozostaje włączona
-2. Jeśli tak: dodać odpowiedzi na `CMD_ESP_WIFI` / `CMD_ESP_BT` w trybie normalnym
-3. Jeśli nie: zbadać czy brak `CMD_BATTERY` powoduje SUPERVISION
-4. Znaleźć bit colona na wyświetlaczu (b0, U4)
-5. Zrozumieć format godzinowy RTC (0x40000011) — synchronizacja czasu
+- **ESP cannot physically start mowing** — there is no UART command for START. START/STOP/HOME are physical buttons connected to U16. ESP only receives state notifications.
+- **U16 is not a simple UART bridge** — adds its own messages (sensors), aggregates data from U13, has its own logic.
+- **U13 parses JSON via cJSON** — confirmed in firmware strings.
+- **OTA**: Cloud → ESP32 → U16 → U13 (same UART channel, different framing: `[2B length LE][N bytes][1B XOR checksum]`).
 
 ---
 
-## 10. Eksperymenty watchdog (logi 12-22, 2026-06-22)
+## 9. Conclusions and Next Steps
 
-### Kontekst
+### What We Know For Sure
+1. Protocol is JSON with CRC8-Dallas, `&` prefix, `#` suffix, 230400 8N1
+2. Boot sequence is required for MB to respond
+3. MB requires POLL every ~30ms — supervision timer
+4. PIN (4-digit) is stored in EEPROM U22, verified by U13
+5. Display is 3× 74HC595, SPI, 24 bits per digit
 
-Po sflashowaniu nowej wersji komponentu ESPHome (z poprawionym mapowaniem stanów i handlerami), MB odcinał zasilanie (watchdog) w ciągu kilku-kilkudziesięciu sekund. Seria eksperymentów (logi 12-22) pozwoliła zidentyfikować przyczyny.
+### What Is Uncertain
+1. **Why MB shuts down after boot_seq** — hypothesis: `rain=1` in boot sequence. Changed to `rain=0`.
+2. **Will MB stay on after `rain=0`** — to be verified in next test.
+3. **Are additional responses to MB queries needed** — WiFi/BT status, ESP_INFO.
+4. **Does MB expect CMD_BATTERY from ESP** — LA shows MB sends `bat:x`, ESP responds.
 
-### Wyniki poszczególnych logów
+### Priority for Further Work
+1. Test with `rain=0` in boot sequence (commit `13f98d4`) — does MB stay on?
+2. If yes: add responses to `CMD_ESP_WIFI` / `CMD_ESP_BT` in normal mode
+3. If no: investigate whether missing `CMD_BATTERY` causes SUPERVISION
+4. Find colon bit on display (b0, U4)
+5. Understand RTC time format (0x40000011) — time synchronization
 
-| Log | Commit | Wynik | Przyczyna problemu |
-|-----|--------|-------|--------------------|
-| 12 | `956ae67` | ❌ Watchdog ~8s po PIN | Burst WIFI+BT+ESP_INFO natychmiast po PIN (timery przeterminowane) |
-| 13 | `85e9416` | ❌ Watchdog ~4s po PIN | Ten sam burst + ESP_TRIM w boot sequence |
-| 14 | `d597775` | ❌ Watchdog ~2s po boot seq | uint32_t underflow: `now` sprzed UART read, timery resetowane wewnątrz |
-| 15 | `24b7991` | ❌ Watchdog <1s | BOOT wysłany po boot_delay — watchdog MB ~30s od włączenia |
-| 16 | `5480356` | ✅ **Stabilny >1min** | Powrót do stabilnej bazy 5be3712 + poprawki protokołu |
-| 17 | `0a1bc44` | ❌ BOOT_INIT flood + SUPERVISION | Proactive PIN przed SYNC + SYNC timeout 2s (przerwał burst) |
-| 18 | `204ccb2` | ❌ DEVICE_INFO flood | Display CS fix (gpio_set_level w timer) zakłócał timing |
-| 19 | `aea0004` | ❌ DEVICE_INFO flood 68× | Burst ESP_INFO+ESP_STATE po PIN (timery nie zresetowane) |
-| 20 | `029086b` | ❌ DEVICE_INFO flood 198× | POLL co 200ms w DONE → MB re-sends DEVICE_INFO |
-| 21 | `fe90293` | ❌ DEVICE_INFO flood 138× | POLL co 30ms w DONE → ten sam efekt |
-| 22 | `e74b56c` | ✅ **Stabilny** | Usunięcie POLL z DONE — tylko KEEPALIVE co 1s |
+---
 
-### Kluczowe odkrycia
+## 10. Watchdog Experiments (logs 12-22, 2026-06-22)
 
-#### 1. POLL w DONE powoduje flood DEVICE_INFO
+### Context
 
-**Problem:** `CMD_ESP_POLL` (`0x300000A1`) wysyłany cyklicznie w fazie DONE powoduje, że MB interpretuje to jako "ESP prosi o device info" i odsyła `DEVICE_INFO` + `HW_VERSIONS` w kółko (68-198 powtórzeń w ~20s).
+After flashing a new version of the ESPHome component (with corrected state mapping and handlers), MB kept cutting power (watchdog) within a few to tens of seconds. A series of experiments (logs 12-22) identified the root causes.
 
-**Rozwiązanie:** POLL ma być wysyłany **tylko w fazach PRE i SYNC** (do wykrycia DEVICE_INFO podczas boot). W fazie DONE tylko `KEEPALIVE` (`0x30000005`) co 1s.
+### Individual Log Results
 
-**Dowód:** Log 16 (bez POLL w DONE) — 12 powtórzeń DEVICE_INFO. Log 21 (POLL@30ms w DONE) — 138 powtórzeń. Log 20 (POLL@200ms) — 198 powtórzeń (MB jeszcze bardziej zdezorientowany).
+| Log | Commit | Result | Root Cause |
+|-----|--------|--------|------------|
+| 12 | `956ae67` | ❌ Watchdog ~8s after PIN | WIFI+BT+ESP_INFO burst immediately after PIN (timers expired) |
+| 13 | `85e9416` | ❌ Watchdog ~4s after PIN | Same burst + ESP_TRIM in boot sequence |
+| 14 | `d597775` | ❌ Watchdog ~2s after boot seq | uint32_t underflow: `now` before UART read, timers reset internally |
+| 15 | `24b7991` | ❌ Watchdog <1s | BOOT sent after boot_delay — MB watchdog ~30s from power-on |
+| 16 | `5480356` | ✅ **Stable >1min** | Reverted to stable base 5be3712 + protocol fixes |
+| 17 | `0a1bc44` | ❌ BOOT_INIT flood + SUPERVISION | Proactive PIN before SYNC + SYNC timeout 2s (interrupted burst) |
+| 18 | `204ccb2` | ❌ DEVICE_INFO flood | Display CS fix (gpio_set_level in timer) interfered with timing |
+| 19 | `aea0004` | ❌ DEVICE_INFO flood 68× | Burst ESP_INFO+ESP_STATE after PIN (timers not reset) |
+| 20 | `029086b` | ❌ DEVICE_INFO flood 198× | POLL at 200ms in DONE → MB re-sends DEVICE_INFO |
+| 21 | `fe90293` | ❌ DEVICE_INFO flood 138× | POLL at 30ms in DONE → same effect |
+| 22 | `e74b56c` | ✅ **Stable** | Removed POLL from DONE — only KEEPALIVE every 1s |
 
-#### 2. Burst komend po PIN dezorientuje MB
+### Key Discoveries
 
-**Problem:** Jeśli po wysłaniu PIN (`0x41000005`) ESP natychmiast wysyła `ESP_INFO` (`0x40000006`) i/lub `ESP_STATE` (`0x30000028`), MB wpada w pętlę re-inicjalizacji (BOOT_INIT flood) i ostatecznie triggeruje watchdog (`0x20000002` SUPERVISION).
+#### 1. POLL in DONE causes DEVICE_INFO flood
 
-**Rozwiązanie:** Reset timerów okresowych (`last_wifi_status_`, `last_esp_info_`, `last_esp_state_`) przy przejściu SYNC→DONE, aby pierwsze cykliczne wysyłki nastąpiły po pełnym interwale (5s/30s/10s), nie natychmiast.
+**Problem:** `CMD_ESP_POLL` (`0x300000A1`) sent periodically in DONE phase causes MB to interpret it as "ESP requests device info" and re-sends `DEVICE_INFO` + `HW_VERSIONS` in a loop (68-198 repetitions in ~20s).
 
-**Mechanizm:** Timery są inicjalizowane w `finish_setup()` (początek). SYNC trwa ~1s. Bez resetu, `now - last_esp_info_ > 30000` jest true natychmiast po wejściu w DONE → burst.
+**Solution:** POLL should be sent **only in PRE and SYNC phases** (to detect DEVICE_INFO during boot). In DONE phase only `KEEPALIVE` (`0x30000005`) every 1s.
 
-#### 3. Proactive PIN przed SYNC psuje handshake
+**Evidence:** Log 16 (no POLL in DONE) — 12 repetitions of DEVICE_INFO. Log 21 (POLL@30ms in DONE) — 138 repetitions. Log 20 (POLL@200ms) — 198 repetitions (MB even more confused).
 
-**Problem:** Wysyłanie PIN (`0x41000005`) zaraz po odebraniu DEVICE_INFO, ale **przed** zakończeniem SYNC burst (5×ESP_INFO + 6×INIT), powoduje że MB nie zdąży przetworzyć pełnej sekwencji boot → re-init flood.
+#### 2. Command burst after PIN confuses MB
 
-**Rozwiązanie:** PIN wysyłany dopiero po zakończeniu SYNC (`init_burst_count_ >= 6`), w fazie DONE.
+**Problem:** If ESP immediately sends `ESP_INFO` (`0x40000006`) and/or `ESP_STATE` (`0x30000028`) right after sending PIN (`0x41000005`), MB enters a re-initialization loop (BOOT_INIT flood) and eventually triggers watchdog (`0x20000002` SUPERVISION).
 
-#### 4. Watchdog MB ~30s od włączenia zasilania
+**Solution:** Reset periodic timers (`last_wifi_status_`, `last_esp_info_`, `last_esp_state_`) at the SYNC→DONE transition, so the first periodic sends occur after a full interval (5s/30s/10s), not immediately.
 
-**Problem:** MB ma watchdog ~30s od power-on. Jeśli ESP nie wyśle `BOOT` (`0x40000004`) w tym oknie, MB odcina zasilanie.
+**Mechanism:** Timers are initialized in `finish_setup()` (at start). SYNC lasts ~1s. Without reset, `now - last_esp_info_ > 30000` is true immediately after entering DONE → burst.
 
-**Rozwiązanie:** `boot_delay` (30s) powoduje wysłanie POLL+KEEPALIVE podczas opóźnienia, ale BOOT jest wysyłany po wygaśnięciu delay. Przy `boot_delay: 30` watchdog odpalał się równocześnie.
+#### 3. Proactive PIN before SYNC breaks handshake
 
-**Status:** Rozwiązane w stabilnej bazie 5be3712 — BOOT+KEEPALIVE+STATE+RAIN wysyłane natychmiast w `finish_setup()`, przed boot_delay. Podczas boot_delay wysyłane POLL+KEEPALIVE co 200ms/1s.
+**Problem:** Sending PIN (`0x41000005`) right after receiving DEVICE_INFO, but **before** completing the SYNC burst (5×ESP_INFO + 6×INIT), causes MB to not finish processing the full boot sequence → re-init flood.
 
-#### 5. Display CS fix zakłóca komunikację
+**Solution:** PIN sent only after SYNC completes (`init_burst_count_ >= 6`), in DONE phase.
 
-**Problem:** Ręczne sterowanie CS (`gpio_set_level` w timer callback co 2ms) zakłóca timing UART, destabilizując komunikację z MB.
+#### 4. MB watchdog ~30s from power-on
 
-**Rozwiązanie:** Powrót do SPI-managed CS (`spics_io_num = display_cs_`). Flicker wyświetlacza to problem kosmetyczny — stabilność MB jest krytyczna.
+**Problem:** MB has a watchdog ~30s from power-on. If ESP does not send `BOOT` (`0x40000004`) within this window, MB cuts power.
 
-### Stabilna konfiguracja (commit `e74b56c`)
+**Solution:** `boot_delay` (30s) sends POLL+KEEPALIVE during the delay, but BOOT is sent after the delay expires. With `boot_delay: 30` the watchdog would trigger simultaneously.
+
+**Status:** Solved in stable base 5be3712 — BOOT+KEEPALIVE+STATE+RAIN sent immediately in `finish_setup()`, before boot_delay. During boot_delay POLL+KEEPALIVE are sent at 200ms/1s.
+
+#### 5. Display CS fix interferes with communication
+
+**Problem:** Manual CS control (`gpio_set_level` in timer callback every 2ms) interferes with UART timing, destabilizing communication with MB.
+
+**Solution:** Reverted to SPI-managed CS (`spics_io_num = display_cs_`). Display flicker is cosmetic — MB stability is critical.
+
+### Stable Configuration (commit `e74b56c`)
 
 ```
 Boot sequence:
-  finish_setup(): BOOT + KEEPALIVE + STATE(0) + RAIN(1) (natychmiast)
+  finish_setup(): BOOT + KEEPALIVE + STATE(0) + RAIN(1) (immediately)
   boot_delay (30s): POLL@200ms + KEEPALIVE@1s + WIFI/BT@5s
-  Po boot_delay: BOOT + KEEPALIVE + STATE(0) + RAIN(1) (ponownie)
-  PRE→SYNC: po DEVICE_INFO od MB
+  After boot_delay: BOOT + KEEPALIVE + STATE(0) + RAIN(1) (again)
+  PRE→SYNC: after DEVICE_INFO from MB
   SYNC: 5×ESP_INFO + 6×INIT (burst ~1s)
-  SYNC→DONE: reset timerów (WIFI/ESP_INFO/ESP_STATE)
+  SYNC→DONE: reset timers (WIFI/ESP_INFO/ESP_STATE)
   DONE: PIN(1×) + KEEPALIVE@1s + WIFI/BT@5s + ESP_INFO@30s + ESP_STATE@10s + RAIN@60s
-  DONE: BRAK POLL (tylko KEEPALIVE)
+  DONE: NO POLL (only KEEPALIVE)
 ```
 
-### Otwarte pytania
+### Open Questions
 
-1. **Czy MB przestanie wysyłać PIN_RESULT cyklicznie?** — W logu 22 PIN accepted pojawia się co 5s. To może być normalne (MB odsyła wynik przy każdym WIFI/BT status) ale warto zweryfikować.
-2. **Czy `send_esp_state(state_)` z `state:1` jest poprawne?** — Oryginał wysyłał `state:0` przy boot, potem aktualny stan. Sprawdzić w captures.
-3. **Czy brak ESP_TRIM w boot jest OK?** — Oryginał wysyłał `0x300000A6` po INIT. MB może nie wysłać pełnego SCHEDULE bez tego, ale log 22 działa bez niego.
+1. **Will MB stop sending PIN_RESULT periodically?** — In log 22, PIN accepted appears every 5s. This might be normal (MB resends result with every WIFI/BT status) but worth verifying.
+2. **Is `send_esp_state(state_)` with `state:1` correct?** — Original sent `state:0` at boot, then current state. Check in captures.
+3. **Is omitting ESP_TRIM in boot OK?** — Original sent `0x300000A6` after INIT. MB may not send full SCHEDULE without it, but log 22 works without it.

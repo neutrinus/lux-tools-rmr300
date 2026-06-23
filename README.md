@@ -52,7 +52,6 @@ Go to **[BATTERY.md](BATTERY.md)** — compatible packs, replacement guide, DIY 
 |------|----------|
 | [HARDWARE.md](HARDWARE.md) | Boards, MCUs, pinouts, SWD ports, GPIO |
 | [PROTOCOLS.md](PROTOCOLS.md) | Inter-chip communication protocols (verified by LA) |
-| [ALIASES.md](ALIASES.md) | All brand/model names of this platform |
 | [captures/README.md](captures/README.md) | 64 decoded UART commands from 6 capture scenarios |
 | [BATTERY.md](BATTERY.md) | 5S Li-Ion battery — specs, BMS, replacement guide |
 
@@ -98,7 +97,6 @@ kosiarka/
 ├── README.md           ← this file
 ├── PIN.md              ← PIN recovery guide
 ├── ha.md               ← ESPHome — work-in-progress status
-├── ALIASES.md          ← clone/brand list
 ├── HARDWARE.md         ← hardware, pinouts, SWD
 ├── PROTOCOLS.md        ← communication protocols
 ├── BATTERY.md          ← 5S Li-Ion battery analysis
@@ -117,7 +115,7 @@ kosiarka/
 ├── sw/                 ← third-party tools (ghidra, JDK, ghidra-cli)
 ├── class_scripts/      ← Java classes for Ghidra bridge
 ├── results/            ← mower search results
-└── olx_results/        ← OLX marketplace results
+└── results/            ← mower search results
 ```
 
 ---
