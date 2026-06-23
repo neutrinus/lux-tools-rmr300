@@ -875,3 +875,65 @@ Boot sequence:
 1. **Will MB stop sending PIN_RESULT periodically?** — In log 22, PIN accepted appears every 5s. This might be normal (MB resends result with every WIFI/BT status) but worth verifying.
 2. **Is `send_esp_state(state_)` with `state:1` correct?** — Original sent `state:0` at boot, then current state. Check in captures.
 3. **Is omitting ESP_TRIM in boot OK?** — Original sent `0x300000A6` after INIT. MB may not send full SCHEDULE without it, but log 22 works without it.
+
+---
+
+## 11. Session 2026-06-23: Final Cleanup & Project Wind-Down
+
+### Context
+After exhausting all software-based methods to trigger mowing from the ESP32 (methods 1–5), and failing to get a response from the physical START button even with stable communication (log 23), the project was wound down. The original firmware was restored to the mower — it mows normally with stock software.
+
+### Changes Made This Session
+
+| Change | Description |
+|--------|-------------|
+| Removed GPIO13/15/20/22 binary sensors | Exclude interference with J8 button circuits |
+| Removed GPIO19/OK binary sensor | Also removed to rule out any GPIO conflict |
+| Removed all test buttons | `Action: Mow`, `Action: Dock`, `Test: START_ACK`, `Test: EXEC_ACTION`, `Test: CMD action=1/4`, `Test: ESP_TRIM auto=1` — all confirmed useless |
+| Translated `ha.md` to English | Full Polish→English translation |
+| Removed `ALIASES.md` references | Cleaned up README.md |
+| Removed `olx_results/` and `results/` | Marketplace search results, no longer needed |
+| Merged `doc/` → `docs/` | Consolidated documentation directories |
+| Reorganized `captures/2026-06-21/` | Each capture now in its own subfolder with `capture.vcd` + `notes.md` |
+| Removed `.opencode/plans/` | Agent planning files |
+| Removed `img/crops/` | Unused cropped PCB photos |
+| Removed `secrets.yaml` from git & disk | Security cleanup |
+| Removed `kosiarka-logs*.txt` from git | Log files now gitignored (kept on disk for reference) |
+| Added status summary to `PROTOCOLS.md` | Documented what works/doesn't, key constraints, future work |
+
+### Key Findings
+
+#### 1. GPIO sensors do not affect START button
+Even after removing all binary_sensor GPIO definitions (GPIO13/15/20/22 + GPIO19/OK), the physical START button still did not trigger any MB response. This confirms the buttons are **exclusively handled by U16 through J8** — ESP32 has no influence over them.
+
+#### 2. PIN is NOT stored in ESP32 firmware
+Confirmed by firmware decompilation agent:
+- Zero GPIO input reads in original ESP32 firmware
+- No `pwd` constant, no `rw_key.c`, no button matrix, no touch sensor
+- No evidence in any capture that a UART message carries button-press info during PIN entry
+- PIN is stored in **U13 KV-store (EEPROM U22)** — ESP only forwards user-entered PIN for verification
+- Original firmware cannot auto-send PIN because it doesn't have it stored
+
+#### 3. No UART command triggers mowing (definitive conclusion)
+Methods 1–5 all failed:
+- `send_action(1/4)`
+- `CMD_EXEC_ACTION` (0x41000003) sent from ESP
+- `CMD_START_ACK` (0x41000020) sent from ESP
+- `CMD_RETURN_HOME` (0x41000006) sent from ESP
+- `CMD 0x4100000A` with `action:1/4`
+- `ESP_TRIM auto=1` with current-time schedule
+- `ESP_STATE(2)` sent periodically
+
+No evidence in any LA capture of an ESP→MB command that initiates mowing.
+
+### Only Untested Approach: Method 6 — GPIO jumper
+- Connect a free ESP32 GPIO pin (e.g., GPIO13/15/20/22) to **J8 pin 6** (START line)
+- Pulse LOW to simulate START button press
+- Requires soldering or probing on lacquer-coated PCB (not attempted)
+
+### Final State
+- The ESPHome component (`snk_mower`) achieves stable communication with MB (36+ s, state=1 READY, watchdog-safe)
+- All sensors, display, buzzer, HA integration work
+- Mowing control from ESP is **impossible via UART** — the protocol has no such command
+- Physical buttons (START/STOP/HOME) are hardwired to U16 through J8, bypassing ESP entirely
+- Original firmware restored — mower operates normally
