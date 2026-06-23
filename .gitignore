@@ -44,3 +44,5 @@ report-*.md
 
 # Sensitive
 .allegro_cookies.json
+secrets.yaml
+kosiarka-logs*.txt

@@ -109,13 +109,10 @@ kosiarka/
 ├── components/         ← ESPHome custom component (snk_mower)
 ├── img/                ← PCB photographs
 ├── tools/              ← scripts, OpenOCD configs, stubs
-├── doc/                ← original user manual
-├── docs/               ← internal documentation
+├── docs/               ← datasheets, user manual, notes
 ├── ghidra_proj/        ← Ghidra project files
 ├── sw/                 ← third-party tools (ghidra, JDK, ghidra-cli)
 ├── class_scripts/      ← Java classes for Ghidra bridge
-├── results/            ← mower search results
-└── results/            ← mower search results
 ```
 
 ---
