@@ -42,7 +42,14 @@ report-*.md
 # Virtual environment
 .venv/
 
-# Sensitive
+# Sensitive / cookies
 .allegro_cookies.json
 secrets.yaml
 kosiarka-logs*.txt
+
+# Price search results
+offers/
+
+# Trwały profil przeglądarki (Playwright)
+.browser_profile/
+.browser_profile_allegro/
