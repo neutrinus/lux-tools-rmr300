@@ -994,11 +994,240 @@ The display is driven entirely by ESP32 (SPI → 74HC595). There is no way for t
 
 - **Test**: Full decompilation of all 3 MCUs (ESP32 + U16 + U13) with cross-referencing would reveal all peripheral interactions
 
-### Recommended Next Steps (if project is revisited)
+## 13. Execution Plan: Why START Does Not Respond (H3 + H1)
 
-1. **Re-examine ESP32 firmware** — focus on ISRs, timer callbacks, and direct register access (`GPIO.in`, `GPIO.out`, `GPIO.enable`)
-2. **Compare STATUS frames** — original `drugi.sr` vs our log 23, look for any difference in `0x330000A0` fields
-3. **Replay original boot sequence** — send exact commands at exact timings from our firmware to isolate the state machine difference
-4. **Cycle unknown GPIOs** — write HIGH/LOW to each unknown pin on J8/display board while monitoring for button functionality change
-5. **Deep U16 decompilation** — the button routing logic is likely in U16 firmware (FreeRTOS, EasyLogger), which has 256 KB of code
-6. **Trace GPIO4/14/18/26 on PCB** — remove lacquer and trace to find hidden connections
+### Goal
+Find why physical START button does not respond on custom ESPHome firmware.
+
+### Priority & Strategy
+- ~~**H3 first** (~30-40 min) — compare captures of original firmware vs our logs. Most likely to yield answer quickly.~~ ✅ **COMPLETE** — root cause found (see §14)
+- **H1 second** (~2-3h) — re-decompile ESP32 firmware with proper tools (ghidra-esp32-flash-loader + SVD) to find GPIO ISR handlers.
+- **U16/U13 decompilation deferred** — high-effort, do only if H3+H1 yield nothing.
+
+### ⚡ Updated Direction (2026-06-24)
+
+**H3 identified the root cause**: boot protocol mismatch. The next step is NOT more reverse engineering — it's **implementing the correct boot protocol in the ESPHome component**:
+
+1. Add MB boot frame handlers (wait for POWER_ON/DEVICE_INFO/STATUS before sending)
+2. Send `ESP_BOOT` as first response
+3. Send `ESP_KEEPALIVE`, `ESP_POLL`, `ESP_INIT` in correct order
+4. Send `ESP_STATE state=0` (not state=1)
+5. Send `ESP_TRIM` + `ESP_RAIN_CFG` + `ESP_MULTIZONE` during boot
+6. OTA-update to mower and test if START responds
+
+**H1 (ESP32 decompilation) is now lower priority** — only if boot protocol fix doesn't restore START functionality.
+
+---
+
+### H3: Compare Original Capture vs Custom Firmware Logs
+
+#### H3.1 — Decode `drugi` capture (PIN + START)
+```bash
+python3 tools/decode_capture.py captures/2026-06-21/drugi/capture.vcd --json \
+  > captures/2026-06-21/drugi/decoded.json
+```
+Decode all four captures the same way:
+- `pierwszy` — boot + PIN only (no START)
+- `trzeci` — full cycle (START → MOW → STOP → HOME → STOP)
+- `czwarty` — docking (HOME+OK → charge)
+- `02-boot-pin` — already has `decoded.json`
+
+#### H3.2 — Extract STATUS frames from all sources
+
+STATUS = `0x330000A0`. Extract every STATUS frame with timestamps from:
+1. `drugi/decoded.json` — original firmware, PIN+START+error
+2. `pierwszy/decoded.json` — original firmware, boot only
+3. `trzeci/decoded.json` — full cycle
+4. `czwarty/decoded.json` — docking
+5. `02-boot-pin/decoded.json` — bench test
+6. `kosiarka-logs (23).txt` — our custom firmware log
+
+Build a side-by-side table of STATUS fields:
+| Source | state | stop_state | border_state | rain_state | station | lock | bat_lv | pwd_en | error |
+
+#### H3.3 — Compare ESP→MB TX sequences
+
+Compare ORDER and TIMING of commands sent by ESP after boot:
+| Command | Original (drugi) | Our firmware (log 23) |
+|---------|------------------|----------------------|
+| `CMD_ESP_TRIM` (`0x300000A6`) | ? | ? |
+| `CMD_ESP_RAIN_CFG` (`0x300000A7`) | ? | ? |
+| `CMD_ESP_POLL` (`0x300000A1`) | ? | ? |
+| `CMD_ESP_STATE` (`0x30000028`) | ? | ? |
+| `CMD_ESP_KEEPALIVE` (`0x30000005`) | ? | ? |
+
+Key question: **Is `CMD_ESP_TRIM` sent early enough?** The original boot sequence sends it during initialisation; our firmware may send it later or not at all.
+
+#### H3.4 — Find START_ACK trigger condition
+
+In the original capture, find exactly what happens just *before* `0x41000020 START_ACK`:
+- What is the MB state (STATUS.state)?
+- What was the last ESP→MB command before START_ACK?
+- Is there a specific delay or sequence that must complete before MB accepts START?
+
+**How to verify**: look at `drugi/decoded.json` and `02-boot-pin/decoded.json` — find the index of the first `0x41000020` frame, then look at the 10-20 preceding frames.
+
+#### Done criteria for H3
+- [ ] All 4 + 1 captures decoded to JSON
+- [ ] STATUS frame table built — any field differences identified
+- [ ] ESP→MB sequence table built — missing/out-of-order commands identified
+- [ ] START_ACK trigger condition documented
+
+---
+
+### H1: Re-decompile ESP32 Firmware with Ghidra + SVD
+
+#### H1.1 — Install ghidra-esp32-flash-loader
+
+Repo: `https://github.com/SwiCoo/ghidra-esp32-flash-loader`
+
+```bash
+# Build from source
+git clone https://github.com/SwiCoo/ghidra-esp32-flash-loader.git
+cd ghidra-esp32-flash-loader
+# Build with Gradle (Ghidra's gradle wrapper)
+# Copy resulting .zip to Ghidra's Extensions directory
+```
+
+Alternative: use `antoniovazquezblanco/GhidraSVD` (a maintained fork of GhidraSVDLoader that supports Ghidra 12+).
+
+SVD files needed:
+- ESP32 SVD from `espressif/svd` (for auto-labelling GPIO registers like `GPIO.in` at `0x3FF44000`)
+- Or manually define GPIO register addresses in Ghidra Memory Map
+
+#### H1.2 — Load ESP32 firmware with SVD
+
+```bash
+# ESP32 firmware binary location
+ls esp32/snk-mower-firmware* esp32/ESP32*/esp32*.bin
+```
+
+- Load as raw binary in Ghidra
+- Base address: `0x3F400000` (ESP32 flash cache region) or `0x40000000` (IRAM)
+- Apply SVD → peripheral registers get proper labels
+- Auto-analyze
+
+#### H1.3 — Find all GPIO reads and ISR handlers
+
+Search for:
+- **`gpio_isr_handler_add`** — shows which GPIOs have interrupt handlers
+- **`gpio_install_isr_service`** — confirms ISR infrastructure
+- **`GPIO.in` / `GPIO.in1`** — direct register reads (bypass HAL)
+- **`gpio_get_level`** — HAL function for reading pin state
+
+Key question: **Which GPIO numbers are passed to `gpio_isr_handler_add`?**
+
+#### H1.4 — Trace BTN_WAIT / BTN_SEND state machine
+
+From previous analysis, the firmware has:
+- `BTN_WAIT` state — presumably waiting for button press
+- `BTN_SEND` state — presumably sending button info via UART
+
+Find these in the decompiled code and trace the data flow:
+1. What event triggers `BTN_WAIT → BTN_SEND` transition?
+2. Which GPIO is read during this transition?
+3. What UART message is constructed from the button data?
+
+#### Done criteria for H1
+- [ ] ESP32 firmware loaded in Ghidra with SVD
+- [ ] All `gpio_isr_handler_add` calls found → GPIO numbers documented
+- [ ] GPIO register reads (`GPIO.in`, `GPIO.in1`) identified
+- [ ] `BTN_WAIT`/`BTN_SEND` state machine traced: input GPIO → UART message mapping
+- [ ] If buttons ARE connected to ESP32: GPIO numbers documented for ESPHome config
+
+---
+
+### U16/U13 Decompilation (Fallback)
+
+Only if H3+H1 don't explain the issue:
+
+1. Load GD32F303 firmware dump in Ghidra (ARM Cortex-M4, base `0x08000000`)
+2. Use STM32F103 SVD as replacement (GD32 per FSMC are at same addresses)
+3. Find `xTaskCreate` calls → identify all application tasks
+4. Search for button-reading logic — likely in `comm_task` or `init_task`
+5. Search for FreeRTOS queues/semaphores related to GPIO inputs
+
+### Notes decyzyjne (zapisane z wcześniejszej analizy)
+
+- PCB jest zalana lakierem — brak możliwości lutowania
+- `boot_delay: 30s` wymagany dla OTA (watchdog podczas rebootu ESP32)
+- **Żadna komenda UART nie może wysłać START** — to fizyczny przycisk do U16 przez J8
+- PIN **nie jest** przechowywany w ESP32 — jest w U13 (EEPROM U22); ESP tylko forwarduje PIN od użytkownika
+- ESP32 firmware **ma** GPIO ISR — `gpio_install_isr_service` + `gpio_isr_handler_add` potwierdzone w binarkach
+- Wyświetlacz: timer 8ms (hardware `esp_timer`) — zbyt szybki na debounce; GPIO ISR bardziej prawdopodobny mechanizm
+- Nawet po usunięciu WSZYSTKICH `binary_sensor` GPIO, fizyczny START nie reagował → MB state-machine mismatch to główna hipoteza dla H3
+- Oryginalny boot sequence zawiera `CMD_ESP_TRIM` wcześnie; nasz firmware wysyła go później lub wcale
+
+---
+
+## 14. H3 Analysis Results: Boot Protocol Mismatch (Root Cause Found)
+
+### Summary
+
+**Our custom ESPHome firmware does NOT implement the MB boot protocol correctly.** The MB (U16) ignores all ESP communication because the ESP never completes the required boot handshake. This explains why physical START (and all other functions) don't respond.
+
+### Key Finding: Zero MB→ESP Frames
+
+In `kosiarka-logs (23).txt`, the custom firmware receives **zero** frames from the MB. The log shows 53 TX frames (ESP→MB) but 0 RX frames (MB→ESP). Compare to original firmware captures where MB sends dozens of frames during boot.
+
+### Boot Protocol: Original vs Custom
+
+| Phase | Original Firmware | Custom Firmware (log 23) |
+|-------|-------------------|--------------------------|
+| **1. MB boot** | MB sends POWER_ON, BOOT_HEART(x5), BOOT_INIT(x7), POWER_READY, BATTERY, DEVICE_INFO, HW_VERSIONS, MAP_CFG, LIGHT, UNKNOWN_14, SCHEDULE, STATUS state=0, RAIN_CFG, LOCK (~36-117 frames) | **Nothing** — MB never sends anything |
+| **2. ESP Boot ACK** | ESP sends **`ESP_BOOT`** (`0x40000004`) | **MISSING** — never sent |
+| **3. ESP Heartbeat** | ESP sends **`ESP_KEEPALIVE`** (`0x30000005`) | **MISSING** — never sent |
+| **4. ESP State** | ESP sends **`ESP_STATE state=0`** (idle) | ESP sends **`ESP_STATE state=1`** (ready) — wrong state |
+| **5. ESP Poll** | ESP sends **`ESP_POLL`** (`0x300000A1`) repeatedly (~10-15× between each WiFi/BT) | **MISSING** |
+| **6. ESP Init** | ESP sends **`ESP_INIT init=3`** (`0x40000001`) | **MISSING** |
+| **7. ESP Info** | ESP sends **`ESP_INFO`** (hv, sv, mac) | ESP sends ESP_INFO, but **too early** (before ESP_BOOT) |
+| **8. ESP Trim** | ESP sends **`ESP_TRIM`** (`0x300000A6`) during boot | Only sent when "start mowing" pressed via HA |
+| **9. ESP Rain CFG** | ESP sends `ESP_RAIN_CFG` + `ESP_MULTIZONE` during boot | **MISSING** |
+| **10. PIN Send** | ESP sends `PIN_SEND pwd=9633` after boot complete | Sent via periodic loop (along with duplicated ESP_WIFI/BT) |
+| **11. WiFi/BT** | ESP sends `ESP_WIFI` + `ESP_BT` every ~10 ESP_POLL cycles | ESP sends them **constantly** (every ~5s) without ESP_POLL |
+
+### Why MB Ignores Custom Firmware
+
+The MB (U16) expects a strict boot sequence:
+
+```
+MB boot ──→ ESP_BOOT ──→ ESP_KEEPALIVE ──→ ESP_STATE=0 ──→ ESP_POLL* ──→ ESP_INIT ──→ ESP_INFO ──→ ESP_TRIM ──→ ...
+```
+
+Our firmware jumps straight to `ESP_WIFI/BT/STATE=1` without any of the prerequisite handshake frames. The MB likely:
+1. Has a timeout waiting for `ESP_BOOT` after boot
+2. Drops any frames that arrive before the boot protocol is satisfied
+3. Never enters the "operational" state where button inputs are processed
+
+### Why Physical START Didn't Respond
+
+Physical START goes to U16 (not ESP32). U16's FreeRTOS task that monitors buttons likely checks the system state first. If the boot protocol with ESP32 never completed, U16 may be stuck in an initialization state where button inputs are ignored.
+
+### How to Fix
+
+To restore communication, the custom firmware must:
+
+1. **Wait** for MB boot sequence (receive POWER_ON/DEVICE_INFO/STATUS) before sending anything
+2. **Send `ESP_BOOT`** (`{"cmd":1073741828}`) as first response
+3. **Send `ESP_KEEPALIVE`** (`{"cmd":805306373}`) regularly
+4. **Send `ESP_STATE state=0`** (`{"cmd":805306408,"state":0}`) — not state=1!
+5. **Send `ESP_POLL`** (`{"cmd":805306529}`) repeatedly (~every 200ms)
+6. **Send `ESP_INIT init=3`** (`{"cmd":1073741825,"init":3}`)
+7. **Send `ESP_INFO`** with correct hv/sv/mac
+8. **Send `ESP_TRIM`** + `ESP_RAIN_CFG` + `ESP_MULTIZONE` during boot
+9. Only then send `PIN_SEND pwd=XXXX`
+
+### Data Sources
+
+| Source | MB→ESP frames | ESP→MB frames |
+|--------|---------------|---------------|
+| `02-boot-pin/decoded.json` | 98 frames (boot) | 224 frames (ESP response) |
+| `drugi/decoded.json` | 117 frames (boot) | 157 frames (ESP response) |
+| `pierwszy/decoded.json` | 90 frames | 107 frames |
+| `trzeci/decoded.json` | 85 frames | 109 frames |
+| `czwarty/decoded.json` | 68 frames | 89 frames |
+| **log 23 (custom)** | **0 frames** | 53 frames |
+
+### Next Step
+
+**Implement boot protocol in ESPHome custom component** — add handlers for MB boot frames, send correct ESP_BOOT/ESP_KEEPALIVE/ESP_POLL/ESP_INIT sequence, then test if START becomes responsive.

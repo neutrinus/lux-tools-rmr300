@@ -109,6 +109,7 @@ void SnkMower::setup() {
 
 void SnkMower::finish_setup() {
   last_activity_ms_ = millis();
+  last_boot_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
     gpio_set_direction(buzzer_pin_, GPIO_MODE_OUTPUT);
@@ -124,25 +125,14 @@ void SnkMower::finish_setup() {
   set_display_text("boot");
 
   if (boot_delay_ms_ > 0) {
-    ESP_LOGI(TAG, "Boot handshake delayed by %ums for OTA safety", boot_delay_ms_);
-    boot_phase_ = BootPhase::PRE;
-    phase_start_ms_ = millis();
-    return;
+    ESP_LOGI(TAG, "Boot phase PRE: waiting %ums for OTA safety — LISTEN ONLY, no TX",
+             boot_delay_ms_);
+  } else {
+    ESP_LOGI(TAG, "Boot phase PRE: waiting for MB boot frames — LISTEN ONLY, no TX");
   }
-
-  ESP_LOGI(TAG, "Boot phase PRE: sending BOOT + KEEPALIVE + STATE + RAIN");
-  send_boot();
-  delay(15);
-  send_keepalive();
-  delay(15);
-  send_esp_state(0);
-  delay(15);
-  send_rain_status(1);
 
   boot_phase_ = BootPhase::PRE;
   phase_start_ms_ = millis();
-  last_boot_ms_ = phase_start_ms_;
-  ESP_LOGI(TAG, "Boot PRE — waiting for DEVICE_INFO from mainboard");
 }
 
 void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
@@ -508,6 +498,18 @@ void SnkMower::send_rain_status(int rain) {
   send_json(doc);
 }
 
+void SnkMower::send_rain_cfg_cmd() {
+  JsonDocument doc;
+  doc["cmd"] = CMD_ESP_RAIN_CFG;
+  send_json(doc);
+}
+
+void SnkMower::send_multizone_cmd() {
+  JsonDocument doc;
+  doc["cmd"] = CMD_ESP_MULTIZONE;
+  send_json(doc);
+}
+
 void SnkMower::read_rain_sensor() {
   if (rain_pin_ == GPIO_NUM_NC) return;
   int rain = gpio_get_level(rain_pin_);
@@ -554,7 +556,51 @@ void SnkMower::loop() {
   // ── Boot phase state machine ──────────────────────────────────
 
   if (boot_phase_ == BootPhase::PRE) {
-    // Send POLL/keepalive during boot_delay — watchdog expects UART traffic
+    // PRE phase: LISTEN ONLY during boot_delay (OTA window)
+    // MB boots within ~2-5s and starts sending boot frames.
+    // Do NOT transmit anything until boot_delay expires.
+    if (boot_delay_ms_ > 0) {
+      if (now - phase_start_ms_ >= boot_delay_ms_) {
+        ESP_LOGI(TAG, "Boot delay expired — starting boot handshake");
+        boot_delay_ms_ = 0;
+        phase_start_ms_ = now;
+        // Fall through to send boot sequence below
+      } else {
+        return;  // Still in OTA window — no TX
+      }
+    }
+
+    // Send ESP_BOOT as first handshake frame
+    ESP_LOGI(TAG, "Boot: sending ESP_BOOT");
+    send_boot();
+    delay(1);
+    send_keepalive();
+    delay(1);
+    send_esp_state(0);
+    delay(1);
+    send_poll();
+    delay(1);
+    send_rain_status(1);
+
+    // Start POLL spam (original firmware sends POLL ~every 200ms during init)
+    last_poll_ = now;
+    last_keepalive_ = now;
+
+    if (device_info_received_) {
+      ESP_LOGI(TAG, "DEVICE_INFO already received — entering SYNC phase");
+      boot_phase_ = BootPhase::SYNC;
+      device_info_arrived_ms_ = now;
+      info_burst_count_ = 0;
+      init_burst_count_ = 0;
+    } else {
+      // Stay in PRE until we get DEVICE_INFO, but keep sending POLLs
+      phase_start_ms_ = now;
+      ESP_LOGI(TAG, "Boot: waiting for DEVICE_INFO from MB");
+    }
+  }
+
+  // In PRE-after-boot or SYNC: send POLLs at ~200ms to keep MB happy
+  if (boot_phase_ == BootPhase::PRE || boot_phase_ == BootPhase::SYNC) {
     if (now - last_poll_ > 200) {
       last_poll_ = now;
       send_poll();
@@ -562,34 +608,6 @@ void SnkMower::loop() {
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
-    }
-    if (now - last_wifi_status_ > 5000) {
-      last_wifi_status_ = now;
-      send_wifi_status();
-    }
-
-    if (boot_delay_ms_ > 0) {
-      if (now - phase_start_ms_ >= boot_delay_ms_) {
-        ESP_LOGI(TAG, "Boot delay expired — starting handshake");
-        send_boot();
-        delay(1);
-        send_keepalive();
-        delay(1);
-        send_esp_state(0);
-        delay(1);
-        send_rain_status(1);
-        boot_delay_ms_ = 0;
-        phase_start_ms_ = now;
-        last_boot_ms_ = now;
-
-        if (device_info_received_) {
-          ESP_LOGI(TAG, "DEVICE_INFO already received — entering SYNC phase");
-          boot_phase_ = BootPhase::SYNC;
-          device_info_arrived_ms_ = now;
-          info_burst_count_ = 0;
-          init_burst_count_ = 0;
-        }
-      }
     }
   }
 
@@ -606,7 +624,16 @@ void SnkMower::loop() {
       init_burst_count_++;
       ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
     }
-    if (init_burst_count_ >= 6) {
+    if (info_burst_count_ >= 5 && init_burst_count_ >= 6 && burst_elapsed > 800) {
+      // After INFO+INIT bursts, send TRIM + RAIN_CFG + MULTIZONE like original firmware does
+      ESP_LOGI(TAG, "Boot SYNC: sending TRIM + RAIN_CFG + MULTIZONE");
+      send_trim();
+      delay(1);
+      send_rain_cfg_cmd();
+      delay(1);
+      send_multizone_cmd();
+      delay(1);
+
       boot_phase_ = BootPhase::DONE;
       phase_start_ms_ = now;
       // Reset periodic timers to prevent burst of ESP_INFO/ESP_STATE
@@ -616,11 +643,6 @@ void SnkMower::loop() {
       last_esp_state_ = now;
       ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
     }
-    // Keep sending POLLs during sync phase too
-    if (now - last_poll_ > 30) {
-      last_poll_ = now;
-      send_poll();
-    }
   }
 
   if (boot_phase_ == BootPhase::DONE) {
@@ -628,6 +650,11 @@ void SnkMower::loop() {
     if (now - last_keepalive_ > 1000) {
       last_keepalive_ = now;
       send_keepalive();
+    }
+    // Send POLL periodically (original firmware sends it during all phases)
+    if (now - last_poll_ > 30000) {
+      last_poll_ = now;
+      send_poll();
     }
     if (!pin_sent_) {
       send_pin();
@@ -1022,11 +1049,13 @@ void SnkMower::handle_signal_level(const JsonDocument &doc) {
 void SnkMower::handle_power_on(const JsonDocument &doc) {
   int action = doc["action"] | 0;
   ESP_LOGI(TAG, "Power ON (action=%d)", action);
+  mb_boot_detected_ = true;
 }
 
 void SnkMower::handle_power_ready(const JsonDocument &doc) {
   ESP_LOGI(TAG, "Power READY");
   power_ready_ = true;
+  mb_boot_detected_ = true;
 }
 
 void SnkMower::handle_boot_heart(const JsonDocument &doc) {

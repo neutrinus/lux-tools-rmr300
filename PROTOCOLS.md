@@ -472,17 +472,29 @@ U13 OTA framing (from `FUN_08008cb8`):
 5. **U16 max 128 bytes/frame** — mport driver limitation.
 6. **PIN is stored in U13, not on ESP32** — ESP only forwards user-entered PIN.
 
-### Future Work (if continuing)
-1. **Method 6**: GPIO jumper wire from free ESP32 pin to J8 pin 6 (START) — only way to trigger mowing from ESP
-2. **Remove GPIO13/15/20/22 binary sensors** from YAML to rule out interference with J8 button circuits → done, commit pending
-3. **Investigate MB lock-out**: check `stop_state`, `border_state`, `rain_state` in STATUS when physical START fails
-4. **Re-test physical START with cover off** after GPIO sensor removal
-5. **Capture LA trace with original firmware + MQTT** to find any omitted UART command for mowing trigger
-6. **Find colon bit** on display (b0, U4)
-7. **Implement MB query tracking** — respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in DONE phase
+### Root Cause: Boot Protocol Mismatch (Found 2026-06-24)
 
-### Current Decision
-The project is being **wound down** after exhausting all software-based methods to trigger mowing. The only remaining approach (method 6, GPIO jumper) requires hardware modification. Original firmware has been restored to the mower — it mows normally with stock software.
+**Our custom ESPHome firmware does NOT implement the MB boot protocol correctly.** Analysis of all 5 LA captures (drugi, pierwszy, trzeci, czwarty, 02-boot-pin) vs our log 23 revealed:
+
+- **Zero MB→ESP frames** in our log 23 — MB never responds to our ESP
+- **Missing handshake frames**: `ESP_BOOT` (`0x40000004`), `ESP_KEEPALIVE` (`0x30000005`), `ESP_INIT` (`0x40000001`), `ESP_POLL` (`0x300000A1`)
+- **Wrong state**: our firmware sends `ESP_STATE state=1` immediately; original sends `state=0` first
+- **Wrong order**: our firmware jumps to `ESP_WIFI/BT/STATE=1` without waiting for MB boot sequence
+
+The MB (U16) expects: `MB boot ──→ ESP_BOOT ──→ ESP_KEEPALIVE ──→ ESP_STATE=0 ──→ ESP_POLL ──→ ESP_INIT ──→ ...`
+
+Our firmware never sends `ESP_BOOT`, so MB ignores all communication. Physical START doesn't respond because U16's button-reading task checks system state first — if boot protocol never completed, buttons are ignored.
+
+See `ha.md §14` for full analysis.
+
+### Future Work (if continuing)
+1. **Fix boot protocol in ESPHome component** — add handlers for MB boot frames, send correct `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` sequence
+2. **Method 6**: GPIO jumper wire from free ESP32 pin to J8 pin 6 (START) — alternative if boot fix incomplete
+3. **Find colon bit** on display (b0, U4)
+4. **Implement MB query tracking** — respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in DONE phase
+
+### Current Decision (updated 2026-06-24)
+H3 analysis identified the root cause: **boot protocol mismatch**. The MB is not in a state where it processes button inputs because our ESP never completed the required boot handshake. The fix is in software (implement correct boot protocol in ESPHome component), not hardware. Original firmware still on mower for now; testing requires OTA update with fixed firmware.
 
 ---
 

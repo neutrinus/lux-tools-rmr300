@@ -88,6 +88,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   void send_trim();
   void send_esp_state(int state);
   void send_rain_status(int rain);
+  void send_rain_cfg_cmd();
+  void send_multizone_cmd();
 
   void handle_json(const JsonDocument &doc);
 
@@ -138,6 +140,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
+  bool mb_boot_detected_{false};
   int pin_retries_{0};
   bool power_ready_{false};
 
