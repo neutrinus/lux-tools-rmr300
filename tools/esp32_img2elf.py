@@ -24,29 +24,35 @@ def main():
     img_path = sys.argv[1]
     elf_path = sys.argv[2]
 
-    segments = [
-        (0x3f400020, 0x000262b4, 'drom',     PF_R),
-        (0x3ffbdb60, 0x00006cd4, 'dram',     PF_R | PF_W),
-        (0x40080000, 0x00003060, 'iram0',    PF_R | PF_X),
-        (0x400d0020, 0x000e4004, 'irom',     PF_R | PF_X),
-        (0x40083060, 0x000191f8, 'iram1',    PF_R | PF_X),
-        (0x50000000, 0x00000010, 'rtc_data', PF_R),
-    ]
-    file_offsets = [
-        0x00000018, 0x000262d4, 0x0002cfb0,
-        0x00030018, 0x00114024, 0x0012d224,
-    ]
-    entry = 0x400814ec
-
     with open(img_path, 'rb') as f:
         img = f.read()
 
+    # Parse the segment table from the image instead of hard-coding it.
+    # Each segment = 8-byte header (load addr, length) followed by its data; the
+    # data starts 8 bytes AFTER the header offset. (The previous hard-coded table
+    # used header offsets as data offsets, shifting every section by 8 bytes and
+    # producing the broken esp32/firmware/disasm.s.)
+    if img[0] != 0xE9:
+        sys.exit('not an ESP32 app image')
+    entry = struct.unpack('<I', img[4:8])[0]
     seg_data = []
-    for (vaddr, size, name, pflags), fo in zip(segments, file_offsets):
-        if size == 0:
-            continue
-        data = img[fo:fo + size]
-        seg_data.append((vaddr, size, data, name, pflags))
+    off = 0x18                  # 8-byte image header + 16-byte extended header
+    for _ in range(img[1]):
+        vaddr, size = struct.unpack('<II', img[off:off + 8])
+        data = img[off + 8:off + 8 + size]
+        off += 8 + size
+        if 0x3f400000 <= vaddr < 0x3f800000:
+            name, pflags = 'drom%x' % vaddr, PF_R
+        elif 0x3ff80000 <= vaddr < 0x40000000:
+            name, pflags = 'dram%x' % vaddr, PF_R | PF_W
+        elif 0x40070000 <= vaddr < 0x400c0000:
+            name, pflags = 'iram%x' % vaddr, PF_R | PF_X
+        elif 0x400d0000 <= vaddr < 0x40400000:
+            name, pflags = 'irom%x' % vaddr, PF_R | PF_X
+        else:
+            name, pflags = 'rtc%x' % vaddr, PF_R
+        if size:
+            seg_data.append((vaddr, size, data, name, pflags))
 
     # Section name string table (shstrtab)
     shstrtab_names = [b'.shstrtab'] + [b'.' + s[3].encode() for s in seg_data]

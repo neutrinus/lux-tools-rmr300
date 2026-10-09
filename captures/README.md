@@ -1,8 +1,10 @@
 # UART captures
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): ESP32 łączy się UART-em bezpośrednio z U13 (`dpport`, USART0); U16 nie jest mostem, tylko MCU czujników przewodu/podnoszenia na osobnym porcie U13 (`bdport`). Przyciski START/HOME/OK są na ESP32 GPIO22/21/19 (pull-up, aktywne niskim); `0x10000001/2/7` to komendy klawiszy (START+OK = start koszenia, HOME+OK = powrót), nie potwierdzenia błędów.
+
 ## Setup
 - **Probes:** J8 connector (display → mainboard)
-  - CH1/D0: orange (→) — MB → ESP (U16 TX)
+  - CH1/D0: orange (→) — MB → ESP (U13 TX)
   - CH2/D1: green (←) — ESP → MB (ESP TX)
   - CH3/D2: blue (START button)
   - GND: black
@@ -52,7 +54,7 @@ python3 tools/decode_capture.py captures/XX-scenario/capture.vcd
 
 | Prefix | Prefix (hex) | Source | Description |
 |--------|-------------|--------|-------------|
-| `0x10xxxxxx` | 0x10000000 | ESP→MB | Error acknowledges |
+| `0x10xxxxxx` | 0x10000000 | ESP→MB | Key/action commands (START/HOME/OK) |
 | `0x20xxxxxx` | 0x20000000 | MB→ESP | Power/action notifications |
 | `0x22xxxxxx` | 0x22000000 | ESP→MB | Sensor data (rain — sensor on display board) |
 | `0x30xxxxxx` | 0x30000000 | ESP→MB | Settings, keepalive, WiFi/BT status, config |
@@ -104,10 +106,10 @@ python3 tools/decode_capture.py captures/XX-scenario/capture.vcd
 | `0x41000003` | 1090519043 | EXEC_ACTION | — | MB→ESP | Execute queued button action |
 | `0x41000004` | 1090519044 | ERROR_NOTIFY | `err` | MB→ESP | Error code notification |
 | `0x41000005` | 1090519045 | PIN_SEND | `pwd` | ESP→MB | Send 4-digit PIN |
-| `0x41000020` | 1090519072 | START_ACK | `result` | MB→ESP | START button acknowledged |
-| `0x10000001` | 268435457 | ESP_ERR_ACK1 | — | ESP→MB | Error acknowledge |
-| `0x10000002` | 268435458 | ESP_ERR_ACK2 | — | ESP→MB | Error acknowledge |
-| `0x10000007` | 268435463 | ESP_ERR_ACK7 | — | ESP→MB | Error acknowledge |
+| `0x41000020` | 1090519072 | PIN_UNLOCK_RESULT | `result` | MB→ESP | Answer to `0x41000005 {pwd}` |
+| `0x10000001` | 268435457 | KEY_START_CONFIRM | — | ESP→MB | OK after START: start mowing |
+| `0x10000002` | 268435458 | KEY_HOME_CONFIRM | — | ESP→MB | OK after HOME: return to station |
+| `0x10000007` | 268435463 | KEY_SELECT | — | ESP→MB | START or HOME pressed |
 | `0x41000008` | 1090519048 | SHUTDOWN | — | MB→ESP | Power-off command |
 | `0x40000013` | 1073741843 | CUT_TIME_QUERY | `len` | MB→ESP | Query daily cutting time (min) |
 | `0x30000006` | 805306374 | SETTING_MODE | — | ESP→MB | Enter settings mode |

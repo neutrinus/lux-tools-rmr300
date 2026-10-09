@@ -1,5 +1,7 @@
 # SNK Mower — Lux Tools A-RMR-300-24 & clones
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): ESP32 łączy się UART-em bezpośrednio z U13 (`dpport`, USART0); U16 nie jest mostem, tylko MCU czujników przewodu/podnoszenia na osobnym porcie U13 (`bdport`). Przyciski START/HOME/OK są na ESP32 GPIO22/21/19 (pull-up, aktywne niskim); `0x10000001/2/7` to komendy klawiszy (START+OK = start koszenia, HOME+OK = powrót), nie potwierdzenia błędów.
+
 ![A-RMR-300-24](img/a-rmr-300-24.png)
 
 This project documents the **SNK OEM** robot mower platform — the same hardware
@@ -61,7 +63,7 @@ Go to **[BATTERY.md](BATTERY.md)** — compatible packs, replacement guide, DIY 
 |--------|-----------|------|----------|
 | [esp32/](esp32/) | ESP32-WROOM-32UE | Display, WiFi/BT, UI | dumps, notes |
 | [u13/](u13/) | GD32F305 (main MCU) | Motors, navigation, PIN, USB | dumps, decomp, notes, datasheet |
-| [u16/](u16/) | GD32F303 (board MCU) | Sensors, UART bridge, motors | dump, notes |
+| [u16/](u16/) | GD32F303 (board MCU) | Border wire, lift/hall sensors (via U13 `bdport`) | dump, notes |
 
 ---
 
@@ -79,7 +81,7 @@ Go to **[BATTERY.md](BATTERY.md)** — compatible packs, replacement guide, DIY 
                    │ Main Board (SNK_MAINBOARD_CP_V11)    │
                    │                                      │
                    │ U16 (GD32F303) — sensors, motors,    │
-                   │   UART bridge, IEC 60730            │
+                   │   link to U13, IEC 60730           │
                    │                                      │
                    │ U13 (GD32F305) — motors, navigation, │
                    │   USB host, KV-store, ★ PIN        │

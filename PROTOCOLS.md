@@ -1,5 +1,10 @@
 # Inter-Chip Communication Protocols
 
+> **Korekta 2026-10-09** (szczegóły i dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)):
+> 1. ESP32 rozmawia **bezpośrednio z U13** (`driver_dpport`, USART0). U16 nie jest mostem: to MCU czujników przewodu i podnoszenia, podłączony do U13 osobnym portem (`bdport`, USART1 w U13, USART2 w U16).
+> 2. Przyciski START/HOME/OK czyta **ESP32** (GPIO22/21/19). Klawisze wysyła do MB jako `0x1000000x`. To **nie są** "error ACK".
+> 3. Koszenie **da się** uruchomić po UART: `0x10000007`, potem `0x10000001` (START, a potem OK). Powrót do stacji: `0x10000007`, potem `0x10000002` (HOME, a potem OK).
+
 > **Krzyżowa weryfikacja kierunków (2026-06-22):**
 > Kierunki poniżej zostały zweryfikowane z **trzech niezależnych źródeł**:
 > 1. **Captures 01-06** — D0=MB→ESP, D1=ESP→MB (etykiety w `captures/README.md` i `notes.md` poprawne)
@@ -12,23 +17,23 @@
 ## Overview
 
 ```
-ESP32 (Display Board)              U16 (Board MCU)              U13 (Main MCU)
-┌──────────────────────┐          ┌──────────────────────┐     ┌──────────────────────┐
-│ ESP32-WROOM-32UE     │  JSON    │ GD32F303CGT6         │JSON │ GD32F305AGT6         │
-│                      │ 230400   │                      │230400│                      │
-│ GPIO17 (TX) ─────────┼──────────┼→ U16 RX              │─────→│ bdport (USART)       │
-│ GPIO16 (RX) ←────────┼──────────┼← U16 TX             │←─────│                      │
-│                      │ 8N1      │                      │ 8N1  │                      │
-│ &{json}<CRC>#        │          │ JSON bridge          │      │ Motor control        │
-│                      │          │ FreeRTOS             │      │ KV-store + PIN       │
-│                      │          │ cJSON                │      │ dpport (display port)│
-└──────────────────────┘          └──────────────────────┘     └──────────────────────┘
+ESP32 (Display Board)                 U13 (Main MCU)                    U16 (border board MCU)
+┌──────────────────────────┐ J8      ┌──────────────────────────┐      ┌────────────────────────┐
+│ ESP32-WROOM-32UE         │ JSON    │ GD32F305AGT6             │ JSON │ GD32F303CGT6           │
+│ GPIO17 TX ───────────────┼────────→│ dpport  (USART0)         │      │                        │
+│ GPIO16 RX ←──────────────┼─────────│                          │      │                        │
+│                          │ 230400  │ bdport  (USART1) ←──────→│──────│ mport (USART2)         │
+│ START=GPIO22 HOME=GPIO21 │         │ ledport (UART3)          │      │ border coils, lift     │
+│ OK=GPIO19 (pull-up, act.L)│        │ button drv: PE10/PE11 ←──┼─ J8 ST/OK? (inferred)      │
+│ display, buzzer, rain    │         │ motors, nav, KV-store+PIN│      │ hall sensors           │
+└──────────────────────────┘         └──────────────────────────┘      └────────────────────────┘
 ```
 
-**Jeden protokół** między ESP32 a U16 (zweryfikowany przez 10 nagrań LA):
+Dowody: stringi i literały w U13 (`driver_dpport_snk_v1.c`, literał `0x40013800`; `driver_bdport_snk_v1.c`, literał `0x40004400`), w U16 (`driver_mboard_port_snk_v2.c`, literał `0x40004800`, stringi tylko "bdboard"/border/lift). Ścieżki J8 na `img/mainboard_bottom.jpg` biegną w stronę U13.
+
+**Jeden format** na łączu ESP32 ↔ U13 (zweryfikowany przez 10 nagrań LA):
 - **JSON** over UART at **230400 8N1**, standard polarity (not inverted)
 - **Frame format**: `&{json}<CRC>#` (pojedynczy `#` — NIE `##` jak wcześniej dokumentowano)
-- U16 acts as a bidirectional JSON bridge to U13
 - **CRC**: Dallas/Maxim CRC-8 (poly 0x31, init 0x00, ref_in=true, ref_out=true) over JSON bytes only
 
 Wcześniejsza dokumentacja protokołu binarnego (`0xAA 0x55` @115200) w `esp32/notes/ESP32.md` jest **NIEPRAWIDŁOWA**.
@@ -75,7 +80,7 @@ Command IDs are 32-bit integers. Prefix indicates source subsystem:
 
 | Prefix | Direction | Description |
 |--------|-----------|-------------|
-| `0x10xxxxxx` | **ESP→MB** | Error acknowledges |
+| `0x10xxxxxx` | **ESP→MB** | Komendy klawiszy/akcji z UI (START/HOME/OK), patrz „Action Flow” |
 | `0x20xxxxxx` | **MB→ESP** | Power/action notifications |
 | `0x22xxxxxx` | **ESP→MB** | Sensor data (rain — sensor on display board) |
 | `0x30xxxxxx` | **ESP→MB** | Settings, keepalive, WiFi/BT status, config |
@@ -146,11 +151,11 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x41000002` | 1090519042 | `lock:0/1` | LOCK | Lock state |
 | `0x41000003` | 1090519043 | — | EXEC_ACTION | Akcja wykonana (po STOP/akcji) |
 | `0x41000004` | 1090519044 | `err` | ERROR_NOTIFY | Error code notification |
-| `0x41000005` | 1090519045 | (brak `pwd`) | **SEEK_WIRE** | MB→ESP notyfikacja (bez pola pwd! — patrz uwaga) |
+| `0x41000005` | 1090519045 | (brak `pwd`) | **DEPARTURE** | MB→ESP zaraz po `0x10000001` (START+OK), przed `state:8` — odjazd do koszenia |
 | `0x41000006` | 1090519046 | — | RETURN_HOME | Home/return to dock notification |
 | `0x41000007` | 1090519047 | — | DOCKED_CHARGE | Docked / charge start |
 | `0x41000008` | 1090519048 | — | SHUTDOWN | Power-off command |
-| `0x41000020` | 1090519072 | `result` | START_ACK | START button acknowledged |
+| `0x41000020` | 1090519072 | `result` | PIN_UNLOCK_RESULT | Wysyłane ~10 ms po `0x41000005 {"pwd"}` z ESP (wszystkie captures). Wcześniej nazwane START_ACK, ale nigdy nie następuje po naciśnięciu START |
 | `0x50000021` | 1342177313 | `bat:0..3` | BATTERY | Battery level |
 
 > **Uwaga o `0x41000005`**: To ID komendy występuje w **obu kierunkach**:
@@ -161,9 +166,13 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 
 | CMD HEX | DEC | JSON Fields | Nazwa | Opis |
 |---------|-----|-------------|-------|------|
-| `0x10000001` | 268435457 | — | ESP_ERR_ACK1 | Error acknowledge 1 |
-| `0x10000002` | 268435458 | — | ESP_ERR_ACK2 | Error acknowledge 2 |
-| `0x10000007` | 268435463 | — | ESP_ERR_ACK7 | Error acknowledge 7 |
+| `0x10000001` | 268435457 | — | KEY_START_CONFIRM | OK po START (≤3 s): **start koszenia** |
+| `0x10000002` | 268435458 | — | KEY_HOME_CONFIRM | OK po HOME (≤3 s): **powrót do stacji** |
+| `0x10000003` | 268435459 | — | KEY_EVT_3 | Zdarzenie UI 3 (wyzwalacz nieustalony) |
+| `0x10000004` | 268435460 | — | KEY_EVT_4 | Zdarzenie UI 4 (wyzwalacz nieustalony) |
+| `0x10000007` | 268435463 | — | KEY_SELECT | Wciśnięto START lub HOME (otwiera okno 3 s na OK) |
+| `0x10000008` | 268435464 | — | CLEAR_USER_SETTINGS | log ESP: "send command clear user setting" |
+| `0x10000009` | 268435465 | — | MEMS_CORRECTION | log ESP: "send command mems correction" |
 | `0x22000000` | 570425344 | `rain:0/1` | RAIN | Rain sensor state (sensor on display board) |
 | `0x30000005` | 805306373 | — | KEEPALIVE | Keepalive (ciągły, ~100ms) |
 | `0x30000006` | 805306374 | — | SETTING_MODE | Enter settings submenu |
@@ -271,43 +280,51 @@ Steady state:
 
 ## Action Flow (START / STOP / HOME)
 
-**Wszystkie akcje fizyczne** — START, STOP, HOME — są obsługiwane bezpośrednio przez U16 (przyciski podpięte do U16 przez J8, nie do ESP32). ESP32 tylko otrzymuje notyfikacje stanu i wysyła error ACKs.
+START, HOME i OK są podłączone do **ESP32** (GPIO22/21/19, aktywne niskim stanem, wewnętrzny pull-up). ESP32 prowadzi UI i wysyła do MB komendy klawiszy. STOP (czerwony, złącze `STOP`/U19 na płycie głównej) obsługuje MB sam (`stop_state`).
 
-### START (rozpoczęcie koszenia)
+Logika z firmware ESP32 (`ota_0.bin` 3.02.02, pętla UI `0x400e27f4`, dyspozytor `0x400e2194`), tick 10 ms, debounce 70 ms:
+- wciśnięcie START albo HOME → ESP zapamiętuje klawisz na 3 s i wysyła `0x10000007`,
+- OK w ciągu 3 s po START → `0x10000001`; po HOME → `0x10000002`.
 
-```
-User → START button (physical, J8 pin 6 → U16)
-  → U16 starts mowing internally
-  → MB→ESP: 0x41000020 {"result":1}    (START_ACK)
-  → MB→ESP: 0x330000A0 {"state":2}      (MOWING)
-  → MB→ESP: 0x41000003                  (EXEC_ACTION)
-  → State: 0→1→2 (MOWING)
-```
-
-### STOP (zatrzymanie)
+### START, potem OK (start koszenia), `captures/2026-06-21/trzeci`, D3=START, D4=OK
 
 ```
-User → STOP button (physical, to U16)
-  → U16 stops motors
-  → MB→ESP: 0x330000A0 {"stop_state":1}
-  → MB→ESP: 0x41000003                  (EXEC_ACTION)
-  → MB→ESP: 0x330000A0 {"state":6}      (STOP)
-  → MB→ESP: 0x330000A0 {"stop_state":0}
+16.7372  START pressed
+16.8128  ESP→MB 0x10000007          (+75 ms = debounce)
+17.6022  OK pressed
+17.6828  ESP→MB 0x10000001          (+80 ms)
+17.7145  MB→ESP 0x41000005          (departure)
+17.7364  MB→ESP 0x330000A0 {"state":8}
 ```
 
-### HOME (powrót do stacji)
+To samo w `drugi` (26.20 s / 27.33 s) i w `04-return-home` (28.35 s). Tam MB odpowiada `err:16`, bo kosiarka stała poza przewodem.
+
+### HOME, potem OK (powrót do stacji), `captures/2026-06-21/czwarty`
 
 ```
-User → HOME button (physical, to U16)
-  → MB→ESP: 0x41000020 {"result":1}    (START_ACK — krótki odjazd)
-  → MB→ESP: 0x330000A0 {"state":2}      (jazda)
-  → MB→ESP: 0x41000003                  (EXEC_ACTION)
-  → MB→ESP: 0x330000A0 {"state":6}      (stop)
-  → MB→ESP: 0x41000006                  (RETURN_HOME notification)
-  → MB→ESP: 0x330000A0 {"state":9}      (RETURNING TO DOCK)
-  → MB→ESP: 0x330000A0 {"station":true} (stacja wykryta)
-  → MB→ESP: 0x41000007                  (DOCKED_CHARGE)
-  → MB→ESP: 0x330000A0 {"state":10}     (CHARGING)
+17.6614  ESP→MB 0x10000007          (HOME nie był podpięty do LA)
+18.0219  OK pressed
+18.1013  ESP→MB 0x10000002
+18.1488  MB→ESP 0x41000006          (RETURN_HOME)
+18.1998  MB→ESP 0x330000A0 {"state":9}
+20.2982  MB→ESP 0x330000A0 {"station":true}
+```
+
+### STOP (zatrzymanie), obsługiwany przez MB
+
+```
+MB→ESP: 0x330000A0 {"stop_state":1}
+MB→ESP: 0x41000003                  (EXEC_ACTION / stop)
+MB→ESP: 0x330000A0 {"state":6}
+MB→ESP: 0x330000A0 {"stop_state":0}
+```
+
+### Po wprowadzeniu PIN
+
+```
+ESP→MB: 0x41000005 {"pwd":9633}
+MB→ESP: 0x41000020 {"result":1}
+MB→ESP: 0x330000A0 {"state":2} → 0x41000003 → {"state":6}
 ```
 
 ---
@@ -318,12 +335,9 @@ User → HOME button (physical, to U16)
 MB detects error (lift, out of wire, etc.):
   → MB→ESP: 0x41000004 {"err":16}       (ERROR_NOTIFY)
   → MB→ESP: 0x330000A0 {"state":7,"error":16}  (ERROR state)
-
-ESP acknowledges:
-  → ESP→MB: 0x10000001                   (ESP_ERR_ACK1)
-  → ESP→MB: 0x10000002                   (ESP_ERR_ACK2)
-  → ESP→MB: 0x10000007                   (ESP_ERR_ACK7)
 ```
+
+ESP **nie** wysyła potwierdzeń błędów. `0x1000000x` widoczne w captures po błędach to naciśnięcia klawiszy przez użytkownika (patrz wyżej).
 
 ### Error Codes
 
@@ -336,17 +350,11 @@ ESP acknowledges:
 ## PIN Verification Flow
 
 ```
-Step   ESP32                        U16 (bridge)                 U13
-────   ─────                        ────────────                 ───
-1.     JSON {"cmd":1090519045,      receives, forwards           receives JSON
-            "pwd":9633}                                          
-       ──────────────────────────▶  ──────────────────────────▶
-2.                                                              reads PIN from KV-store (key "pwd" @ RAM 0x2000027C)
-                                                                compares
-3.                                 JSON result ←────────────────  sends OK/FAIL
-4.     0x33000021 {"result":true} ←─────────────── translates JSON → result
-5.     MB→ESP: 0x41000002 {"lock":1}  (lock state — unlocked LED)
-6.     MB→ESP: 0x330000A0 {"state":1}  (READY)
+Step   ESP32                                   U13 (dpport)
+────   ─────                                   ────────────
+1.     user enters PIN with START/HOME/OK
+2.     {"cmd":1090519045,"pwd":9633} ────────▶  reads PIN from KV-store (key "pwd" @ RAM 0x2000027C), compares
+3.     ◀──────── 0x41000020 {"result":1}
 ```
 
 PIN jest przechowywany w U13 (KV-store, key `"pwd"`, adres RAM `0x2000027C`), NIE na ESP32.
@@ -394,11 +402,12 @@ ESP tylko przesyła PIN wprowadzony przez użytkownika do MB w celu weryfikacji.
 
 ## Protocol: U16 ↔ U13 (Internal)
 
-Same JSON format at 230400. U16 is a transparent bridge + adds its own messages.
+JSON przez osobny UART: U16 `mport` (USART2), U13 `bdport` (USART1). U16 **nie** przekazuje ruchu ESP32. Jego wiadomości to dane przewodu granicznego, podnoszenia i wersji ("bdboard").
 
 U13 firmware strings confirm architecture:
-- `driver_dpport.c` ("dpport drv") — **display port** driver (komunikacja z ESP przez U16 bridge)
-- `driver_bdport.c` ("bdport drv") — **board port** driver (komunikacja z U16)
+- `driver_dpport.c` / `driver_dpport_snk_v1.c` ("dpport drv") — **display port** driver, USART0 (literał `0x40013800`), bezpośrednio do ESP32
+- `driver_bdport.c` / `driver_bdport_snk_v1.c` ("bdport drv") — **board port** driver (komunikacja z U16), USART1
+- `driver_ledport_snk_v1.c` — trzeci port, UART3 (moduł LED/ultradźwięków, "ledport no board connect")
 - `service_bdport.c` ("bdport srv") — board port service
 - `deal_message.c` — message handling
 - `add receive message head callback failed, head=%d` — dynamic command dispatch by ID
@@ -410,7 +419,7 @@ U13 has services: movement, map, time, blade, bms, border, multizone, hit, ultra
 
 ## OTA Protocol
 
-OTA flows: Cloud → ESP32 → U16 → U13 over same UART channel.
+OTA flows: Cloud → ESP32 → U13 (dpport). Firmware U16 ("BB") i innych płytek U13 programuje dalej swoimi portami (stringi `BB IAP start`, `LB IAP start`). Wniosek z firmware, nie z capture'u.
 
 U13 OTA framing (from `FUN_08008cb8`):
 ```
@@ -425,8 +434,8 @@ U13 OTA framing (from `FUN_08008cb8`):
 
 - **U16 runs FreeRTOS** — comm_task, init_task, init_bd
 - **U16 uses EasyLogger v2.2.99** — logs to internal buffer
-- **ESP cannot trigger mowing via UART** — nie istnieje komenda "start mowing" w protokole UART
-- **All physical actions (START/STOP/HOME) go to U16** — ESP only receives notifications + sends error ACKs
+- **ESP uruchamia koszenie po UART**: `0x10000007`, potem `0x10000001` (dokładnie to, co robi oryginalny firmware po START+OK)
+- **START/HOME/OK czyta ESP32** (GPIO22/21/19). STOP obsługuje MB. ON (K4) idzie tylko do MB
 - **U16 JSON parser**: generic cJSON-based, handles arbitrary JSON
 - **U16 limit**: max 128 bytes per message (mport driver)
 - **U13 RTC** exists, sends RTC heartbeat (`0x40000011`) co ~1s do ESP
@@ -447,17 +456,15 @@ U13 OTA framing (from `FUN_08008cb8`):
 - ✅ **Handshake** — stable SYNC→DONE transition, PIN accepted → `state:1` (READY)
 - ✅ **Watchdog-safe communication** — 36+ s without watchdog (log 22), `safe_mode` counter resets
 - ✅ **Periodic reporting** — KEEPALIVE@1s, WIFI/BT@5s, ESP_INFO@30s, ESP_STATE@10s, RAIN@60s
-- ✅ **Error ACK** — all 3 commands (`0x10000001` / `0x10000002` / `0x10000007`)
+- ~~Error ACK~~: błędna interpretacja. `0x10000001/2/7` to komendy klawiszy, a stary `send_error_ack()` po każdym błędzie wysyłał „start koszenia” + „do stacji”. Usunięte 2026-10-09
 - ✅ **Display** — 4-digit 7-segment LED (SPI, 3× 74HC595, 2MHz, hardware timer)
 - ✅ **Sensors** — rain (GPIO36), light, battery, device-info, schedule parsing
 - ✅ **HA integration** — full sensor/binary_sensor/text_sensor publishing
 - ✅ **Boot delay (30s)** — OTA-safe window, configurable
 
 ### What Does NOT Work
-- ❌ **START/STOP/HOME buttons** — physical buttons connect through J8 to U16, **not** to ESP32. ESP sees only `START_ACK`/`EXEC_ACTION` notifications. **No UART command exists to trigger mowing.**
-- ❌ **Software mowing start** — methods 1-5 (`send_action`, `CMD_EXEC_ACTION`, `CMD_RETURN_HOME`, `CMD_START_ACK`, `ESP_TRIM auto=1`, `ESP_STATE=2`) all ignored by MB. No evidence in any LA capture of an ESP→MB command that initiates mowing.
-- ❌ **`start_mowing()`** — MB ignores the TRIM schedule + error ACK + state=2 sequence
-- ❌ **`return_to_dock()`** — sends `CMD_RETURN_HOME` but mower stays in idle
+- 🔄 **START/HOME/OK buttons** (poprawione 2026-10-09, niezweryfikowane na sprzęcie): przyciski są na ESP32 GPIO22/21/19 i wymagają `INPUT_PULLUP`. Komponent obsługuje je teraz tak jak oryginał (`key_start/key_home/key_ok`).
+- 🔄 **Software mowing start** (poprawione 2026-10-09, niezweryfikowane na sprzęcie): `start_mowing()` wysyła `0x10000007`, a po 500 ms `0x10000001`. `return_to_dock()` wysyła `0x10000007`, a po 500 ms `0x10000002`. Wcześniejsze metody 1–5 nie działały, bo używały komend MB→ESP albo harmonogramu.
 - ❌ **GPIO mowing trigger (method 6)** — untested. Would require a jumper wire from a free ESP32 pin to J8 pin 6 (START button line).
 - ❌ **PIN is NOT stored in original ESP32 firmware** — PIN is stored in U13 KV-store (EEPROM U22). Original ESP32 firmware only forwards user-entered PIN for verification; there is no `pwd` constant in the firmware binary.
 - ❌ **Physical START button** — does not trigger any MB response in log 23. Possible causes: J8 cable seating, GPIO interference, or MB state lock-out condition. Not resolved.
@@ -465,7 +472,7 @@ U13 OTA framing (from `FUN_08008cb8`):
 - ❌ **ESP not responding to MB queries** — `CMD_ESP_WIFI` / `CMD_ESP_BT` queries are sent by MB but ESP does not track/respond to them in time
 
 ### Key Architectural Constraints
-1. **ESP cannot start mowing via UART** — no such command exists in the protocol. All physical actions (START/STOP/HOME) go directly to U16 through J8. ESP only receives notifications.
+1. ~~ESP cannot start mowing via UART~~: nieprawda, patrz „Action Flow”. START+OK = `0x10000007` + `0x10000001`.
 2. **MB watchdog ~30s from power-on** — only `BOOT` (`0x40000004`) resets it. Boot_delay keeps MB alive with POLL/KEEPALIVE but does NOT reset the watchdog.
 3. **POLL in DONE causes DEVICE_INFO flood** — MB interprets periodic `CMD_ESP_POLL` as "ESP requests device info" and re-sends `DEVICE_INFO` + `HW_VERSIONS` indefinitely. POLL must be restricted to PRE/SYNC phases.
 4. **`0x41xxxxxx` commands are MB→ESP** — all except `PIN_SEND` (`0x41000005`). Sending them reverse (ESP→MB) has no effect.
@@ -481,20 +488,20 @@ U13 OTA framing (from `FUN_08008cb8`):
 - **Wrong state**: our firmware sends `ESP_STATE state=1` immediately; original sends `state=0` first
 - **Wrong order**: our firmware jumps to `ESP_WIFI/BT/STATE=1` without waiting for MB boot sequence
 
-The MB (U16) expects: `MB boot ──→ ESP_BOOT ──→ ESP_KEEPALIVE ──→ ESP_STATE=0 ──→ ESP_POLL ──→ ESP_INIT ──→ ...`
+The MB (U13, dpport) expects: `MB boot ──→ ESP_BOOT ──→ ESP_KEEPALIVE ──→ ESP_STATE=0 ──→ ESP_POLL ──→ ESP_INIT ──→ ...`
 
-Our firmware never sends `ESP_BOOT`, so MB ignores all communication. Physical START doesn't respond because U16's button-reading task checks system state first — if boot protocol never completed, buttons are ignored.
+Our firmware never sends `ESP_BOOT`, so MB ignores all communication. Physical START didn't respond because the buttons are read by the ESP32 itself (GPIO22/21/19) and our firmware did not send the key commands `0x10000007` → `0x10000001` (correction 2026-10-09).
 
 See `ha.md §14` for full analysis.
 
 ### Future Work (if continuing)
 1. **Fix boot protocol in ESPHome component** — add handlers for MB boot frames, send correct `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` sequence
-2. **Method 6**: GPIO jumper wire from free ESP32 pin to J8 pin 6 (START) — alternative if boot fix incomplete
+2. ~~Method 6 (GPIO jumper to J8 START)~~: not needed, START+OK is a UART command (see Action Flow)
 3. **Find colon bit** on display (b0, U4)
 4. **Implement MB query tracking** — respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in DONE phase
 
 ### Current Decision (updated 2026-06-24)
-H3 analysis identified the root cause: **boot protocol mismatch**. The MB is not in a state where it processes button inputs because our ESP never completed the required boot handshake. The fix is in software (implement correct boot protocol in ESPHome component), not hardware. Original firmware still on mower for now; testing requires OTA update with fixed firmware.
+H3 analysis identified the root cause: **boot protocol mismatch**. The MB ignored our ESP because it never completed the boot handshake; buttons additionally need the ESP-side key commands (see Action Flow). The fix is in software (implement correct boot protocol in ESPHome component), not hardware. Original firmware still on mower for now; testing requires OTA update with fixed firmware.
 
 ---
 
@@ -508,7 +515,7 @@ H3 analysis identified the root cause: **boot protocol mismatch**. The MB is not
 |---------|-----------|-------------|
 | D0 | MB→ESP | Zawiera `0x20000001` (POWER_ON), `0x330000A1` (DEVICE_INFO), `0x50000021` (BATTERY) |
 | D1 | ESP→MB | Zawiera `0x30000005` (KEEPALIVE), `0x22000000` (RAIN), `0x41000005 {"pwd":9633}` (PIN) |
-| D2 | START button | (tylko w 01, 02) |
+| D2 | START button | (01, 02, 04) |
 
 Etykiety w `captures/README.md` i `notes.md` dla 01-06 są **POPRAWNE**.
 

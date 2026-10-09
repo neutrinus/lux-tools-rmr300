@@ -63,6 +63,10 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   void start_mowing();
   void return_to_dock();
+  // Front-panel buttons, call from binary_sensor on_press
+  void key_start();
+  void key_home();
+  void key_ok();
   void send_action(int action_value);
   void send_raw_json(const std::string &json_str);
   void buzz(int duration_ms);
@@ -83,8 +87,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   void send_poll();
   void send_wifi_status();
   void send_esp_info();
-  void send_error_ack();
-  void send_return_home();
+  void send_cmd(uint32_t cmd);
+  void arm_key(uint8_t key);
   void send_trim();
   void send_esp_state(int state);
   void send_rain_status(int rain);
@@ -131,6 +135,10 @@ class SnkMower : public Component, public uart::UARTDevice {
     SYNC,  // DEVICE_INFO received, sending ESP_INFO/INIT burst
     DONE,  // handshake complete, normal keepalive operation
   };
+
+  static const uint8_t KEY_NONE = 0, KEY_START = 1, KEY_HOME = 2;
+  uint8_t armed_key_{KEY_NONE};
+  uint32_t armed_at_ms_{0};
 
   BootPhase boot_phase_{BootPhase::PRE};
   uint32_t phase_start_ms_{0};

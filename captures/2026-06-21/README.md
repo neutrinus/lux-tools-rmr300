@@ -1,5 +1,7 @@
 # Captures 2026-06-21 — LA UART sniffer (original firmware)
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](../../20261009_claude_investigation.md)): wnioski 1–3 i 6–7 poniżej są błędne, patrz poprawiona lista.
+
 ## Setup
 
 - **LA**: fx2lafw (Saleae Logic clone), 4MHz samplerate
@@ -23,10 +25,10 @@
 
 ## Key conclusions (corrected directions)
 
-1. **START/STOP/HOME are physical buttons → U16** — do NOT go through UART
-2. **ESP cannot send "start mowing" command** via UART — it does not exist
-3. **MB sends** `0x41000020` (START_ACK) to ESP after physical start — ESP is only notified
+1. **START/HOME/OK are read by the ESP32** (GPIO22/21/19); STOP is handled by the MB. Decode with `tools/re/la_decode.py ... --uart D1=ESP,D2=MB --lines D3=START,D4=OK`
+2. **ESP starts mowing via UART**: START → `0x10000007` (+75 ms), OK → `0x10000001` (+80 ms) → MB `0x41000005`, `state:8` (trzeci 16.74–17.74 s)
+3. `0x41000020` is the answer to the PIN command `0x41000005 {pwd}`, not a START ack
 4. **MB sends** `0x41000006` (RETURN_HOME) to ESP after physical HOME
 5. **MB sends** `0x41000007` (DOCKED_CHARGE) to ESP after docking
-6. ESP sends to MB: KEEPALIVE, POLL, RAIN, PIN, WiFi/BT status, ESP_INFO, error ACKs
-7. To control via HA, GPIO ESP would need to be connected to button lines (but those go to U16, not ESP)
+6. ESP sends to MB: KEEPALIVE, POLL, RAIN, PIN, WiFi/BT status, ESP_INFO, key commands `0x1000000x` (HOME→OK = `0x10000007`,`0x10000002`, czwarty 17.66/18.10 s)
+7. To control via HA, send the same key commands from ESPHome (`start_mowing()` / `return_to_dock()`)

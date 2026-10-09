@@ -115,14 +115,42 @@ snk_mower:
   mower_state:
     name: "${friendly_name} Mower State"
 
+# Front-panel buttons on the display board (from the original firmware, see
+# 20261009_claude_investigation.md): active low, need the internal pull-up.
+# START then OK = start mowing, HOME then OK = return to station (3 s window),
+# the same key commands the original firmware sends to the mainboard.
+# ON (K4) is not wired to the ESP32.
 binary_sensor:
   - platform: gpio
-    pin: GPIO19
-    name: "${friendly_name} OK Button"
-    device_class: "connectivity"
+    pin:
+      number: GPIO22
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} START Button"
     filters:
-      - invert:
-      - delayed_on_off: 10ms
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_start();'
+  - platform: gpio
+    pin:
+      number: GPIO21
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} HOME Button"
+    filters:
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_home();'
+  - platform: gpio
+    pin:
+      number: GPIO19
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} OK Button"
+    filters:
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_ok();'
 
 
 button:

@@ -55,11 +55,17 @@ static const uint32_t CMD_PIN_SEND       = 0x41000005;
 static const uint32_t CMD_SHUTDOWN       = 0x41000008;
 static const uint32_t CMD_START_ACK      = 0x41000020;
 static const uint32_t CMD_BATTERY        = 0x50000021;
-static const uint32_t CMD_RETURN_HOME    = 0x41000006;
+static const uint32_t CMD_RETURN_HOME    = 0x41000006;  // MB->ESP notification only
 static const uint32_t CMD_DOCKED_CHARGE  = 0x41000007;
-static const uint32_t CMD_ERR_ACK1       = 0x10000001;
-static const uint32_t CMD_ERR_ACK2       = 0x10000002;
-static const uint32_t CMD_ERR_ACK7       = 0x10000007;
+// ESP->MB key/action commands. These are NOT error acks. Original ESP firmware
+// (ota_0.bin 3.02.02, dispatcher 0x400e2194, see 20261009_claude_investigation.md)
+// sends KEY_SELECT when START or HOME is pressed, then START_CONFIRM / HOME_CONFIRM
+// when OK follows within 3 s. Verified in captures/2026-06-21/trzeci: START,
+// 0x10000007, OK, 0x10000001, then MB state 8 (leaving to cut).
+static const uint32_t CMD_KEY_START_CONFIRM = 0x10000001;  // START then OK: start mowing
+static const uint32_t CMD_KEY_HOME_CONFIRM  = 0x10000002;  // HOME then OK: return to station
+static const uint32_t CMD_KEY_SELECT        = 0x10000007;  // START or HOME pressed
+static const uint32_t KEY_CONFIRM_WINDOW_MS = 3000;        // 300 ticks of 10 ms in original fw
 
 static const uint32_t CMD_SETTING_ACK_BASE = 0x33000000;
 
@@ -446,21 +452,9 @@ void SnkMower::send_esp_info() {
   send_json(doc);
 }
 
-void SnkMower::send_error_ack() {
+void SnkMower::send_cmd(uint32_t cmd) {
   JsonDocument doc;
-  doc["cmd"] = CMD_ERR_ACK1;
-  send_json(doc);
-  doc.clear();
-  doc["cmd"] = CMD_ERR_ACK2;
-  send_json(doc);
-  doc.clear();
-  doc["cmd"] = CMD_ERR_ACK7;
-  send_json(doc);
-}
-
-void SnkMower::send_return_home() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_RETURN_HOME;
+  doc["cmd"] = cmd;
   send_json(doc);
 }
 
@@ -893,7 +887,8 @@ void SnkMower::handle_error_notify(const JsonDocument &doc) {
       error_code_sensor_->publish_state(error_code_);
   }
   buzz(300);
-  send_error_ack();
+  // Original firmware does not ack errors. The old send_error_ack() sent
+  // 0x10000001/0x10000002/0x10000007, i.e. "start mowing" + "go home" key commands.
   publish_mower_state(MowerState::ERROR_STATE);
 }
 
@@ -1123,26 +1118,48 @@ void SnkMower::handle_setting_ack(const JsonDocument &doc, uint32_t cmd) {
 }
 
 void SnkMower::start_mowing() {
-  ESP_LOGI(TAG, "Command: start mowing");
-
-  // Approach 1: Set schedule to start NOW via ESP_TRIM
-  // The MB may auto-start if it sees a matching schedule time
-  send_trim();
-  delay(5);
-
-  // Approach 2: Clear any pending error state
-  send_error_ack();
-  delay(5);
-
-  // Approach 3: Signal ESP state as mowing to encourage MB to follow
-  send_esp_state(2);
-
-  ESP_LOGI(TAG, "Start mowing: trim schedule sent, state=2 signaled");
+  // Same as a user pressing START, then OK.
+  ESP_LOGI(TAG, "Command: start mowing (KEY_SELECT, then START_CONFIRM)");
+  send_cmd(CMD_KEY_SELECT);
+  this->set_timeout("key_confirm", 500, [this]() { send_cmd(CMD_KEY_START_CONFIRM); });
 }
 
 void SnkMower::return_to_dock() {
-  ESP_LOGI(TAG, "Command: return to dock");
-  send_return_home();
+  // Same as a user pressing HOME, then OK.
+  ESP_LOGI(TAG, "Command: return to dock (KEY_SELECT, then HOME_CONFIRM)");
+  send_cmd(CMD_KEY_SELECT);
+  this->set_timeout("key_confirm", 500, [this]() { send_cmd(CMD_KEY_HOME_CONFIRM); });
+}
+
+// Physical front buttons (display board): START=GPIO22, HOME=GPIO21, OK=GPIO19,
+// active low, internal pull-up. Mirrors the original firmware's short-press logic:
+// START/HOME arms a 3 s window and sends KEY_SELECT, OK inside the window confirms.
+void SnkMower::key_start() { arm_key(KEY_START); }
+void SnkMower::key_home() { arm_key(KEY_HOME); }
+
+void SnkMower::arm_key(uint8_t key) {
+  armed_key_ = key;
+  armed_at_ms_ = millis();
+  buzz(20);
+  send_cmd(CMD_KEY_SELECT);
+}
+
+void SnkMower::key_ok() {
+  bool in_window = armed_key_ != KEY_NONE && millis() - armed_at_ms_ < KEY_CONFIRM_WINDOW_MS;
+  uint8_t key = armed_key_;
+  armed_key_ = KEY_NONE;
+  if (!in_window) {
+    ESP_LOGD(TAG, "OK pressed without START/HOME before it, ignored");
+    return;
+  }
+  buzz(20);
+  if (key == KEY_START) {
+    ESP_LOGI(TAG, "Key: START+OK, start mowing");
+    send_cmd(CMD_KEY_START_CONFIRM);
+  } else {
+    ESP_LOGI(TAG, "Key: HOME+OK, return to station");
+    send_cmd(CMD_KEY_HOME_CONFIRM);
+  }
 }
 
 void SnkMower::publish_mower_state(MowerState state) {

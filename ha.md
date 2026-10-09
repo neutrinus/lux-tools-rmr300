@@ -1,5 +1,7 @@
 # Mainboard (MB) Reverse Engineering Documentation — RMR300 Lawn Mower
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): ESP32 łączy się UART-em bezpośrednio z U13 (`dpport`, USART0); U16 nie jest mostem, tylko MCU czujników przewodu/podnoszenia na osobnym porcie U13 (`bdport`). Przyciski START/HOME/OK są na ESP32 GPIO22/21/19 (pull-up, aktywne niskim); `0x10000001/2/7` to komendy klawiszy (START+OK = start koszenia, HOME+OK = powrót), nie potwierdzenia błędów. Sekcje poniżej mówiące, że „ESP nie może uruchomić koszenia”, „przyciski idą do U16” i o „error ACK”, są nieaktualne. `start_mowing()`/`return_to_dock()` i obsługa przycisków zostały przepisane.
+
 ## Document History
 
 | Date | Author | Description |
@@ -14,7 +16,7 @@
 ### Mainboard (MB)
 - **MCU (U16)**: GD32F303CGT6 (ARM Cortex-M4F) — communicates with ESP32
 - **MCU (U13)**: GD32F305AGT6 (ARM Cortex-M4F) — motor control, KV-store, PIN
-- U16 acts as a JSON bridge between ESP32 and U13 running FreeRTOS
+- ~~U16 acts as a JSON bridge~~: ESP32 łączy się bezpośrednio z U13 (dpport)
 
 ### ESP32-WROOM-32UE (Display Board)
 - **Physical pins**:
@@ -25,7 +27,7 @@
   - `GPIO32` — CS (SPI, display / 74HC595 latch)
   - `GPIO27` — Buzzer (digital PWM)
   - `GPIO36` — Rain sensor (GPIO36 = ADC1_CH0, digital input)
-  - `GPIO19` — OK button (to U16, active LOW)
+  - `GPIO19` — OK button (active LOW, pull-up); `GPIO22` START, `GPIO21` HOME
 - **UART**: 230400 8N1, standard polarity
 - **Built-in light sensor**: on ADC
 - **Wi-Fi/BT sensor pad**: unpopulated (pins assigned to UART)
@@ -162,9 +164,9 @@
 | `CMD_ERROR_NOTIFY` | `0x41000004` | 1090519044 | Error notify |
 | `CMD_PIN_SEND` | `0x41000005` | 1090519045 | PIN send (from MB!) |
 | `CMD_START_ACK` | `0x41000020` | 1090519072 | START ACK |
-| `CMD_ERR_ACK1` | `0x10000001` | 268435457 | Error ACK |
-| `CMD_ERR_ACK2` | `0x10000002` | 268435458 | Error ACK |
-| `CMD_ERR_ACK7` | `0x10000007` | 268435463 | Error ACK (sent by ESP) |
+| `CMD_KEY_START_CONFIRM` | `0x10000001` | 268435457 | OK after START: start mowing |
+| `CMD_KEY_HOME_CONFIRM` | `0x10000002` | 268435458 | OK after HOME: return home |
+| `CMD_KEY_SELECT` | `0x10000007` | 268435463 | START or HOME pressed |
 | `CMD_SUPERVISION` | `0x20000002` | 536870914 | ★ Supervision — MB cuts power |
 | `CMD_FRAME_ERROR` | `0x15000001` | 352321537 | Frame error (U16 reports bad CRC) |
 
@@ -432,7 +434,7 @@ Current hypothesis: **rain=1** in boot sequence is the most suspicious. It was c
 ### Not Working / Problematic
 - ❌ **MB shuts down after boot_seq** (SUPERVISION 0x20000002) — likely caused by `rain=1`, to be verified after change to `rain=0`
 - ❌ **Normal operation** — ESP cannot reach "stable communication" state long enough for MB to enter normal mode
-- ❌ `start_mowing()` — sends TRIM schedule + error ACK + state=2, but MB ignores (no software command exists for physical start — START only through U16 button)
+- 🔄 `start_mowing()`: teraz wysyła `0x10000007`, a potem `0x10000001` (sekwencja START→OK z oryginału). Niezweryfikowane na sprzęcie
 - ❌ `return_to_dock()` — sends CMD_RETURN_HOME, but mower stays in idle
 - ❌ Colon on display — bit not found (TODO in `set_display_text`)
 - ❌ ESP does not respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in time because it doesn't track MB queries
@@ -765,10 +767,10 @@ PRE ──→ DONE
 
 ### Architectural Notes
 
-- **ESP cannot physically start mowing** — there is no UART command for START. START/STOP/HOME are physical buttons connected to U16. ESP only receives state notifications.
-- **U16 is not a simple UART bridge** — adds its own messages (sensors), aggregates data from U13, has its own logic.
+- ~~ESP cannot physically start mowing~~: może. START→OK = `0x10000007` + `0x10000001`
+- **U16 is not a UART bridge at all** (osobny port U13 `bdport`) — adds its own messages (sensors), aggregates data from U13, has its own logic.
 - **U13 parses JSON via cJSON** — confirmed in firmware strings.
-- **OTA**: Cloud → ESP32 → U16 → U13 (same UART channel, different framing: `[2B length LE][N bytes][1B XOR checksum]`).
+- **OTA**: Cloud → ESP32 → U13 (same UART channel, different framing: `[2B length LE][N bytes][1B XOR checksum]`).
 
 ---
 
@@ -904,7 +906,7 @@ After exhausting all software-based methods to trigger mowing from the ESP32 (me
 ### Key Findings
 
 #### 1. GPIO sensors do not affect START button
-Even after removing all binary_sensor GPIO definitions (GPIO13/15/20/22 + GPIO19/OK), the physical START button still did not trigger any MB response. This confirms the buttons are **exclusively handled by U16 through J8** — ESP32 has no influence over them.
+Even after removing all binary_sensor GPIO definitions (GPIO13/15/20/22 + GPIO19/OK), the physical START button still did not trigger any MB response. ~~This confirms the buttons are exclusively handled by U16~~. Błędny wniosek: komponent nie wysyłał wtedy żadnych komend klawiszy, a GPIO22/21 nie miały pull-upu.
 
 #### 2. PIN is NOT stored in ESP32 firmware
 Confirmed by firmware decompilation agent:
