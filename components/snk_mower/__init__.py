@@ -31,8 +31,6 @@ CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
 CONF_IS_CHARGING = "is_charging"
 CONF_IS_DOCKED = "is_docked"
-CONF_HAS_ERROR = "has_error"
-CONF_IS_LOCKED = "is_locked"
 CONF_IS_RETURNING = "is_returning"
 
 CONF_LIGHT_LEVEL = "light_level"
@@ -41,7 +39,6 @@ CONF_CUT_AREA = "cut_area"
 CONF_TOTAL_MINUTES = "total_minutes"
 CONF_ON_MINUTES = "on_minutes"
 CONF_BAT_HEALTH = "bat_health"
-CONF_BAT_LEVEL_BARS = "bat_level_bars"
 CONF_RAIN_DELAY = "rain_delay"
 
 CONF_DEVICE_NAME = "device_name"
@@ -89,42 +86,45 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_LIGHT_LEVEL): sensor.sensor_schema(
                 icon="mdi:brightness-5",
                 accuracy_decimals=0,
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_WORK_AREA): sensor.sensor_schema(
                 unit_of_measurement="m²",
                 icon="mdi:map-marker-area",
                 accuracy_decimals=0,
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_CUT_AREA): sensor.sensor_schema(
                 unit_of_measurement="m²",
                 icon="mdi:grass",
                 accuracy_decimals=0,
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_TOTAL_MINUTES): sensor.sensor_schema(
                 unit_of_measurement="min",
                 icon="mdi:clock-outline",
                 accuracy_decimals=0,
                 state_class="total_increasing",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_ON_MINUTES): sensor.sensor_schema(
                 unit_of_measurement="min",
                 icon="mdi:timer-outline",
                 accuracy_decimals=0,
                 state_class="total_increasing",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_BAT_HEALTH): sensor.sensor_schema(
                 unit_of_measurement="%",
                 icon="mdi:heart-pulse",
                 accuracy_decimals=0,
-            ),
-            cv.Optional(CONF_BAT_LEVEL_BARS): sensor.sensor_schema(
-                icon="mdi:battery",
-                accuracy_decimals=0,
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_RAIN_DELAY): sensor.sensor_schema(
                 unit_of_measurement="min",
                 icon="mdi:weather-rainy",
                 accuracy_decimals=0,
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_RAIN_ADC): sensor.sensor_schema(
                 icon="mdi:water",
@@ -143,29 +143,28 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_IS_DOCKED): binary_sensor.binary_sensor_schema(
                 device_class="connectivity",
             ),
-            cv.Optional(CONF_HAS_ERROR): binary_sensor.binary_sensor_schema(
-                device_class="problem",
-            ),
-            cv.Optional(CONF_IS_LOCKED): binary_sensor.binary_sensor_schema(
-                icon="mdi:lock",
-            ),
             cv.Optional(CONF_IS_RETURNING): binary_sensor.binary_sensor_schema(
                 icon="mdi:home-import-outline",
             ),
             cv.Optional(CONF_DEVICE_NAME): text_sensor.text_sensor_schema(
                 icon="mdi:label",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_MODEL): text_sensor.text_sensor_schema(
                 icon="mdi:information",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_SERIAL): text_sensor.text_sensor_schema(
                 icon="mdi:barcode",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_FIRMWARE_VERSION): text_sensor.text_sensor_schema(
                 icon="mdi:package-up",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_BATTERY_NAME): text_sensor.text_sensor_schema(
                 icon="mdi:battery-info",
+                entity_category="diagnostic",
             ),
             cv.Optional(CONF_MOWER_STATE): text_sensor.text_sensor_schema(
                 icon="mdi:state-machine",
@@ -225,7 +224,6 @@ async def to_code(config):
         (CONF_TOTAL_MINUTES, "set_total_minutes_sensor"),
         (CONF_ON_MINUTES, "set_on_minutes_sensor"),
         (CONF_BAT_HEALTH, "set_bat_health_sensor"),
-        (CONF_BAT_LEVEL_BARS, "set_bat_level_bars_sensor"),
         (CONF_RAIN_DELAY, "set_rain_delay_sensor"),
         (CONF_RAIN_ADC, "set_rain_adc_sensor"),
     ]:
@@ -237,8 +235,6 @@ async def to_code(config):
         (CONF_IS_MOWING, "set_is_mowing_sensor"),
         (CONF_IS_CHARGING, "set_is_charging_sensor"),
         (CONF_IS_DOCKED, "set_is_docked_sensor"),
-        (CONF_HAS_ERROR, "set_has_error_sensor"),
-        (CONF_IS_LOCKED, "set_is_locked_sensor"),
         (CONF_IS_RETURNING, "set_is_returning_sensor"),
         (CONF_RAINING, "set_raining_sensor"),
     ]:

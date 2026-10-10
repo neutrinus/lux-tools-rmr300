@@ -1,13 +1,16 @@
+# ESPHome configuration for the SNK robot mower display board (ESP32).
+# See docs/install.md. Needs a secrets.yaml with wifi_ssid, wifi_password,
+# api_key, ap_password and mower_pin.
+
 substitutions:
-  name: kosiarka
-  friendly_name: Kosiarka
+  name: mower
+  friendly_name: Mower
 
 external_components:
-  # Built on another machine, so the component comes from GitHub.
-  # To test a branch before merging, change @main to @<branch>.
+  # To test a branch, change @main to @<branch>.
   - source: github://neutrinus/lux-tools-rmr300@main:components
     components: [snk_mower]
-    refresh: 10s
+    refresh: 1h
 
 esphome:
   name: ${name}
@@ -23,7 +26,7 @@ esp32:
       sram1_as_iram: true
 
 logger:
-  baud_rate: 0
+  baud_rate: 0  # UART0 pins are not used by the mower link, but keep the console quiet
   level: DEBUG
 
 wifi:
@@ -31,15 +34,21 @@ wifi:
   password: !secret wifi_password
   ap:
     ssid: ${friendly_name} Fallback Hotspot
-    password: "Hxye5fmx2yDo"
+    password: !secret ap_password
 
 captive_portal:
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
 
 time:
   - platform: sntp
     id: mower_time
-    # Night mode for the display from 20:00 to 06:00. It can still be
-    # toggled by hand in between; the next boundary sets it again.
+    # Dim the display from 20:00 to 06:00.
     on_time:
       - seconds: 0
         minutes: 0
@@ -65,13 +74,13 @@ time:
                 else
                   id(display_night).turn_off();
 
-api:
-  encryption:
-    key: "NDgm+gGpAoan2fh1f71mGv9lMga8nOynabbt8gF3JRM="
+globals:
+  - id: night_mode_initialized
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
-ota:
-  - platform: esphome
-
+# Link to the main board (U13), connector J8.
 uart:
   id: mower_uart
   tx_pin: GPIO17
@@ -82,148 +91,138 @@ uart:
 snk_mower:
   id: my_mower
   uart_id: mower_uart
-  pin: !secret mower_pin  # 4-digit PIN set on the mower
+  pin: !secret mower_pin  # the 4-digit PIN set on the mower
   display_clk: 33
   display_mosi: 25
   display_cs: 32
   buzzer_pin: 27
-  # Rain sensor: electrodes driven from GPIO18/GPIO5, read on ADC GPIO36.
-  rain_pin: 36
+  rain_pin: 36  # electrodes driven from GPIO18/GPIO5
 
-  battery_level:
-    name: "${friendly_name} Battery Level"
-  error_code:
-    name: "${friendly_name} Error Code"
-  light_level:
-    name: "${friendly_name} Light Level"
-  work_area:
-    name: "${friendly_name} Work Area"
-  cut_area:
-    name: "${friendly_name} Cut Area"
-  total_minutes:
-    name: "${friendly_name} Total Minutes"
-  on_minutes:
-    name: "${friendly_name} On Minutes"
-  bat_health:
-    name: "${friendly_name} Battery Health"
-  bat_level_bars:
-    name: "${friendly_name} Battery Bars"
-  rain_delay:
-    name: "${friendly_name} Rain Delay"
-  rain_adc:
-    name: "${friendly_name} Rain Sensor ADC"
-
-  is_mowing:
-    name: "${friendly_name} Is Mowing"
-  is_charging:
-    name: "${friendly_name} Is Charging"
-  is_docked:
-    name: "${friendly_name} Is Docked"
-  has_error:
-    name: "${friendly_name} Has Error"
-  is_locked:
-    name: "${friendly_name} Is Locked"
-  is_returning:
-    name: "${friendly_name} Is Returning"
-  raining:
-    name: "${friendly_name} Raining"
-
-  device_name:
-    name: "${friendly_name} Device Name"
-  model:
-    name: "${friendly_name} Model"
-  serial:
-    name: "${friendly_name} Serial"
-  firmware_version:
-    name: "${friendly_name} Firmware Version"
-  battery_name:
-    name: "${friendly_name} Battery Name"
+  # Main entities
   mower_state:
-    name: "${friendly_name} Mower State"
+    name: "State"  # idle, mowing, trimming, returning, charging, docked, error, locked
+  battery_level:
+    name: "Battery"
+  error_code:
+    name: "Error Code"  # 0 = no error
+  raining:
+    name: "Raining"
 
-# WiFi RSSI of the display board. The mower drives around the garden, so this
-# gives a rough idea of where it is.
+  # Diagnostics, disabled in Home Assistant by default
+  cut_area:
+    name: "Cut Area"
+    disabled_by_default: true
+  work_area:
+    name: "Work Area"
+    disabled_by_default: true
+  total_minutes:
+    name: "Total Minutes"
+    disabled_by_default: true
+  on_minutes:
+    name: "On Minutes"
+    disabled_by_default: true
+  bat_health:
+    name: "Battery Health"
+    disabled_by_default: true
+  rain_delay:
+    name: "Rain Delay"
+    disabled_by_default: true
+  rain_adc:
+    name: "Rain Sensor ADC"
+    disabled_by_default: true
+  light_level:
+    name: "Light Level"
+    disabled_by_default: true
+  device_name:
+    name: "Device Name"
+    disabled_by_default: true
+  model:
+    name: "Model"
+    disabled_by_default: true
+  serial:
+    name: "Serial"
+    disabled_by_default: true
+  firmware_version:
+    name: "Mainboard Firmware"
+    disabled_by_default: true
+  battery_name:
+    name: "Battery Type"
+    disabled_by_default: true
+
 sensor:
   - platform: wifi_signal
-    name: "${friendly_name} WiFi Signal"
-    update_interval: 30s
+    name: "WiFi Signal"
+    update_interval: 60s
+    entity_category: diagnostic
 
-# Front-panel buttons on the display board (from the original firmware, see
-# 20261009_claude_investigation.md): active low, need the internal pull-up.
-# START then OK = start mowing, HOME then OK = return to station (3 s window),
-# the same key commands the original firmware sends to the mainboard.
-# ON (K4) is not wired to the ESP32.
+# Front buttons on the display board, active low. START or HOME, then OK
+# within 3 s, like the original firmware. Not exposed to Home Assistant.
 binary_sensor:
   - platform: gpio
+    id: key_start
+    internal: true
     pin:
       number: GPIO22
       mode: INPUT_PULLUP
       inverted: true
-    name: "${friendly_name} START Button"
     filters:
       - delayed_on_off: 50ms
     on_press:
       - lambda: 'id(my_mower).key_start();'
   - platform: gpio
+    id: key_home
+    internal: true
     pin:
       number: GPIO21
       mode: INPUT_PULLUP
       inverted: true
-    name: "${friendly_name} HOME Button"
     filters:
       - delayed_on_off: 50ms
     on_press:
       - lambda: 'id(my_mower).key_home();'
   - platform: gpio
+    id: key_ok
+    internal: true
     pin:
       number: GPIO19
       mode: INPUT_PULLUP
       inverted: true
-    name: "${friendly_name} OK Button"
     filters:
       - delayed_on_off: 50ms
     on_press:
       - lambda: 'id(my_mower).key_ok();'
 
-
 button:
   - platform: template
-    name: "${friendly_name} Start Mowing"
+    name: "Start Mowing"
     icon: "mdi:play"
     on_press:
       - lambda: 'id(my_mower).start_mowing();'
   - platform: template
-    name: "${friendly_name} Return to Dock"
+    name: "Return to Dock"
     icon: "mdi:home-import-outline"
     on_press:
       - lambda: 'id(my_mower).return_to_dock();'
   - platform: template
-    name: "${friendly_name} Stop"
+    name: "Stop"
     icon: "mdi:stop"
     on_press:
       - lambda: 'id(my_mower).stop_mowing();'
   - platform: template
-    name: "${friendly_name} Trim Edge"
+    name: "Trim Edge"  # only from the station
     icon: "mdi:vector-square"
     on_press:
       - lambda: 'id(my_mower).trim_edge();'
 
+# Dims the display (display_night_brightness, default 20 %). Driven by the
+# time schedule above, not exposed to Home Assistant.
 switch:
-  # Dims the front display (display_night_brightness, default 20 %).
-  # Switched automatically at 20:00 and 06:00, see time: above.
   - platform: template
     id: display_night
-    name: "${friendly_name} Display Night Mode"
-    icon: "mdi:weather-night"
+    internal: true
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     turn_on_action:
       - lambda: 'id(my_mower).set_display_night(true);'
     turn_off_action:
       - lambda: 'id(my_mower).set_display_night(false);'
-
-globals:
-  - id: night_mode_initialized
-    type: bool
-    restore_value: no
-    initial_value: 'false'

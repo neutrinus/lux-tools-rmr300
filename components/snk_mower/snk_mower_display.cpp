@@ -233,8 +233,6 @@ void SnkMower::publish_mower_state(MowerState state) {
     is_charging_sensor_->publish_state(state == MowerState::CHARGING);
   if (is_docked_sensor_)
     is_docked_sensor_->publish_state(state == MowerState::DOCKED || state == MowerState::CHARGING);
-  if (has_error_sensor_)
-    has_error_sensor_->publish_state(state == MowerState::ERROR_STATE || state == MowerState::LOCKED);
   if (is_returning_sensor_)
     is_returning_sensor_->publish_state(state == MowerState::RETURNING);
   if (mower_state_sensor_)

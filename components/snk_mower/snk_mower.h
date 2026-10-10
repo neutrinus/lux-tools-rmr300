@@ -64,15 +64,12 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_total_minutes_sensor(sensor::Sensor *s) { total_minutes_sensor_ = s; }
   void set_on_minutes_sensor(sensor::Sensor *s) { on_minutes_sensor_ = s; }
   void set_bat_health_sensor(sensor::Sensor *s) { bat_health_sensor_ = s; }
-  void set_bat_level_bars_sensor(sensor::Sensor *s) { bat_level_bars_sensor_ = s; }
   void set_rain_delay_sensor(sensor::Sensor *s) { rain_delay_sensor_ = s; }
   void set_rain_adc_sensor(sensor::Sensor *s) { rain_adc_sensor_ = s; }
 
   void set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
   void set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
   void set_is_docked_sensor(binary_sensor::BinarySensor *s) { is_docked_sensor_ = s; }
-  void set_has_error_sensor(binary_sensor::BinarySensor *s) { has_error_sensor_ = s; }
-  void set_is_locked_sensor(binary_sensor::BinarySensor *s) { is_locked_sensor_ = s; }
   void set_is_returning_sensor(binary_sensor::BinarySensor *s) { is_returning_sensor_ = s; }
   void set_raining_sensor(binary_sensor::BinarySensor *s) { raining_sensor_ = s; }
 
@@ -244,15 +241,12 @@ class SnkMower : public Component, public uart::UARTDevice {
   sensor::Sensor *total_minutes_sensor_{nullptr};
   sensor::Sensor *on_minutes_sensor_{nullptr};
   sensor::Sensor *bat_health_sensor_{nullptr};
-  sensor::Sensor *bat_level_bars_sensor_{nullptr};
   sensor::Sensor *rain_delay_sensor_{nullptr};
   sensor::Sensor *rain_adc_sensor_{nullptr};
 
   binary_sensor::BinarySensor *is_mowing_sensor_{nullptr};
   binary_sensor::BinarySensor *is_charging_sensor_{nullptr};
   binary_sensor::BinarySensor *is_docked_sensor_{nullptr};
-  binary_sensor::BinarySensor *has_error_sensor_{nullptr};
-  binary_sensor::BinarySensor *is_locked_sensor_{nullptr};
   binary_sensor::BinarySensor *is_returning_sensor_{nullptr};
   binary_sensor::BinarySensor *raining_sensor_{nullptr};
 

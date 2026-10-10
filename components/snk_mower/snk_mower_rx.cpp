@@ -121,8 +121,6 @@ void SnkMower::handle_json(const JsonDocument &doc) {
       break;
     case proto::MB_LOCK: {
       bool locked = (doc["lock"] | 0) != 0;
-      if (is_locked_sensor_)
-        is_locked_sensor_->publish_state(locked);
       // U13 asks for the PIN; the original sends it once the user has typed it.
       if (locked && pin_retries_ < 5) {
         ESP_LOGI(TAG, "MB locked, sending PIN");
@@ -130,10 +128,6 @@ void SnkMower::handle_json(const JsonDocument &doc) {
       }
       break;
     }
-    case proto::MB_BATTERY:
-      if (bat_level_bars_sensor_ && doc["bat"].is<int>())
-        bat_level_bars_sensor_->publish_state(doc["bat"].as<int>());
-      break;
     case proto::MB_MAP_CFG:
       if (work_area_sensor_ && doc["area"].is<int>())
         work_area_sensor_->publish_state(doc["area"].as<int>());
@@ -176,7 +170,6 @@ void SnkMower::handle_status(const JsonDocument &doc) {
       s->publish_state(doc[key].as<int>());
   };
   publish("error", error_code_sensor_);
-  publish("bat_lv", bat_level_bars_sensor_);
   publish("bat_per", battery_level_sensor_);
   publish("rain_delay", rain_delay_sensor_);
   publish("bat_health", bat_health_sensor_);
@@ -187,8 +180,15 @@ void SnkMower::handle_status(const JsonDocument &doc) {
 
   if (doc["state"].is<int>())
     state_ = doc["state"];
-  if (doc["error"].is<int>())
+  if (doc["error"].is<int>()) {
     error_code_ = doc["error"];
+  } else if (doc["state"].is<int>() && state_ != 7) {
+    // U13 only sends "error" with state 7, so any other state means no
+    // error. Publish 0 so the sensor is never left unknown.
+    error_code_ = 0;
+    if (error_code_sensor_ && (!error_code_sensor_->has_state() || error_code_sensor_->state != 0))
+      error_code_sensor_->publish_state(0);
+  }
   if (doc["bat_per"].is<int>())
     battery_percent_ = doc["bat_per"];
   if (doc["station"].is<bool>())
@@ -252,8 +252,6 @@ void SnkMower::handle_pin_result(const JsonDocument &doc) {
   if (doc["result"].as<bool>()) {
     ESP_LOGI(TAG, "PIN accepted");
     pin_retries_ = 0;
-    if (is_locked_sensor_)
-      is_locked_sensor_->publish_state(false);
     publish_mower_state(MowerState::IDLE);
     return;
   }

@@ -151,6 +151,10 @@ void SnkMower::link_up(const char *why) {
   send_cmd(proto::ESP_GET_SCHEDULE);
   send_cmd(proto::ESP_GET_RAIN_CFG);
   send_cmd(proto::ESP_GET_ZONES);
+  // U13 sends device info only while booting. After an ESP-only restart, one
+  // POLL makes it send DEVICE_INFO and HW_VERSIONS again (repeated POLLs
+  // would make it repeat them every time).
+  send_cmd(proto::ESP_POLL);
 }
 
 void SnkMower::link_guard_callback(void *arg) {
