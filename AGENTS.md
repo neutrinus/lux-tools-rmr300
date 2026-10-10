@@ -43,7 +43,7 @@ python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> 
 
 ## Protocol facts that docs get wrong
 
-- Real link: **JSON over UART 230400 8N1**, frame `&{json}<CRC>#` (**single** `#`), Dallas/Maxim CRC-8 (poly 0x31) over the JSON bytes only. Bus: ESP32 ↔ **U13** directly (GD32F305 `dpport`, USART0; motors/PIN/EEPROM U22). U16 (GD32F303) is **not** a bridge: it is the border-wire/lift MCU on a separate U13 port (`bdport`). Evidence: `20261009_claude_investigation.md`.
+- Real link: **JSON over UART 230400 8N1**, frame `&{json}<CRC>#` (**single** `#`), Dallas/Maxim CRC-8 (poly 0x31) over the JSON bytes only. Bus: ESP32 ↔ **U13** directly (GD32F305 `dpport`, USART0; motors/PIN/env on SPI NOR). U16 (GD32F303) is **not** a bridge: it is the border-wire/lift MCU on a separate U13 port (`bdport`). Evidence: `20261009_claude_investigation.md`.
 - **Ignore banner direction tables in `ha.md` §2** (generated from constants; wrong). Use `PROTOCOLS.md`.
 - **Ignore the binary protocol `0xAA 0x55` @115200 in `esp32/notes/ESP32.md`** — it is wrong.
 - `captures/2026-06-21/README.md` has **reversed D1/D2 labels**; direction labels in `captures/README.md` (01–06) are correct.
@@ -53,7 +53,7 @@ python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> 
 
 - **Corrected 2026-10-09:** mowing *can* be started over UART. The original firmware does it on START→OK: `0x10000007`, then `0x10000001` (capture `2026-06-21/trzeci`, MB answers `state:8`). Earlier attempts failed because they used MB→ESP commands. Buttons START/HOME/OK are on ESP32 GPIO22/21/19 (pull-up, active low), not on U16. Remote app commands map to `0x10000021` start, `0x10000022` home, `0x10000023` stop, `0x10000015` edge trim (firmware only, untested). See `20261009_claude_investigation.md`.
 - **U13 shuts the mower off ~16 s after boot if the ESP misses the handshake**: answer every `0x40000009` with ESP_INFO and every `0x40000008` with ESP_INIT `{"init":3}`, within ~2.5 s / ~1 s. Never stay silent for >3 s while running. `0x10000004/14/24` is a **power-off** command. See `20261009_claude_investigation.md` §10.
-- **PIN is not in the ESP32**; it lives in the U13 KV-store / EEPROM U22. The ESP only forwards an entered PIN.
+- **PIN is not in the ESP32**; it lives in the U13 EasyFlash env (`pwd`) on the external SPI NOR (W25Q64), cached in RAM at `0x2000027C`. `FORMATFLASH.json` (non-empty) on a stick in J6 erases it with the rest of the env. The ESP only forwards an entered PIN.
 - Root cause of the last failure: custom firmware never sent the `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` handshake, so the MB (U13) ignored it (`ha.md` §14).
 
 ## Git gotchas
