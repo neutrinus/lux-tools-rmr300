@@ -191,8 +191,9 @@ void SnkMower::handle_status(const JsonDocument &doc) {
     s = MowerState::DOCKED;
   } else {
     switch (state_) {
-      case 2:  // mowing
-      case 8:  // leaving the station to mow (captures/2026-06-21/trzeci)
+      // 2 is not mowing: in every capture and on the mower it appears only
+      // right after the PIN result, followed by 0x41000003 and state 6.
+      case 8:  // mowing, sent right after 0x41000005 (departure)
         s = MowerState::MOWING;
         break;
       case 9:  // returning (captures/2026-06-21/czwarty)

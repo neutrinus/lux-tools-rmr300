@@ -149,7 +149,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x40000013` | 1073741843 | `len` | CUT_TIME_QUERY | MB queries max cut time (min) |
 | `0x40000014` | 1073741844 | — | UNKNOWN_14 | Nieznane |
 | `0x40000020` | 1073741856 | `lv` | LIGHT | Light sensor level |
-| `0x40000021` | 1073741857 | — | BOOT_ACK | Boot acknowledge |
+| `0x40000021` | 1073741857 | — | BOOT_ACK? | Przy starcie, ale też co ~0,5 s w trakcie koszenia (z `0x40000020 {"lv":255}`); znaczenie niepewne |
 | `0x41000002` | 1090519042 | `lock:0/1` | LOCK | Lock state |
 | `0x41000003` | 1090519043 | — | EXEC_ACTION | Akcja wykonana (po STOP/akcji) |
 | `0x41000004` | 1090519044 | `err` | ERROR_NOTIFY | Error code notification |
@@ -209,12 +209,12 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 
 | State | Znaczenie |
 |-------|-----------|
-| 0 | Idle (po włączeniu, przed PIN) |
-| 1 | Ready (PIN odblokowany) |
-| 2 | **MOWING** (lub jazda/odjazd) |
-| 6 | Stop / pauza |
+| 0 | Po włączeniu, przed `{"lock":1}` |
+| 1 | Czeka na PIN (po `{"lock":1}`, przed `0x41000020`) |
+| 2 | Chwilowy, zaraz po `0x41000020 {"result":1}`; potem zawsze `0x41000003` i `state:6`. **Nie koszenie** (wszystkie capture'y i test 2026-10-10) |
+| 6 | Stop / gotowa (stan spoczynkowy po odblokowaniu i po każdym STOP) |
 | 7 | Error (z polem `error:N`) |
-| 8 | Seek wire? (przed `0x41000005` bez pwd) |
+| 8 | **Koszenie**: po `0x10000001` przychodzi `0x41000005` (odjazd) i `state:8` (potwierdzone na kosiarce 2026-10-10) |
 | 9 | **RETURNING TO DOCK** |
 | 10 | **CHARGING** |
 | 11 | **SHUTDOWN / POWER OFF** |

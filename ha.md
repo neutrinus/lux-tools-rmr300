@@ -1270,3 +1270,33 @@ Diagnostyka dodana do komponentu: każda nieokresowa ramka RX w logu (`RX {...}`
 - Brak reakcji na klawisze **nie** wynika z kodowania ramek ani z dekodera komend w U13. Bramka jest w procesie oczekiwania U13.
 - Hipoteza główna [I]: kosiarka jest zablokowana PIN-em (`lock:1`), bo U13 nie przyjął PIN-u wysłanego za wcześnie albo jego wynik (`0x41000020`) był ignorowany. Za: w oryginale między PIN-em a START jest `0x41000020 {"result":1}`, u nas nigdy go nie widzieliśmy. Przeciw: nie wiadomo, czy lock blokuje akcje w `0x0806ab90`.
 - Do sprawdzenia następnym razem: boot trace po włączeniu kosiarki (czy przychodzi `lock:1`, czy `0x41000020` ma `result:1`), potem START+OK z przycisków.
+
+### Aktualizacja 17:15: kosiarka kosi ze sterowania ESPHome ✅
+
+Po wersji `050f3c1` (PIN wysyłany po `{"lock":1}`) **koszenie, STOP i powrót do stacji działają** z HA i z przycisków na kosiarce. Hipoteza o blokadzie PIN-em potwierdzona.
+
+Boot trace (restart ESP po OTA, czasy w s od startu ESP):
+
+```
+0.145 TX 0x40000004 (ESP_BOOT)            0.252 RX 0x41000002 {"lock":1}
+0.146 TX 0x30000028 {"state":0}           0.253 TX 0x41000005 {"pwd":9633}
+0.147 TX 0x22000000 {"rain":1}            0.275 RX 0x330000A0 {"state":1,"bat_per":100,...}
+0.245 RX 0x20000001                       0.291 RX 0x41000020 {"result":1}
+0.247 RX 0x20000004  → link up            0.314 RX 0x330000A0 {"state":2}
+0.249 TX 0x300000A6 / A7 / A8 (zapytania) 0.416 RX 0x41000003
+                                          0.417 RX 0x330000A0 {"state":6}
+52.203 TX 0x10000007   52.710 TX 0x10000001   52.755 RX 0x41000005   52.777 RX state:8  (kosi)
+62.855 TX 0x10000023   62.954 RX 0x41000003   62.970 RX state:6                        (stop)
+71.353 TX 0x10000007   71.859 TX 0x10000002   71.897 RX 0x41000006   71.920 RX state:9  (do stacji)
+```
+
+Twarde fakty:
+- **U13 odpowiada na `ESP_BOOT` (`0x40000004`) od nowa: `0x20000001`, `0x20000004`, potem `lock:1` i pełny status**, także gdy restartuje się tylko ESP. Nie trzeba wyłączać kosiarki, żeby przejść przez blokadę.
+- **Bez `0x41000020 {"result":1}` U13 ignoruje wszystkie komendy klawiszy i zdalne** (bez żadnej odpowiedzi). To była bramka w procesie oczekiwania. Wcześniej PIN szedł raz, przy `link up`; w poprzednich próbach wynik nie przychodził albo nie był widoczny [I: dlaczego U13 nie przyjął wcześniejszego PIN-u — nieustalone; teraz PIN idzie ~1 ms po `lock:1`].
+- `0x10000023` (zdalny stop) działa: `0x41000003` + `state:6`.
+- `0x10000007` + `0x10000002` (HOME+OK) działa: `0x41000006` + `state:9`.
+- Stany: 1 = czeka na PIN, **2 = chwilowy po odblokowaniu (nie koszenie)**, 6 = stop/gotowa, 8 = koszenie, 9 = powrót. `state:2` we wszystkich 9 capture'ach występuje tylko po wyniku PIN-u. Komponent mapował 2 na koszenie; poprawione, tabela w `PROTOCOLS.md` też.
+- W trakcie koszenia MB wysyła co ~0,5 s na zmianę `0x40000020 {"lv":255}` i `0x40000021`.
+- Komenda START ma odpowiedź w ~45 ms, STOP w ~100 ms.
+
+Otwarte: `0x10000015` (krawędź) testowane tylko poza stacją, bez reakcji (zgodnie z firmware: tylko ze stacji). `0x10000021/22` (zdalny start/powrót) nieprzetestowane.
