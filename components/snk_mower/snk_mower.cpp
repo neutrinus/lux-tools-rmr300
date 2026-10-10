@@ -12,7 +12,7 @@ static const char *const TAG = "snk_mower";
 // receive timeout, 0x080706a0). The guard steps in after 1.5 s of silence.
 static constexpr uint32_t LINK_GUARD_PERIOD_MS = 500;
 static constexpr uint32_t LINK_GUARD_SILENCE_MS = 1500;
-// Intervals measured on the original firmware (captures/02-boot-pin).
+// Intervals measured on the original firmware (captures/02-boot-start-error).
 static constexpr uint32_t POLL_INTERVAL_MS = 100;
 static constexpr uint32_t KEEPALIVE_INTERVAL_MS = 500;
 static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;

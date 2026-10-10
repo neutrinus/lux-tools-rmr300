@@ -7,7 +7,7 @@
   gd32dis.py BIN lit VALUE           4-byte-aligned literal-pool words equal to VALUE
   gd32dis.py BIN periph              literal-pool words that are USART/UART/GPIO bases
 
-BIN is a raw dump mapped at 0x08000000 (u13/firmware/u13_flash.bin, u16/firmware/u16_flash.bin).
+BIN is a raw dump mapped at 0x08000000 (dumps/u13/u13_flash.bin, dumps/u16/u16_flash.bin).
 """
 import argparse, struct, sys
 import capstone

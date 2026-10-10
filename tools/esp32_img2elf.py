@@ -31,7 +31,7 @@ def main():
     # Each segment = 8-byte header (load addr, length) followed by its data; the
     # data starts 8 bytes AFTER the header offset. (The previous hard-coded table
     # used header offsets as data offsets, shifting every section by 8 bytes and
-    # producing the broken esp32/firmware/disasm.s.)
+    # producing the broken dumps/esp32/disasm.s.)
     if img[0] != 0xE9:
         sys.exit('not an ESP32 app image')
     entry = struct.unpack('<I', img[4:8])[0]

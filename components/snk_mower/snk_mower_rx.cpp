@@ -195,7 +195,9 @@ void SnkMower::handle_status(const JsonDocument &doc) {
     station_ = doc["station"];
 
   MowerState s;
-  if (station_ && (state_ == 0 || state_ == 1)) {
+  // In the station and not doing anything: before the PIN (0, 1), right after
+  // it (2) or stopped (6).
+  if (station_ && (state_ == 0 || state_ == 1 || state_ == 2 || state_ == 6)) {
     s = MowerState::DOCKED;
   } else {
     switch (state_) {
@@ -207,7 +209,7 @@ void SnkMower::handle_status(const JsonDocument &doc) {
       case 16:  // edge trim: 0x10000015 from the station, answered by 0x41000013
         s = MowerState::TRIMMING;
         break;
-      case 9:  // returning (captures/2026-06-21/czwarty)
+      case 9:  // returning (captures/10-dock-charge)
         s = MowerState::RETURNING;
         break;
       case 10:

@@ -7,8 +7,7 @@ what shows cause and effect (e.g. START pressed -> ESP sends 0x10000007 ~75 ms l
 
   la_decode.py CAPTURE --uart D0=MB,D1=ESP [--lines D2=START] [--all]
 
-CAPTURE: *.vcd (text VCD) or *.sr (sigrok session zip; note captures/2026-06-21/*/capture.vcd
-are actually .sr zips). --all keeps the periodic heartbeat/keepalive/poll frames.
+CAPTURE: *.vcd (text VCD) or *.sr (sigrok session zip, captures 07-10). --all keeps the periodic heartbeat/keepalive/poll frames.
 Commands are printed as decimal JSON plus a hex cmd id.
 """
 import argparse, bisect, json, re, sys, zipfile

@@ -1,69 +1,64 @@
 # AGENTS.md
 
-Reverse-engineering repo for the **SNK OEM robot mower** (Lux Tools A-RMR-300-24 and ~15 rebrands; same PCBs `80102372-01` / `80102373-01`). Two largely independent workstreams — read the right doc first:
+ESPHome replacement firmware and technical documentation for the **SNK OEM robot mower** (Lux Tools A-RMR-300-24 and rebrands; PCBs `80102372-01` / `80102373-01`). The component in `components/snk_mower/` is feature-complete and runs on the owner's mower. A separate, unrelated tool hunts used-mower prices (`tools/search_mowers.py`, `results/`); leave it alone unless asked.
 
-1. **Firmware / protocol** (reverse engineering + ESPHome replacement). The ESPHome component drives the mower as of 2026-10-10.
-2. **Used-mower price hunting** via `tools/search_mowers.py` (active).
+## Rules for this repo
 
-## Read these first
+- **Everything committed is in English** (docs, comments, commit messages), even though the owner chats in Polish. Exception: `tools/search_mowers.py`, `results/` and `docs/reference/user-manual.txt` stay as they are.
+- **Documentation describes the current technical state only**: no history, no "previously we thought", no dated investigation logs. Put new facts into the matching file in `docs/`. Mark uncertain claims **[I]** (inferred) next to **[F]** (from firmware) / **[C]** (seen on the wire or on the mower) where the file uses markers.
+- The owner's Home Assistant builds its own config on another machine from `github://neutrinus/lux-tools-rmr300@main`: a component change reaches the mower only after **compile, commit and push**. Compile locally before pushing.
 
-- `README.md` — map of the whole repo and rebrand/model table.
-- `FIRMWARE_MAP.md` — layout, modules, key functions and data structures of all three firmwares (ESP32, U13, U16).
-- `ha.md` — firmware status + history. **§15 is the current state** (field test 2026-10-10); earlier sections are history.
-- `PROTOCOLS.md` — **authoritative** command directions and protocol.
-- `captures/README.md` — logic-analyzer setup + scenario index.
+## Map
+
+| Path | What |
+|---|---|
+| `README.md` | Overview, feature list, supported models, documentation index |
+| `docs/install.md`, `docs/component.md` | Installation guide, component reference |
+| `docs/protocol.md` | **Authoritative** display ↔ U13 protocol (commands, directions, states, sequences) |
+| `docs/hardware.md` | Boards, pinouts, connectors |
+| `docs/firmware-esp32.md`, `firmware-u13.md`, `firmware-u16.md` | Original firmware maps (addresses checked against `dumps/`) |
+| `docs/usb.md`, `docs/battery.md`, `docs/pin-recovery.md`, `docs/disassembly.md`, `docs/reverse-engineering.md` | The rest |
+| `esphome/snk-mower.yaml` | Example configuration (`esphome/secrets.yaml.example`) |
+| `dumps/` | Firmware dumps (`esp32`, `u13` + Ghidra exports, `u16`, `mi302`) |
+| `captures/` | LA captures of the original firmware, index in `captures/README.md` |
+| `tools/re/` | `esp32dis.py`, `gd32dis.py`, `la_decode.py` (capstone ≥ 6), see `tools/re/README.md` |
+| `tools/swd/` | OpenOCD dump scripts (run from the repo root) |
 
 ## Commands
 
-ESPHome firmware (config `snk-mower.yaml`, custom component `components/snk_mower/`):
+Local compile (system Python 3.14 breaks ESPHome's protobuf; use the uv venv):
 ```bash
-esphome run snk-mower.yaml        # global ~/.local/bin/esphome 2026.6.0; run from repo root
-```
-- `esphome` is **not** in `.venv`. As of 2026-10-09 `esphome config`/`compile` crash on Python 3.14 with a protobuf `TypeError: Metaclasses with custom tp_new are not supported` — suspect an env/protobuf issue, don't assume the YAML is broken.
-- `secrets.yaml` (gitignored) is **required** by the YAML: `wifi_ssid`, `wifi_password`, `mower_pin` (4 digits).
-- The user's HA builds `kosiarka.yaml` on another machine from `github://neutrinus/lux-tools-rmr300@main`: a fix reaches the mower only after commit + push. For a local build: `uv venv --python 3.13 .venv-esphome && VIRTUAL_ENV=.venv-esphome uv pip install esphome` (locally excluded from git) with `source: {type: local, path: components}` and a dummy `secrets.yaml`.
-
-Offer scan (`.venv` exists only for this; Python is system 3.14):
-```bash
-source .venv/bin/activate
-python3 tools/search_mowers.py            # OLX(API) + Kleinanzeigen + Blocket + Allegro
-python3 tools/search_mowers.py --login    # one-time: solve Allegro DataDome captcha headful
-python3 tools/search_mowers.py --all-prices --portals olx,ka
-```
-- Needs `curl_cffi` (installed) and Playwright Firefox. Allegro session persists in `.browser_profile_allegro/`.
-- Playwright Firefox can fail to launch from a dangling lock: `rm -f ~/.cache/ms-playwright/firefox-1522/firefox/lock`.
-
-Other tools:
-```bash
-python3 tools/decode_capture.py captures/01-boot/capture.vcd   # sigrok-based UART decode
-python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> ELF
-# tools/re/: esp32dis.py, gd32dis.py, la_decode.py (capstone>=6), see tools/re/README.md
-# tools/*.cfg = OpenOCD/SWD scripts for dumping u13/u16 (GD32) and EEPROM
+uv venv --python 3.13 .venv-esphome && VIRTUAL_ENV=.venv-esphome uv pip install esphome   # once
+# copy esphome/snk-mower.yaml to a scratch dir, replace the github source with
+#   - source: {type: local, path: <repo>/components}
+# add a dummy secrets.yaml (keys from esphome/secrets.yaml.example), then:
+.venv-esphome/bin/esphome compile <scratch>/snk-mower.yaml
 ```
 
-## Protocol facts that docs get wrong
+Captures and dumps:
+```bash
+python3 tools/re/la_decode.py captures/09-mow-stop-home/capture.sr --uart D1=ESP,D2=MB --lines D3=START,D4=OK
+python3 tools/re/gd32dis.py dumps/u13/u13_flash.bin dis 08063808 08063900
+python3 tools/re/esp32dis.py dumps/esp32/ota_0.bin str "KeyNum"
+```
 
-- Real link: **JSON over UART 230400 8N1**, frame `&{json}<CRC>#` (**single** `#`), Dallas/Maxim CRC-8 (poly 0x31) over the JSON bytes only. Bus: ESP32 ↔ **U13** directly (GD32F305 `dpport`, USART0; motors/PIN/env on SPI NOR). U16 (GD32F303) is **not** a bridge: it is the border-wire/lift MCU on a separate U13 port (`bdport`). Evidence: `20261009_claude_investigation.md`.
-- **Ignore banner direction tables in `ha.md` §2** (generated from constants; wrong). Use `PROTOCOLS.md`.
-- **Ignore the binary protocol `0xAA 0x55` @115200 in `esp32/notes/ESP32.md`** — it is wrong.
-- `captures/2026-06-21/README.md` has **reversed D1/D2 labels**; direction labels in `captures/README.md` (01–06) are correct.
-- `0x33000021/22` are MB acks of the ESP WiFi/BT status frames, **not PIN results**. `0x30000023` resets the PIN to `0000` (cloud `cmd 112`). Cloud MQTT topics are `/<…>/<id>/get|update` on plain `mqtt://server.sk-robot.com`, not `snk/device/...`. Brucke firmware files from io-tech.fi do not fit our bootloader. See `20261010_forum_io-techfi.md`.
-- `0x10000001/2/7` are **key commands, not error ACKs** (START/HOME → `0x10000007`, then OK → `0x10000001` mow / `0x10000002` home).
+Price search (`.venv`, Playwright Firefox, `curl_cffi`):
+```bash
+source .venv/bin/activate && python3 tools/search_mowers.py
+```
+A dangling Playwright lock: `rm -f ~/.cache/ms-playwright/firefox-1522/firefox/lock`.
 
-## Hard-won constraints (don't re-litigate)
+## Facts that are easy to get wrong
 
-- **Corrected 2026-10-09:** mowing *can* be started over UART. The original firmware does it on START→OK: `0x10000007`, then `0x10000001` (capture `2026-06-21/trzeci`, MB answers `state:8`). Earlier attempts failed because they used MB→ESP commands. Buttons START/HOME/OK are on ESP32 GPIO22/21/19 (pull-up, active low), not on U16. Remote app commands map to `0x10000021` start, `0x10000022` home, `0x10000023` stop, `0x10000015` edge trim (firmware only, untested). See `20261009_claude_investigation.md`.
-- **U13 shuts the mower off ~16 s after boot if the ESP misses the handshake**: answer every `0x40000009` with ESP_INFO and every `0x40000008` with ESP_INIT `{"init":3}`, within ~2.5 s / ~1 s. Never stay silent for >3 s while running. `0x10000004/14/24` is a **power-off** command. See `20261009_claude_investigation.md` §10.
-- **Confirmed on the mower 2026-10-10:** start/stop/home work from ESPHome, but only after U13 accepts the PIN. U13 sends `0x41000002 {"lock":1}`; answer with `0x41000005 {"pwd":N}`, wait for `0x41000020 {"result":1}`. Until then every key/remote command is silently ignored. U13 replays the boot sequence (incl. `lock:1`) whenever it gets `ESP_BOOT`. State 2 is a transient after unlock, not mowing; mowing is 8. See `ha.md` §15.
-- **PIN is not in the ESP32**; it lives in the U13 EasyFlash env (`pwd`) on the external SPI NOR (W25Q64), cached in RAM at `0x2000027C`. `FORMATFLASH.json` (non-empty) on a stick in J6 erases it with the rest of the env. The ESP only forwards an entered PIN.
-- Root cause of the last failure: custom firmware never sent the `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` handshake, so the MB (U13) ignored it (`ha.md` §14).
+- The ESP32 talks **directly to U13** (`dpport`, USART0). U16 is the boundary-wire/lift MCU on another U13 port, not a bridge.
+- Frames are JSON `&{json}<CRC8>#` (single `#`) at 230400. The CRC byte can be `{`, so frames start at `&{`.
+- `0x10000001/2/7` are **key commands** (START/HOME → `0x10000007`, OK → `0x10000001` mow / `0x10000002` home), not acks.
+- `0x33000021/22` ack the ESP's WiFi/BT frames; the **PIN result is `0x41000020`**.
+- **No command is acted on until U13 has accepted the PIN** (`{"lock":1}` → `0x41000005 {"pwd":N}` → `0x41000020 {"result":1}`).
+- U13 switches the mower off ~16 s after boot if the handshake (`0x40000009` → ESP_INFO, `0x40000008` → ESP_INIT) is missed, and drops the link after 3 s without frames. `0x10000004/14/24` **power the mower off**.
+- `state` 2 is a transient after unlock, not mowing; mowing is 8, edge trim 16.
+- The PIN lives in U13's env on the SPI NOR, never on the ESP32.
 
 ## Git gotchas
 
-The repo ignores a lot; new files silently won't be committed without `git add -f`:
-- Global: `*.bin`, `*.pdf`, `*.log`, `*.elf`, `*.o`, `__pycache__/`, `.venv/`, `.esphome/`.
-- Dirs: `esp32/`, `u13/decomp/`, `ghidra_proj/`, `sw/ghidra-*/`, `class_scripts/`, `tools/bridge_compile*/`.
-- Env/sensitive: `secrets.yaml`, `.allegro_cookies.json`, `kosiarka-logs*.txt`, `.browser_profile/`, `.browser_profile_allegro/`, `offers/`, `results/`.
-- Tracked files in ignored dirs stay tracked; only *new* files are ignored.
-
-If you need vendored Ghidra tooling, `sw/ghidra-cli/` is a nested project with its own `AGENTS.md`/`CLAUDE.md` (read those there).
+`*.bin`, `*.pdf`, `*.elf`, `*.log` are ignored globally: new dumps or datasheets need `git add -f`. Tracked files stay tracked. `secrets.yaml` is ignored everywhere.

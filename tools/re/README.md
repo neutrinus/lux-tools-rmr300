@@ -8,7 +8,7 @@ python3 -m pip install 'capstone>=6'   # 6.x is the first release with Xtensa (E
 
 | Tool | For | What it does |
 |------|-----|--------------|
-| `esp32dis.py` | ESP32 app image (`esp32/firmware/ota_0.bin`) | Annotated Xtensa disassembly. Resolves `l32r` literals (values and strings) and `call` targets. Also finds strings, xrefs and callers. |
+| `esp32dis.py` | ESP32 app image (`dumps/esp32/ota_0.bin`) | Annotated Xtensa disassembly. Resolves `l32r` literals (values and strings) and `call` targets. Also finds strings, xrefs and callers. |
 | `gd32dis.py` | GD32 raw flash dumps (`u13/…/u13_flash.bin`, `u16/…/u16_flash.bin`), mapped at `0x08000000` | Thumb disassembly with resolved literals. Finds `bl` callers with their argument setup, literal-pool constants and peripheral bases. |
 | `la_decode.py` | Logic-analyser captures (`captures/**/capture.vcd`, `*.sr`) | One time-ordered timeline of both UART directions plus button-line edges. |
 
@@ -17,14 +17,14 @@ python3 -m pip install 'capstone>=6'   # 6.x is the first release with Xtensa (E
 ## esp32dis.py
 
 ```bash
-T=tools/re/esp32dis.py; IMG=esp32/firmware/ota_0.bin
+T=tools/re/esp32dis.py; IMG=dumps/esp32/ota_0.bin
 
 python3 $T $IMG info                          # segments, entry point
 python3 $T $IMG str "button init error"       # where a string lives and which code loads it
 python3 $T $IMG dis 400daf7c 400db01c         # annotated range
 python3 $T $IMG callers 4012cdd0              # who calls gpio_get_level
 python3 $T $IMG xref 3ffc5b18                 # who loads a global (here: UI process context)
-python3 $T $IMG dump esp32/firmware/disasm.s  # regenerate the whole listing (~21 MB)
+python3 $T $IMG dump dumps/esp32/disasm.s  # regenerate the whole listing (~21 MB)
 ```
 
 Example line:
@@ -56,7 +56,7 @@ Useful anchors in `ota_0.bin` (v3.02.02):
 ## gd32dis.py
 
 ```bash
-G=tools/re/gd32dis.py; U13=u13/firmware/u13_flash.bin
+G=tools/re/gd32dis.py; U13=dumps/u13/u13_flash.bin
 
 python3 $G $U13 periph | grep USART           # where USART bases sit in literal pools
 python3 $G $U13 callers 0x805303e             # gpio_input_bit_get callers (port/pin args shown)
@@ -72,11 +72,10 @@ python3 $G $U13 lit 0x40013800                # literal-pool hits for USART0
 L=tools/re/la_decode.py
 
 # captures 01-06: D0 = MB→ESP, D1 = ESP→MB, D2 = START line (01, 02, 04)
-python3 $L captures/04-return-home/capture.vcd --uart D0=MB,D1=ESP --lines D2=START
+python3 $L captures/04-start-home-error/capture.vcd --uart D0=MB,D1=ESP --lines D2=START
 
-# captures/2026-06-21: D1 = ESP TX, D2 = MB TX, D3 = START, D4 = OK
-# (their "capture.vcd" files are really sigrok .sr zips; the tool detects that)
-python3 $L captures/2026-06-21/trzeci/trzeci.sr --uart D1=ESP,D2=MB --lines D3=START,D4=OK
+# captures 07-10 (sigrok .sr): D1 = ESP TX, D2 = MB TX, D3 = START, D4 = OK
+python3 $L captures/09-mow-stop-home/capture.sr --uart D1=ESP,D2=MB --lines D3=START,D4=OK
 ```
 
 Heartbeats, keepalives, polls and WiFi/BT status frames are hidden unless you pass `--all`. Output:

@@ -2,9 +2,8 @@
 
 // Wire protocol between the display board (ESP32) and the main MCU U13.
 // Frames are `&{json}<crc8>#` at 230400 8N1, CRC-8/Maxim over the JSON bytes.
-// Directions and meanings are from the U13 and original ESP32 firmware; see
-// FIRMWARE_MAP.md and 20261009_claude_investigation.md (§10 for the boot
-// handshake and the watchdogs).
+// Directions and meanings are from the U13 and original ESP32 firmware and
+// were confirmed on the mower; see docs/protocol.md.
 
 #include <cstddef>
 #include <cstdint>

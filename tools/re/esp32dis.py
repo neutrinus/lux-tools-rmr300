@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ESP32 (Xtensa LX6) app-image disassembler/xref helper built on capstone >= 6.
 
-Works directly on an ESP-IDF app image (e.g. esp32/firmware/ota_0.bin), no ELF
+Works directly on an ESP-IDF app image (e.g. dumps/esp32/ota_0.bin), no ELF
 or Xtensa binutils needed. Resolves L32R literals (values + strings) and CALLn
 targets, and decodes BEQZ.N/BNEZ.N which capstone 6.0 does not.
 
