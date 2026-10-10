@@ -3,10 +3,11 @@ substitutions:
   friendly_name: Kosiarka
 
 external_components:
-  - source:
-      type: local
-      path: ./components
+  # Built on another machine, so the component comes from GitHub.
+  # To test a branch before merging, change @main to @<branch>.
+  - source: github://neutrinus/lux-tools-rmr300@main:components
     components: [snk_mower]
+    refresh: 10s
 
 esphome:
   name: ${name}

@@ -8,6 +8,7 @@ Reverse-engineering repo for the **SNK OEM robot mower** (Lux Tools A-RMR-300-24
 ## Read these first
 
 - `README.md` — map of the whole repo and rebrand/model table.
+- `FIRMWARE_MAP.md` — layout, modules, key functions and data structures of all three firmwares (ESP32, U13, U16).
 - `ha.md` — firmware status + history. **§14 (H3) is the current root-cause conclusion.**
 - `PROTOCOLS.md` — **authoritative** command directions and protocol.
 - `captures/README.md` — logic-analyzer setup + scenario index.
