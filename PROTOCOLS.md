@@ -130,8 +130,9 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x33000014` | 855638036 | `result` | START_TIME_OK | Start time confirmed |
 | `0x33000015` | 855638037 | `result` | HOURS_SET_OK | Daily hours confirmed |
 | `0x33000017` | 855638039 | `result` | RAIN_SET_OK | Rain config confirmed |
-| `0x33000021` | 855638049 | `result` | PIN_RESULT | PIN verification result |
-| `0x33000022` | 855638050 | `result` | PIN_RESULT2 | PIN verification result (2nd) |
+| `0x33000021` | 855638049 | `result` | WIFI_STATUS_ACK | Reply to ESP `0x30000021` (WiFi status): `true`, or `false` for a bad field (`080461d8`). Not a PIN result (corrected 2026-10-10) |
+| `0x33000022` | 855638050 | `result` | BT_STATUS_ACK | Reply to ESP `0x30000022` (BT status), same handler shape (`080464be`). Not a PIN result (corrected 2026-10-10) |
+| `0x33000023` | 855638051 | `result` | RESET_PWD_ACK | Reply to `0x30000023`: `true` = "reset pwd success", `false` = "reset pwd failed" (env write failed) |
 | `0x33000027` | 855638055 | `result` | DAYS_WEEK_OK | Days/week confirmed |
 | `0x330000A0` | 855638176 | `state, bat_lv, bat_per, ...` | **STATUS** | Stan kosia (raport cykliczny) |
 | `0x330000A1` | 855638177 | `name, sn, version, model, ...` | **DEVICE_INFO** | Pełna konfiguracja urządzenia |
@@ -172,7 +173,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x10000003` | 268435459 | — | KEY_EVT_3 | Zdarzenie UI 3 (wyzwalacz nieustalony) |
 | `0x10000004` | 268435460 | — | POWER_OFF | **Wyłącza kosiarkę** (bit akcji 0x10, „Robot manual power off” we wszystkich procesach U13). Tak samo `0x10000014` i `0x10000024` |
 | `0x10000007` | 268435463 | — | KEY_SELECT | Wciśnięto START lub HOME (otwiera okno 3 s na OK) |
-| `0x10000008` | 268435464 | — | CLEAR_USER_SETTINGS | log ESP: "send command clear user setting" |
+| `0x10000008` | 268435464 | — | CLEAR_USER_SETTINGS | log ESP: "send command clear user setting". Also sent for cloud `cmd 113` |
 | `0x10000009` | 268435465 | — | MEMS_CORRECTION | log ESP: "send command mems correction" |
 | `0x22000000` | 570425344 | `rain:0/1` | RAIN | Rain sensor state (sensor on display board) |
 | `0x30000005` | 805306373 | — | KEEPALIVE | Keepalive (ciągły, ~100ms) |
@@ -188,6 +189,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x30000017` | 805306391 | `rain_en, rain_delay` | SET_RAIN | Rain sensor config |
 | `0x30000021` | 805306401 | `wifi, str` | WIFI_STATUS | WiFi status (disconnected=0) |
 | `0x30000022` | 805306402 | `bt, str` | BT_STATUS | BT status |
+| `0x30000023` | 805306403 | — | **RESET_PWD** | **Resets the PIN to `0000`**. Sent by the ESP for cloud `cmd 112`. U13 handler `0804650a`: sets env `pwd` = 0 (`0807c95c`), clears the wrong-PIN counter (`run_param[0]`) and re-enables PIN input (`run_param[1]` = 1), replies `0x33000023`. No state check [F] |
 | `0x30000027` | 805306407 | `day` | SET_DAYS_WEEK | Days per week (3, 5, 7) |
 | `0x30000028` | 805306408 | `state` | ESP_STATE | ESP state notification |
 | `0x300000A1` | 805306529 | — | POLL | Poll/heartbeat (ciągły) |
@@ -261,8 +263,8 @@ MB starts on its own (D0 w captures 01-06, D2 w captures 2026-06-21):
   0x330000AA                       ← unknown
   0x330000A0 {"state":0,...}       ← initial state report
   0x41000002 {"lock":1}            ← lock state
-  0x33000021 {"result":true}       ← PIN verified OK
-  0x33000022 {"result":true}       ← PIN result (2nd)
+  0x33000021 {"result":true}       ← ack for ESP WiFi status 0x30000021
+  0x33000022 {"result":true}       ← ack for ESP BT status 0x30000022
   0x330000A0 {"state":1,...}       ← READY (unlocked)
 
 ESP responds (D1 w captures 01-06, D1 w captures 2026-06-21):
