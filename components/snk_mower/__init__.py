@@ -67,6 +67,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
             cv.Optional(CONF_RAIN_PIN): cv.int_range(0, 39),
+            # Deprecated and ignored: a silent boot window makes U13 drop the
+            # display link after 3 s. Kept so old configs still validate.
             cv.Optional(CONF_BOOT_DELAY, default=0): cv.positive_int,
             cv.Optional(CONF_COMPAT_MODE, default=False): cv.boolean,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(

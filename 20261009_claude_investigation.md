@@ -244,3 +244,45 @@ Mapowanie `mode` w chmurze (Sunseeker, `lawn_mower.py`) to: 0 czuwanie, 1 koszen
 ### Home Assistant
 
 ESPHome nie ma platformy `lawn_mower`. Komponent wystawia przyciski Start Mowing, Stop, Return to Dock i Trim Edge, sensor Mower State oraz sensory baterii. Do encji `lawn_mower` w HA trzeba osobnej integracji (np. MQTT `lawn_mower`) albo szablonu po stronie HA. Tego nie zrobiłem.
+
+## 10. Dopisek 2026-10-10: watchdog łącza ESP ↔ U13 i OTA
+
+### Jak to działa w U13
+
+| Element | Adres / wartość | Pewność |
+|---|---|---|
+| Konfiguracja usługi `dpport` (USART0, ESP32) | `0x080706a0`: timeout odbioru `0xbb8` = 3000 ms, okres `0x1f4` = 500 ms | [F] |
+| Callback „dpport receive overtime” | `0x08044164`: status łącza = 4 i wysyłka `{"cmd":0x20000004}` do ESP (helper `0x08072558`) | [F] |
+| `deal_safety` | `0x080395a4`: pierwszym sprawdzanym obiektem jest dpport (getter `0x080509a0`). Zerwane łącze ustawia błąd `0x400000` (display_error) | [F] |
+| `process_error` | `0x08068622`: licznik `[ctx+0x24]` porównywany z limitem `[ctx+0x28]`. Limit `0xbb80` ustawiany w `0x08068756`. Po przekroczeniu stan `0xa` = wyłączenie zasilania | [F] |
+| Czas do wyłączenia | `0xbb80` = 48000 tyknięć. Przy 25 ms/tyknięcie to około 20 min | [I: okres tyknięcia nie jest potwierdzony] |
+| Powrót | Gdy ramki z ESP wracają, U13 loguje „recover dpport, change to process=%d” i wychodzi z błędu | [F: string i ścieżka] |
+| `0x20000002` | Wysyłane z `0x080726fc`, wołane z `rw_init` (`0x0805b8a4`, `0x0805b970`) co 2 s. To raport błędu inicjalizacji sterowników `{"error":bity}`, a nie „SUPERVISION” | [F] |
+
+Każda ramka od ESP zeruje timer. W praktyce oryginalny firmware wysyła `ESP_KEEPALIVE` (`0x30000005`) co 1 s.
+
+Skutki ciszy od ESP:
+- Po 3 s U13 uznaje łącze za zerwane i wysyła `0x20000004`. Komponent logował to wcześniej jako „Power READY”, co było mylące.
+- U13 wchodzi w błąd display_error (`0x400000`) i zatrzymuje pracę.
+- Jeśli łącze nie wróci, po około 20 minutach U13 wyłącza zasilanie [I].
+
+Osobno `process_security` wyłącza kosiarkę po około 20 minutach czekania na PIN [I: ten sam mechanizm licznika].
+
+### Dlaczego OTA było trudne
+
+Stary komponent celowo milczał przez pierwsze 30 s po starcie (`boot_delay: 30`, „LISTEN ONLY”). To okno miało chronić OTA. Dwa problemy:
+- Cisza dłuższa niż 3 s to dokładnie warunek zerwania łącza. U13 przechodził w błąd jeszcze przed handshake.
+- W czasie uploadu OTA ESPHome blokuje `loop()`, więc KEEPALIVE nie szedł. Upload trwa dłużej niż 3 s, więc OTA w trakcie pracy zawsze zrywało łącze.
+
+Po restarcie ESP U13 działa dalej i nie wysyła ponownie `DEVICE_INFO`. Stary komponent czekał na `DEVICE_INFO`, więc handshake nigdy się nie kończył i ESP zostawał w fazie PRE.
+
+### Co zmieniłem w komponencie
+
+- **Strażnik łącza.** Osobny `esp_timer` (zadanie `esp_timer`, nie `loop()`) co 500 ms sprawdza, kiedy poszła ostatnia ramka. Po 1,5 s ciszy wysyła gotową ramkę KEEPALIVE. Działa też wtedy, gdy `loop()` stoi na OTA. Wszystkie zapisy na UART idą przez `write_frame()` z mutexem, żeby ramki z dwóch zadań się nie przeplatały.
+- **Brak okna ciszy.** `ESP_BOOT`, KEEPALIVE, `ESP_STATE`, POLL i RAIN idą od razu po starcie, raz (wcześniej `ESP_BOOT` szedł w każdej iteracji `loop()` w fazie PRE). `boot_delay` jest ignorowany z ostrzeżeniem w logu. Klucz zostaje w schemacie, żeby stare YAML-e się walidowały. Usunąłem go z `snk-mower.yaml`.
+- **Ciepły restart.** Jeśli w fazie PRE przyjdzie `0x330000A0` STATUS zanim przyjdzie `DEVICE_INFO`, to U13 już działa (np. po OTA ESP). Komponent przechodzi wtedy prosto do DONE, zeruje liczniki okresowe i wysyła PIN.
+- **Nazwy w logach.** `0x20000004` jest logowane jako „Power READY / link restart”, a `0x20000002` jako „MB init error” z polem `error`.
+
+OTA nadal restartuje ESP, a restart trwa kilka sekund. Przez ten czas U13 może na chwilę zgłosić display_error. Po starcie komponent od razu wysyła ramki, więc U13 powinien wrócić sam („recover dpport”) [I]. Do wyłączenia zasilania potrzeba około 20 minut ciszy, więc restart ESP jest daleko od tej granicy.
+
+**Nie testowane na sprzęcie.** `esphome config` przechodzi; pełnej kompilacji nie dało się tu zrobić (PlatformIO zablokowany w sandboksie).

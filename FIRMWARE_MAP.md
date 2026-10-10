@@ -151,6 +151,12 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | `0804867c` | EasyLogger `elog_output(level, tag, file, func, line, fmt, …)` [I] |
 | `0804de88` / `0804deb4` | Button driver reads PE10 / PE11, active low |
 | `0805303e` | `gpio_input_bit_get` (`0800ca9a` in the bootloader) |
+| `080706a0` | dpport service config: receive timeout `0xbb8` (3000 ms), period `0x1f4` (500 ms) |
+| `08044164` | dpport receive-overtime callback: link status 4, sends `0x20000004` to the ESP |
+| `08072558` | Send `{"cmd":x}` on dpport |
+| `080395a4` | `deal_safety`. dpport is the first checked object (getter `080509a0`); link lost sets error `0x400000` |
+| `08068622` | `process_error` power-off counter `[ctx+0x24]` vs limit `[ctx+0x28]` (`0xbb80`, set at `08068756`). State `0xa` = power off. About 20 min [I] |
+| `080726fc` | Sends `0x20000002` `{"error":bits}`: driver init error, from `rw_init` (`0805b8a4`, `0805b970`) every 2 s |
 
 **Action bits** (`set_action`) [F]:
 
@@ -166,6 +172,8 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | 0x80 | `0x10000008` | — | Clear user setting [I: matches the ESP log] |
 
 The three groups bump separate counters at +0x08, +0x0c and +0x10 of the same context [I: statistics per source].
+
+**Display link watchdog** [F]: U13 expects some frame from the ESP at least every 3 s. Otherwise it sends `0x20000004`, raises `0x400000` (display_error) and, after about 20 min in error, powers off [I]. It recovers when frames return ("recover dpport"). The ESPHome component keeps the link alive from an `esp_timer` task during OTA. Details are in the investigation report §10.
 
 **Error codes** are a bitmask. They match the Sunseeker OLD list: 1 updown, 2 trapped, 4 lift, 16 no border, 32 out of area, 64 sensor timeout, …
 

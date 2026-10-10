@@ -12,7 +12,8 @@ namespace snk_mower {
 static const char *const TAG = "snk_mower";
 
 static const uint32_t CMD_POWER_ON       = 0x20000001;
-static const uint32_t CMD_POWER_READY    = 0x20000004;
+static const uint32_t CMD_POWER_READY    = 0x20000004;  // U13 also sends this when it got no ESP frame for 3 s (link lost)
+static const uint32_t CMD_MB_INIT_ERROR  = 0x20000002;  // U13 rw_init: driver init failed, {"error":bits}, repeated every 2 s
 static const uint32_t CMD_RAIN           = 0x22000000;
 static const uint32_t CMD_ESP_KEEPALIVE  = 0x30000005;
 static const uint32_t CMD_SETTING_MODE   = 0x30000006;
@@ -115,8 +116,10 @@ SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
 void SnkMower::setup() {
   ESP_LOGI(TAG, "SNK Mower starting (PIN: %s, JSON at 230400)", pin_.c_str());
 
+  tx_mutex_ = xSemaphoreCreateMutex();
   setup_display();
   set_display_text("8888", true);
+  start_link_guard();
 
   finish_setup();
 }
@@ -138,12 +141,9 @@ void SnkMower::finish_setup() {
 
   set_display_text("boot");
 
-  if (boot_delay_ms_ > 0) {
-    ESP_LOGI(TAG, "Boot phase PRE: waiting %ums for OTA safety — LISTEN ONLY, no TX",
-             boot_delay_ms_);
-  } else {
-    ESP_LOGI(TAG, "Boot phase PRE: waiting for MB boot frames — LISTEN ONLY, no TX");
-  }
+  if (boot_delay_ms_ > 0)
+    ESP_LOGW(TAG, "boot_delay is ignored: staying silent makes U13 drop the display link after 3 s");
+  ESP_LOGI(TAG, "Boot phase PRE: sending ESP_BOOT, then waiting for DEVICE_INFO");
 
   boot_phase_ = BootPhase::PRE;
   phase_start_ms_ = millis();
@@ -384,7 +384,7 @@ void SnkMower::send_json(const JsonDocument &doc) {
     tx_buf_[n + 1] = crc;
     tx_buf_[n + 2] = '#';
     size_t total_len = n + 3;
-    write_array((const uint8_t *)tx_buf_, total_len);
+    write_frame((const uint8_t *)tx_buf_, total_len);
     tx_buf_[n + 1] = '\0';
     uint32_t cmd = doc["cmd"] | 0;
     if (cmd == CMD_ESP_POLL || cmd == CMD_ESP_KEEPALIVE)
@@ -392,6 +392,50 @@ void SnkMower::send_json(const JsonDocument &doc) {
     else
       ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
   }
+}
+
+void SnkMower::write_frame(const uint8_t *data, size_t len) {
+  // Frames come from loop() and from the link guard timer task; never interleave them.
+  if (tx_mutex_ != nullptr)
+    xSemaphoreTake(tx_mutex_, portMAX_DELAY);
+  write_array(data, len);
+  last_tx_ms_ = millis();
+  if (tx_mutex_ != nullptr)
+    xSemaphoreGive(tx_mutex_);
+}
+
+void SnkMower::start_link_guard() {
+  // Prebuild the KEEPALIVE frame so the timer task never touches ArduinoJson or tx_buf_.
+  char json[32];
+  int n = snprintf(json, sizeof(json), "{\"cmd\":%lu}", (unsigned long)CMD_ESP_KEEPALIVE);
+  keepalive_frame_[0] = '&';
+  memcpy(keepalive_frame_ + 1, json, n);
+  keepalive_frame_[n + 1] = dallas_crc8((const uint8_t *)json, n);
+  keepalive_frame_[n + 2] = '#';
+  keepalive_frame_len_ = n + 3;
+
+  esp_timer_create_args_t args = {
+      .callback = &SnkMower::link_guard_callback,
+      .arg = this,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "snk_link_guard",
+      .skip_unhandled_events = true,
+  };
+  if (esp_timer_create(&args, &link_guard_timer_) == ESP_OK)
+    esp_timer_start_periodic(link_guard_timer_, 500 * 1000);
+  else
+    ESP_LOGE(TAG, "Link guard timer create failed");
+}
+
+void SnkMower::link_guard_callback(void *arg) {
+  auto *self = static_cast<SnkMower *>(arg);
+  if (!self->link_guard_active_)
+    return;
+  // loop() normally sends KEEPALIVE every 1 s. Only step in when it has been
+  // quiet for 1.5 s, well inside U13's 3 s receive timeout.
+  if (millis() - self->last_tx_ms_ < 1500)
+    return;
+  self->write_frame(self->keepalive_frame_, self->keepalive_frame_len_);
 }
 
 void SnkMower::send_boot() {
@@ -557,20 +601,12 @@ void SnkMower::loop() {
 
   // ── Boot phase state machine ──────────────────────────────────
 
-  if (boot_phase_ == BootPhase::PRE) {
-    // PRE phase: LISTEN ONLY during boot_delay (OTA window)
-    // MB boots within ~2-5s and starts sending boot frames.
-    // Do NOT transmit anything until boot_delay expires.
-    if (boot_delay_ms_ > 0) {
-      if (now - phase_start_ms_ >= boot_delay_ms_) {
-        ESP_LOGI(TAG, "Boot delay expired — starting boot handshake");
-        boot_delay_ms_ = 0;
-        phase_start_ms_ = now;
-        // Fall through to send boot sequence below
-      } else {
-        return;  // Still in OTA window — no TX
-      }
-    }
+  if (boot_phase_ == BootPhase::PRE && !boot_sent_) {
+    boot_sent_ = true;
+    // No listen-only window: U13 treats 3 s of silence as a lost display
+    // link (error 0x400000). OTA no longer needs a quiet window because the
+    // link guard keeps KEEPALIVE going while an upload blocks loop().
+    boot_delay_ms_ = 0;
 
     // Send ESP_BOOT as first handshake frame
     ESP_LOGI(TAG, "Boot: sending ESP_BOOT");
@@ -583,6 +619,7 @@ void SnkMower::loop() {
     send_poll();
     delay(1);
     send_rain_status(1);
+    link_guard_active_ = true;
 
     // Start POLL spam (original firmware sends POLL ~every 200ms during init)
     last_poll_ = now;
@@ -754,8 +791,9 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case CMD_CUT_TIME_Q:       handle_cut_time_query(doc); break;
     case CMD_UNKNOWN_14:       ESP_LOGV(TAG, "Unknown 0x40000014"); break;
     default:
-      if (cmd == 0x20000002) {
-        ESP_LOGW(TAG, "SUPERVISION: MB sent 0x20000002 — power may be cut soon");
+      if (cmd == CMD_MB_INIT_ERROR) {
+        ESP_LOGW(TAG, "MB init error 0x20000002: error=0x%lX (U13 driver init failed, it stays in init)",
+                 (unsigned long)(doc["error"] | 0UL));
       } else if (cmd == 0x15000001) {
         ESP_LOGW(TAG, "U16 FRAME ERROR: 0x15000001 — our frames may be malformed");
       } else if ((cmd & 0xFFFFFF00) == CMD_SETTING_ACK_BASE && (cmd & 0xFF) >= 0x09 && (cmd & 0xFF) <= 0x27) {
@@ -768,6 +806,20 @@ void SnkMower::handle_json(const JsonDocument &doc) {
 }
 
 void SnkMower::handle_status(const JsonDocument &doc) {
+  // Warm restart: the ESP rebooted (OTA, crash) while U13 kept running. U13
+  // does not send DEVICE_INFO again, it just keeps reporting STATUS, so the
+  // INFO/INIT burst would never start. Resume in DONE instead.
+  if (boot_phase_ == BootPhase::PRE && boot_sent_ && !device_info_received_) {
+    uint32_t now = millis();
+    ESP_LOGI(TAG, "STATUS before DEVICE_INFO — MB already running (warm restart), resuming");
+    boot_phase_ = BootPhase::DONE;
+    phase_start_ms_ = now;
+    last_keepalive_ = now;
+    last_poll_ = now;
+    last_wifi_status_ = now;
+    last_esp_info_ = now;
+    last_esp_state_ = now;
+  }
   if (doc.containsKey("state")) {
     state_ = doc["state"];
   }
@@ -937,15 +989,13 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
   // DEVICE_INFO from MB — start SYNC burst
   if (boot_phase_ == BootPhase::PRE) {
     device_info_received_ = true;
-    if (boot_delay_ms_ == 0) {
+    {
       ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
       boot_phase_ = BootPhase::SYNC;
       phase_start_ms_ = millis();
       device_info_arrived_ms_ = phase_start_ms_;
       info_burst_count_ = 0;
       init_burst_count_ = 0;
-    } else {
-      ESP_LOGI(TAG, "DEVICE_INFO received during boot delay — will transition after delay");
     }
   }
 }
@@ -1056,7 +1106,9 @@ void SnkMower::handle_power_on(const JsonDocument &doc) {
 }
 
 void SnkMower::handle_power_ready(const JsonDocument &doc) {
-  ESP_LOGI(TAG, "Power READY");
+  // Sent by U13 at dpport init and again whenever it got no frame from us
+  // for 3 s (0x08044164). After a warm restart this is the first sign of life.
+  ESP_LOGI(TAG, "Power READY / link restart (0x20000004)");
   power_ready_ = true;
   mb_boot_detected_ = true;
 }

@@ -10,6 +10,8 @@
 #include <driver/spi_master.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -150,6 +152,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   bool pin_sent_{false};
   bool pin_ok_{false};
   bool device_info_received_{false};
+  bool boot_sent_{false};
   bool mb_boot_detected_{false};
   int pin_retries_{0};
   bool power_ready_{false};
@@ -227,6 +230,20 @@ class SnkMower : public Component, public uart::UARTDevice {
   gpio_num_t display_mosi_{GPIO_NUM_NC};
   gpio_num_t display_cs_{GPIO_NUM_NC};
   esp_timer_handle_t display_timer_{nullptr};
+
+  // Link guard: U13 flags the display link as lost after 3 s without any
+  // frame from the ESP (dpport receive overtime, 0x08044164). A separate
+  // esp_timer keeps KEEPALIVE going while loop() is blocked (OTA upload,
+  // WiFi reconnect, slow API calls).
+  static void link_guard_callback(void *arg);
+  void start_link_guard();
+  void write_frame(const uint8_t *data, size_t len);
+  esp_timer_handle_t link_guard_timer_{nullptr};
+  SemaphoreHandle_t tx_mutex_{nullptr};
+  volatile uint32_t last_tx_ms_{0};
+  volatile bool link_guard_active_{false};
+  uint8_t keepalive_frame_[48];
+  size_t keepalive_frame_len_{0};
 
   volatile uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
   volatile uint8_t display_colon_{0};
