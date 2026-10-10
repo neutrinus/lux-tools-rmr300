@@ -14,6 +14,7 @@ void SnkMower::read_uart() {
   int budget = 256;
   uint8_t byte;
   while (budget-- > 0 && available() > 0 && read_byte(&byte)) {
+    rx_bytes_++;
     if (!rx_in_json_) {
       if (byte != '{')
         continue;
@@ -32,9 +33,12 @@ void SnkMower::read_uart() {
     rx_in_json_ = false;
     JsonDocument doc;
     if (deserializeJson(doc, rx_buf_) != DeserializationError::Ok || !doc["cmd"].is<uint32_t>()) {
+      rx_bad_++;
       ESP_LOGW(TAG, "RX unparsable: %s", rx_buf_);
       continue;
     }
+    rx_frames_++;
+    last_rx_ms_ = millis();
     uint32_t cmd = doc["cmd"];
     if (cmd == proto::MB_RTC || cmd == proto::MB_WIFI_ACK || cmd == proto::MB_BT_ACK)
       ESP_LOGV(TAG, "RX %s", rx_buf_);
@@ -130,6 +134,11 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case proto::MB_HW_VERSIONS:
       ESP_LOGI(TAG, "Versions: MB hv=%d sv=%d, BB hv=%d sv=%d, DB hv=%d sv=%d", doc["mb_hv"] | 0,
                doc["mb_sv"] | 0, doc["bb_hv"] | 0, doc["bb_sv"] | 0, doc["db_hv"] | 0, doc["db_sv"] | 0);
+      break;
+    case proto::MB_WIFI_ACK:
+    case proto::MB_BT_ACK:
+      if (!doc["result"].as<bool>())
+        ESP_LOGW(TAG, "MB rejected our %s status: %s", cmd == proto::MB_WIFI_ACK ? "WiFi" : "BT", rx_buf_);
       break;
     case proto::MB_SHUTDOWN:
       ESP_LOGI(TAG, "MB shutting down");

@@ -120,6 +120,14 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
   uint32_t last_wifi_status_{0};
+  // Debug counters, logged every 10 s by log_link_stats().
+  void log_link_stats(uint32_t now);
+  uint32_t last_stats_ms_{0};
+  uint32_t last_rx_ms_{0};
+  uint32_t rx_bytes_{0};
+  uint32_t rx_frames_{0};
+  uint32_t rx_bad_{0};
+  uint32_t tx_frames_{0};
 
   SemaphoreHandle_t tx_mutex_{nullptr};
   esp_timer_handle_t link_guard_timer_{nullptr};

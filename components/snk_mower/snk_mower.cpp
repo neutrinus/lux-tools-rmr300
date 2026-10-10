@@ -17,6 +17,7 @@ static constexpr uint32_t POLL_INTERVAL_MS = 100;
 static constexpr uint32_t KEEPALIVE_INTERVAL_MS = 500;
 static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;
 static constexpr uint32_t KEY_CONFIRM_WINDOW_MS = 3000;  // 300 ticks of 10 ms in the original
+static constexpr uint32_t STATS_INTERVAL_MS = 10000;
 
 void SnkMower::setup() {
   ESP_LOGI(TAG, "Setting up SNK mower link (230400 8N1)");
@@ -68,6 +69,20 @@ void SnkMower::loop() {
   if (rain_adc_ != nullptr)
     rain_loop(now);
   display_loop(now);
+  if (now - last_stats_ms_ >= STATS_INTERVAL_MS)
+    log_link_stats(now);
+}
+
+void SnkMower::log_link_stats(uint32_t now) {
+  static const char *const LINK_NAMES[] = {"WAIT_MB", "HANDSHAKE", "UP"};
+  last_stats_ms_ = now;
+  if (last_rx_ms_ == 0)
+    ESP_LOGD(TAG, "Link %s: nothing received yet, tx %u frames", LINK_NAMES[static_cast<int>(link_)],
+             (unsigned) tx_frames_);
+  else
+    ESP_LOGD(TAG, "Link %s: rx %u frames (%u bad, %u bytes), last %u ms ago; tx %u frames; state=%d locked-pin=%s",
+             LINK_NAMES[static_cast<int>(link_)], (unsigned) rx_frames_, (unsigned) rx_bad_, (unsigned) rx_bytes_,
+             (unsigned) (now - last_rx_ms_), (unsigned) tx_frames_, state_, pin_retries_ >= 5 ? "gave up" : "ok");
 }
 
 // ── Link ──────────────────────────────────────────────────────────
@@ -126,6 +141,7 @@ void SnkMower::write_frame(const uint8_t *data, size_t len) {
   xSemaphoreTake(tx_mutex_, portMAX_DELAY);
   write_array(data, len);
   last_tx_ms_ = millis();
+  tx_frames_++;
   xSemaphoreGive(tx_mutex_);
 }
 
