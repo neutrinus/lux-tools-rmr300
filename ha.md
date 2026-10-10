@@ -1237,3 +1237,36 @@ To restore communication, the custom firmware must:
 ### Next Step
 
 **Implement boot protocol in ESPHome custom component** — add handlers for MB boot frames, send correct ESP_BOOT/ESP_KEEPALIVE/ESP_POLL/ESP_INIT sequence, then test if START becomes responsive.
+
+## 15. 2026-10-10: pierwszy test nowego komponentu na kosiarce
+
+Komponent z handshake'iem (commit `d77b2da` i późniejsze) wgrany przez OTA, kosiarka w ogrodzie, logi przez API ESPHome. Konfiguracja użytkownika to `kosiarka.yaml` w HA na innej maszynie; komponent pobierany z `github://neutrinus/lux-tools-rmr300@main`, więc każda poprawka wymaga commita i pusha przed OTA.
+
+### Twarde fakty (z logów)
+
+- **Link z U13 działa.** Po OTA (restart samego ESP, U13 dalej pracuje) ESP przechodzi w `UP` po pierwszej ramce z MB. Stabilnie ~19 ramek RX / 10 s (~38 B/ramkę: RTC `0x40000011` co 1 s i ack-i `0x33000021/22` na nasze WiFi/BT), ~40 ramek TX / 10 s, 0 błędnych. MB nie zgłasza `0x20000004` (timeout linku), czyli nasze ramki do niego docierają i są parsowane.
+- **Przyciski na płytce ESP działają.** GPIO22 START, GPIO21 HOME, GPIO19 OK (pull-up, aktywne niskim). START i HOME wysyłają `0x10000007`, OK w oknie 3 s wysyła `0x10000001` / `0x10000002`. Widać to w logu TX przy każdym naciśnięciu.
+- **MB nie reaguje na komendy klawiszy ani zdalne.** Na `0x10000007` + `0x10000001` (z HA i z przycisków), `0x10000002`, `0x10000023`, `0x10000015` nie przychodzi **żadna** ramka (oryginał dostaje `0x41000005` + `state:8` w ~30 ms). Stan MB w tym czasie: `state:1` po świeżym włączeniu, `state:0` po samym restarcie ESP.
+- **Wyłączenie wyłącznikiem:** MB wysyła `0x41000008` (shutdown), potem `0x330000A0 {"state":11,...}`. Po ponownym włączeniu wyświetlacz pokazuje `boot`, potem `IdLE`; status `state:1`.
+- **Po restarcie samego ESP (OTA) MB nie wysyła statusu** (`0x330000A0`/`A1`) dopóki nic się nie zmieni. Wyświetlacz zostawał na `boot`, czujniki stanu na `unknown`.
+- **Bajt CRC może być równy `{` (0x7B).** Parser szukający samego `{` zaczynał ramkę od CRC i gubił następną (`RX unparsable: {#&{"cmd":1073741841,...}`). Poprawione: ramka zaczyna się od `&{`.
+- **Log przez API łączy się ~30–40 s po włączeniu kosiarki**, więc handshake, `lock` i wynik PIN-u z bootu nie były widoczne w żadnym logu z tego dnia.
+- U13: dekoder komend `0x08063808` nie ma żadnych warunków, zawsze woła `set_action` (`0x08076244`, zapis bajtu akcji do `[*0x200002c0 + 4]`). Ostatnia komenda nadpisuje poprzednią (jeden bajt, nie maska). Warunek wykonania jest dopiero w procesie oczekiwania (`0x0806ab90`): wywołanie `[[ctx]+4]->[+0xc]()` != 0 omija całą obsługę akcji (`0x0806abdc` → `0x0806acc0`), a `0x08027b68` != 0 wychodzi wcześniej. Co sprawdzają te funkcje — nieustalone.
+
+### Błędy znalezione i poprawione w komponencie
+
+| Błąd | Skutek | Commit |
+|---|---|---|
+| `0x33000021` traktowane jako wynik PIN-u | co 1 s „PIN accepted” na ack WiFi; prawdziwy wynik `0x41000020 {"result":1}` ignorowany; `Is Locked` nigdy nie gasło | `942ba1b` |
+| PIN wysyłany tylko raz, zaraz po `Link up` | wcześniej niż w oryginale (tam po `lock:1` i zapytaniach `0x300000A6/A7/A8`, gdy użytkownik wpisze PIN); możliwe, że U13 go nie przyjmuje | `050f3c1`: PIN także po `0x41000002 {"lock":1}` |
+| Start ramki na dowolnym `{` | gubienie ramek, gdy CRC = `0x7B` | `050f3c1` |
+| `kosiarka.yaml` użytkownika: GPIO22 jako zwykły czujnik, brak GPIO21, OK bez `inverted`/`key_ok()` | fizyczne przyciski nic nie wysyłały | poprawione w YAML (wzór: `snk-mower.yaml`) |
+
+Diagnostyka dodana do komponentu: każda nieokresowa ramka RX w logu (`RX {...}`), statystyki linku co 10 s (`b4fb306`), bufor pierwszych 80 ramek od startu wypisywany 60 s po starcie i przyciskiem „Dump Boot Trace” (`050f3c1`).
+
+### Wnioski
+
+- Handshake i utrzymanie linku są już poprawne: U13 nie wyłącza kosiarki i odpowiada na ramki stanu.
+- Brak reakcji na klawisze **nie** wynika z kodowania ramek ani z dekodera komend w U13. Bramka jest w procesie oczekiwania U13.
+- Hipoteza główna [I]: kosiarka jest zablokowana PIN-em (`lock:1`), bo U13 nie przyjął PIN-u wysłanego za wcześnie albo jego wynik (`0x41000020`) był ignorowany. Za: w oryginale między PIN-em a START jest `0x41000020 {"result":1}`, u nas nigdy go nie widzieliśmy. Przeciw: nie wiadomo, czy lock blokuje akcje w `0x0806ab90`.
+- Do sprawdzenia następnym razem: boot trace po włączeniu kosiarki (czy przychodzi `lock:1`, czy `0x41000020` ma `result:1`), potem START+OK z przycisków.
