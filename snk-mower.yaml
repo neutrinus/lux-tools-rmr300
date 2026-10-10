@@ -110,6 +110,13 @@ snk_mower:
   mower_state:
     name: "${friendly_name} Mower State"
 
+# WiFi RSSI of the display board. The mower drives around the garden, so this
+# gives a rough idea of where it is.
+sensor:
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 30s
+
 # Front-panel buttons on the display board (from the original firmware, see
 # 20261009_claude_investigation.md): active low, need the internal pull-up.
 # START then OK = start mowing, HOME then OK = return to station (3 s window),
