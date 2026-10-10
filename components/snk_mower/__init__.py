@@ -5,6 +5,7 @@ from esphome.const import (
     CONF_BATTERY_LEVEL,
 )
 from esphome.components import uart, sensor, binary_sensor, text_sensor
+from esphome.core import CORE
 
 DEPENDENCIES = ["uart"]
 AUTO_LOAD = ["sensor", "binary_sensor", "text_sensor", "json"]
@@ -180,6 +181,12 @@ async def to_code(config):
     )
     await cg.register_component(var, config)
     await uart.register_uart_device(var, config)
+
+    if CORE.is_esp32:
+        # ESPHome excludes the ESP-IDF ADC driver from builds by default; the
+        # rain sensor uses adc_oneshot, so pull esp_adc back in.
+        from esphome.components.esp32 import include_builtin_idf_component
+        include_builtin_idf_component("esp_adc")
 
     cg.add(var.set_display_pins(
         config[CONF_DISPLAY_CLK],
