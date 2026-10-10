@@ -3,12 +3,11 @@ import esphome.config_validation as cv
 from esphome.const import (
     CONF_ID,
     CONF_BATTERY_LEVEL,
-    CONF_BATTERY_VOLTAGE,
 )
 from esphome.components import uart, sensor, binary_sensor, text_sensor
 
 DEPENDENCIES = ["uart"]
-AUTO_LOAD = ["sensor", "binary_sensor", "text_sensor", "json", "wifi"]
+AUTO_LOAD = ["sensor", "binary_sensor", "text_sensor", "json"]
 
 snk_mower_ns = cg.esphome_ns.namespace("snk_mower")
 SnkMower = snk_mower_ns.class_("SnkMower", cg.Component, uart.UARTDevice)
@@ -20,8 +19,6 @@ CONF_DISPLAY_CS = "display_cs"
 CONF_BUZZER_PIN = "buzzer_pin"
 CONF_DISPLAY_OFF_TIMEOUT = "display_off_timeout"
 CONF_RAIN_PIN = "rain_pin"
-CONF_BOOT_DELAY = "boot_delay"
-CONF_COMPAT_MODE = "compat_mode"
 
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
@@ -32,7 +29,6 @@ CONF_IS_LOCKED = "is_locked"
 CONF_IS_RETURNING = "is_returning"
 
 CONF_LIGHT_LEVEL = "light_level"
-CONF_SIGNAL_LEVEL = "signal_level"
 CONF_WORK_AREA = "work_area"
 CONF_CUT_AREA = "cut_area"
 CONF_TOTAL_MINUTES = "total_minutes"
@@ -67,18 +63,10 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
             cv.Optional(CONF_RAIN_PIN): cv.int_range(0, 39),
-            cv.Optional(CONF_BOOT_DELAY, default=0): cv.positive_int,
-            cv.Optional(CONF_COMPAT_MODE, default=False): cv.boolean,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
                 device_class="battery",
-            ),
-            cv.Optional(CONF_BATTERY_VOLTAGE): sensor.sensor_schema(
-                unit_of_measurement="V",
-                accuracy_decimals=2,
-                device_class="voltage",
-                state_class="measurement",
             ),
             cv.Optional(CONF_ERROR_CODE): sensor.sensor_schema(
                 icon="mdi:alert-circle",
@@ -86,10 +74,6 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_LIGHT_LEVEL): sensor.sensor_schema(
                 icon="mdi:brightness-5",
-                accuracy_decimals=0,
-            ),
-            cv.Optional(CONF_SIGNAL_LEVEL): sensor.sensor_schema(
-                icon="mdi:signal",
                 accuracy_decimals=0,
             ),
             cv.Optional(CONF_WORK_AREA): sensor.sensor_schema(
@@ -193,21 +177,13 @@ async def to_code(config):
         cg.add(var.set_rain_pin(cg.RawExpression(
             f'(gpio_num_t){config[CONF_RAIN_PIN]}')))
 
-    if config[CONF_BOOT_DELAY] > 0:
-        cg.add(var.set_boot_delay(config[CONF_BOOT_DELAY]))
-
-    if config.get(CONF_COMPAT_MODE, False):
-        cg.add(var.set_compat_mode(True))
-
     if config[CONF_DISPLAY_OFF_TIMEOUT] > 0:
         cg.add(var.set_display_off_timeout(config[CONF_DISPLAY_OFF_TIMEOUT]))
 
     for key, setter in [
         (CONF_BATTERY_LEVEL, "set_battery_level_sensor"),
-        (CONF_BATTERY_VOLTAGE, "set_battery_voltage_sensor"),
         (CONF_ERROR_CODE, "set_error_code_sensor"),
         (CONF_LIGHT_LEVEL, "set_light_level_sensor"),
-        (CONF_SIGNAL_LEVEL, "set_signal_level_sensor"),
         (CONF_WORK_AREA, "set_work_area_sensor"),
         (CONF_CUT_AREA, "set_cut_area_sensor"),
         (CONF_TOTAL_MINUTES, "set_total_minutes_sensor"),

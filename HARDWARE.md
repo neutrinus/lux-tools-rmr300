@@ -1,5 +1,7 @@
 # Hardware Documentation — SNK Mower (Lux Tools A-RMR-300-24)
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): ESP32 łączy się UART-em bezpośrednio z U13 (`dpport`, USART0); U16 nie jest mostem, tylko MCU czujników przewodu/podnoszenia na osobnym porcie U13 (`bdport`). Przyciski START/HOME/OK są na ESP32 GPIO22/21/19 (pull-up, aktywne niskim); `0x10000001/2/7` to komendy klawiszy (START+OK = start koszenia, HOME+OK = powrót), nie potwierdzenia błędów.
+
 ## Overview
 
 The mower contains two PCBs connected via a ribbon cable/header:
@@ -27,7 +29,7 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 | Ref | Chip | Architecture | Role |
 |-----|------|-------------|------|
 | **U13** | `GD32F305 AGT6` (GigaDevice) | ARM Cortex-M4 | Main MCU — motors, BLDC control, navigation, boundary wire sensing, EEPROM access |
-| **U16** | `GD32F303 CGT6` (GigaDevice) | ARM Cortex-M4 | Secondary MCU — UART bridge to display board, forwards button presses to U13 |
+| **U16** | `GD32F303 CGT6` (GigaDevice) | ARM Cortex-M4 | Secondary MCU: boundary-wire coils, lift/hall sensors. JSON link to U13 (`mport` USART2 ↔ U13 `bdport`). Not connected to the display board |
 
 ### Memory
 
@@ -185,7 +187,7 @@ Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze
 
 ### Tracing wizualny ścieżek wyświetlacza (Zweryfikowany na PCB):
 
-Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`) potwierdzono dokładne połączenia:
+Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`, w repo jako [`img/display_front2.jpg`](img/display_front2.jpg)) potwierdzono dokładne połączenia:
 1. **SCLK (Clock) - GPIO33 (Pad 9)**: Biegnie do `R33`, pod układ `U3`, do linii `SH_CP` (Pin 11) wszystkich układów `74HC595`.
 2. **CS/Latch - GPIO32 (Pad 8)**: Biegnie do `R31`, pod układ `U3`, przez punkt testowy `TP27` bezpośrednio na linię `ST_CP` (Pin 12) wszystkich układów `74HC595`.
 3. **MOSI (Data) - GPIO25 (Pad 10)**: Biegnie do `R34`, punktu testowego `TP29` i przez przelotkę na drugą stronę płyty bezpośrednio do linii `DS` (Pin 14) pierwszego układu `U1`.
@@ -242,12 +244,14 @@ We conducted a series of firmware tests to determine which physical buttons (K1�
 
 | Button | Ref | Connection | How ESP32 detects it |
 |--------|-----|------------|---------------------|
-| OK | K3 | **GPIO19** (confirmed) + J8 pin 7 → mainboard | Direct GPIO read |
-| START | K1 | J8 pin 6 → mainboard **only** | Via UART: `0x41000020` (START_ACK) then `0x41000003` (EXEC_ACTION) |
-| HOME | K2 | Unknown — not on ESP32 GPIO or ADC, no unique UART command | Via UART: `0x41000003` (EXEC_ACTION — same as START!) |
-| ON | K4 | J8 pin 2 → mainboard **only** | Not detectable by ESP32 |
+| START | K1 | **GPIO22** + J8 `ST` | Direct GPIO read (key code 1) |
+| HOME | K2 | **GPIO21** only (not on J8) | Direct GPIO read (key code 2) |
+| OK | K3 | **GPIO19** + J8 `OK` | Direct GPIO read (key code 4) |
+| ON | K4 | J8 `ON` → mainboard **only** | Not read by ESP32 (power-on) |
 
-**Key insight:** The mainboard's secondary MCU (U16, GD32F303) reads START and HOME directly, executes the action, and notifies the ESP32 via UART. The ESP32 cannot initiate or block these actions — it only receives status messages after the fact. The OK button is the only physical button directly accessible to the ESP32.
+Source: ESP32 `ota_0.bin` button driver init `0x400daf7c` (`gpio_set_direction(INPUT)` + `gpio_set_pull_mode(PULLUP_ONLY)` on 22, 21, 19) and poll `0x400daef8` (active low, bit0=22, bit1=21, bit2=19). Pin↔button mapping from long-press menus matching the manual (START 3 s = date, HOME 3 s = RAIN, START+HOME = PIN).
+
+**Key insight (corrected 2026-10-09):** the ESP32 runs the UI. On START or HOME it sends `0x10000007`; OK within 3 s sends `0x10000001` (mow) or `0x10000002` (home). U13 also reads PE10/PE11 (active low, used by the bootloader's "key press power on"), most likely the `ST`/`OK` lines on J8. That is inferred, not traced on the PCB. The earlier GPIO scan missed START/HOME because without `INPUT_PULLUP` the lines float.
 
 ---
 

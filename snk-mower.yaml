@@ -3,10 +3,11 @@ substitutions:
   friendly_name: Kosiarka
 
 external_components:
-  - source:
-      type: local
-      path: ./components
+  # Built on another machine, so the component comes from GitHub.
+  # To test a branch before merging, change @main to @<branch>.
+  - source: github://neutrinus/lux-tools-rmr300@main:components
     components: [snk_mower]
+    refresh: 10s
 
 esphome:
   name: ${name}
@@ -61,19 +62,13 @@ snk_mower:
   display_cs: 32
   buzzer_pin: 27
   rain_pin: 36
-  boot_delay: 30
-  compat_mode: true
 
   battery_level:
     name: "${friendly_name} Battery Level"
-  battery_voltage:
-    name: "${friendly_name} Battery Voltage"
   error_code:
     name: "${friendly_name} Error Code"
   light_level:
     name: "${friendly_name} Light Level"
-  signal_level:
-    name: "${friendly_name} Signal Level"
   work_area:
     name: "${friendly_name} Work Area"
   cut_area:
@@ -115,14 +110,49 @@ snk_mower:
   mower_state:
     name: "${friendly_name} Mower State"
 
+# WiFi RSSI of the display board. The mower drives around the garden, so this
+# gives a rough idea of where it is.
+sensor:
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    update_interval: 30s
+
+# Front-panel buttons on the display board (from the original firmware, see
+# 20261009_claude_investigation.md): active low, need the internal pull-up.
+# START then OK = start mowing, HOME then OK = return to station (3 s window),
+# the same key commands the original firmware sends to the mainboard.
+# ON (K4) is not wired to the ESP32.
 binary_sensor:
   - platform: gpio
-    pin: GPIO19
-    name: "${friendly_name} OK Button"
-    device_class: "connectivity"
+    pin:
+      number: GPIO22
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} START Button"
     filters:
-      - invert:
-      - delayed_on_off: 10ms
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_start();'
+  - platform: gpio
+    pin:
+      number: GPIO21
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} HOME Button"
+    filters:
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_home();'
+  - platform: gpio
+    pin:
+      number: GPIO19
+      mode: INPUT_PULLUP
+      inverted: true
+    name: "${friendly_name} OK Button"
+    filters:
+      - delayed_on_off: 50ms
+    on_press:
+      - lambda: 'id(my_mower).key_ok();'
 
 
 button:
@@ -136,6 +166,16 @@ button:
     icon: "mdi:home-import-outline"
     on_press:
       - lambda: 'id(my_mower).return_to_dock();'
+  - platform: template
+    name: "${friendly_name} Stop"
+    icon: "mdi:stop"
+    on_press:
+      - lambda: 'id(my_mower).stop_mowing();'
+  - platform: template
+    name: "${friendly_name} Trim Edge"
+    icon: "mdi:vector-square"
+    on_press:
+      - lambda: 'id(my_mower).trim_edge();'
 
 
   # === Send Raw JSON button (reads from text field below) ===

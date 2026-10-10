@@ -1,5 +1,7 @@
 # ESP32 GPIO Mapping & Xtensa Decompilation
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](../../20261009_claude_investigation.md)): SPI wyświetlacza to MOSI=GPIO25, SCLK=GPIO33, CS=GPIO32, 400 kHz (`TubeInit` `0x400e6da0`); wartości 12/10 poniżej pochodzą ze złego offsetu w obrazie. Łącze z MB to JSON `&{…}crc#` 230400, a nie protokół binarny `0xAA 0x55`. Przyciski: GPIO22 START, GPIO21 HOME, GPIO19 OK. Stary `disasm.s` był przesunięty o 8 bajtów; nowy generuje `tools/re/esp32dis.py`.
+
 ## ELF Generation
 
 Convert raw ota_0.bin (ESP32 OTA image) to ELF for `xtensa-esp32-elf-objdump`:
@@ -54,7 +56,7 @@ then creates a minimal ELF with 6 LOAD segments and proper section headers.
 
 ```bash
 # Full disassembly (~400K lines)
-xtensa-esp32-elf-objdump -d esp32/firmware/ota_0.elf > esp32/firmware/disasm.s
+python3 tools/re/esp32dis.py esp32/firmware/ota_0.bin dump esp32/firmware/disasm.s
 
 # Specific range
 xtensa-esp32-elf-objdump -d --start-address=0x400d7704 --stop-address=0x400d7c00 esp32/firmware/ota_0.elf

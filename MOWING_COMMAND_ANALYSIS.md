@@ -1,5 +1,7 @@
 # Analiza: Komendy koszenia w oryginalnym firmware SNK Mower
 
+> **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): rozwiązane. Start koszenia = `0x10000007`, a po nim `0x10000001` (tak samo jak START→OK w oryginalnym firmware, capture `2026-06-21/trzeci`). Teza „U16 = bridge” i „START obsługuje U16 lokalnie” jest błędna.
+
 ## Data: 2026-06-21
 ## Cel: Odkryć komendy które oryginalna aplikacja/MQTT wysyłała by kosiarka kosiła
 
