@@ -87,9 +87,9 @@ void SnkMower::trace(const char *dir, const char *json) {
 }
 
 void SnkMower::dump_trace() {
-  ESP_LOGI(TAG, "Trace of the first %u frames since boot (s, direction, JSON):", (unsigned) trace_.size());
+  ESP_LOGD(TAG, "Trace of the first %u frames since boot (s, direction, JSON):", (unsigned) trace_.size());
   for (const auto &line : trace_) {
-    ESP_LOGI(TAG, "  %s", line.c_str());
+    ESP_LOGD(TAG, "  %s", line.c_str());
     delay(2);  // let the API log keep up
   }
 }
@@ -99,10 +99,10 @@ void SnkMower::log_link_stats(uint32_t now) {
   last_stats_ms_ = now;
   now = millis();  // read_uart() may have set last_rx_ms_ after `now`
   if (last_rx_ms_ == 0)
-    ESP_LOGD(TAG, "Link %s: nothing received yet, tx %u frames", LINK_NAMES[static_cast<int>(link_)],
+    ESP_LOGV(TAG, "Link %s: nothing received yet, tx %u frames", LINK_NAMES[static_cast<int>(link_)],
              (unsigned) tx_frames_);
   else
-    ESP_LOGD(TAG, "Link %s: rx %u frames (%u bad, %u bytes), last %u ms ago; tx %u frames; state=%d locked-pin=%s",
+    ESP_LOGV(TAG, "Link %s: rx %u frames (%u bad, %u bytes), last %u ms ago; tx %u frames; state=%d locked-pin=%s",
              LINK_NAMES[static_cast<int>(link_)], (unsigned) rx_frames_, (unsigned) rx_bad_, (unsigned) rx_bytes_,
              (unsigned) (now - last_rx_ms_), (unsigned) tx_frames_, state_, pin_retries_ >= 5 ? "gave up" : "ok");
 }

@@ -1,5 +1,7 @@
 # Mainboard (MB) Reverse Engineering Documentation — RMR300 Lawn Mower
 
+> **Status 2026-10-10: the ESPHome component drives the mower** (start, stop, return to station, front buttons). Current state and the root cause of the earlier failures are in **§15**. Sections 1–14 are history; where they disagree with §15, `PROTOCOLS.md` or `AGENTS.md`, those win.
+
 > **Korekta 2026-10-09** (dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)): ESP32 łączy się UART-em bezpośrednio z U13 (`dpport`, USART0); U16 nie jest mostem, tylko MCU czujników przewodu/podnoszenia na osobnym porcie U13 (`bdport`). Przyciski START/HOME/OK są na ESP32 GPIO22/21/19 (pull-up, aktywne niskim); `0x10000001/2/7` to komendy klawiszy (START+OK = start koszenia, HOME+OK = powrót), nie potwierdzenia błędów. Sekcje poniżej mówiące, że „ESP nie może uruchomić koszenia”, „przyciski idą do U16” i o „error ACK”, są nieaktualne. `start_mowing()`/`return_to_dock()` i obsługa przycisków zostały przepisane.
 
 ## Document History
@@ -409,7 +411,7 @@ Current hypothesis: **rain=1** in boot sequence is the most suspicious. It was c
 
 ---
 
-## 5. Current Implementation Status
+## 5. Implementation Status (2026-06, outdated — see §15)
 
 ### Working
 - ✅ Boot sequence: BOOT → KEEPALIVE → STATE(0) → RAIN(0) → WIFI → ESP_INFO → INIT
@@ -1168,6 +1170,8 @@ Only if H3+H1 don't explain the issue:
 
 ## 14. H3 Analysis Results: Boot Protocol Mismatch (Root Cause Found)
 
+> **Resolved.** The handshake was implemented on 2026-10-09; the remaining blocker was the PIN (§15). The U16 parts below are wrong: the ESP talks to U13 directly and START is read by the ESP32.
+
 ### Summary
 
 **Our custom ESPHome firmware does NOT implement the MB boot protocol correctly.** The MB (U16) ignores all ESP communication because the ESP never completes the required boot handshake. This explains why physical START (and all other functions) don't respond.
@@ -1238,65 +1242,64 @@ To restore communication, the custom firmware must:
 
 **Implement boot protocol in ESPHome custom component** — add handlers for MB boot frames, send correct ESP_BOOT/ESP_KEEPALIVE/ESP_POLL/ESP_INIT sequence, then test if START becomes responsive.
 
-## 15. 2026-10-10: pierwszy test nowego komponentu na kosiarce
+## 15. 2026-10-10: field test — the mower runs under ESPHome ✅
 
-Komponent z handshake'iem (commit `d77b2da` i późniejsze) wgrany przez OTA, kosiarka w ogrodzie, logi przez API ESPHome. Konfiguracja użytkownika to `kosiarka.yaml` w HA na innej maszynie; komponent pobierany z `github://neutrinus/lux-tools-rmr300@main`, więc każda poprawka wymaga commita i pusha przed OTA.
+The component with the boot handshake (commit `d77b2da` and later) was flashed over OTA and tested in the garden, with logs over the ESPHome API. The user's config (`kosiarka.yaml`) lives in HA on another machine and pulls the component from `github://neutrinus/lux-tools-rmr300@main`, so every fix has to be committed and pushed before an OTA.
 
-### Twarde fakty (z logów)
+**Result: mowing, stop and return to station work from Home Assistant and from the front buttons (START→OK, HOME→OK). The physical STOP works too.**
 
-- **Link z U13 działa.** Po OTA (restart samego ESP, U13 dalej pracuje) ESP przechodzi w `UP` po pierwszej ramce z MB. Stabilnie ~19 ramek RX / 10 s (~38 B/ramkę: RTC `0x40000011` co 1 s i ack-i `0x33000021/22` na nasze WiFi/BT), ~40 ramek TX / 10 s, 0 błędnych. MB nie zgłasza `0x20000004` (timeout linku), czyli nasze ramki do niego docierają i są parsowane.
-- **Przyciski na płytce ESP działają.** GPIO22 START, GPIO21 HOME, GPIO19 OK (pull-up, aktywne niskim). START i HOME wysyłają `0x10000007`, OK w oknie 3 s wysyła `0x10000001` / `0x10000002`. Widać to w logu TX przy każdym naciśnięciu.
-- **MB nie reaguje na komendy klawiszy ani zdalne.** Na `0x10000007` + `0x10000001` (z HA i z przycisków), `0x10000002`, `0x10000023`, `0x10000015` nie przychodzi **żadna** ramka (oryginał dostaje `0x41000005` + `state:8` w ~30 ms). Stan MB w tym czasie: `state:1` po świeżym włączeniu, `state:0` po samym restarcie ESP.
-- **Wyłączenie wyłącznikiem:** MB wysyła `0x41000008` (shutdown), potem `0x330000A0 {"state":11,...}`. Po ponownym włączeniu wyświetlacz pokazuje `boot`, potem `IdLE`; status `state:1`.
-- **Po restarcie samego ESP (OTA) MB nie wysyła statusu** (`0x330000A0`/`A1`) dopóki nic się nie zmieni. Wyświetlacz zostawał na `boot`, czujniki stanu na `unknown`.
-- **Bajt CRC może być równy `{` (0x7B).** Parser szukający samego `{` zaczynał ramkę od CRC i gubił następną (`RX unparsable: {#&{"cmd":1073741841,...}`). Poprawione: ramka zaczyna się od `&{`.
-- **Log przez API łączy się ~30–40 s po włączeniu kosiarki**, więc handshake, `lock` i wynik PIN-u z bootu nie były widoczne w żadnym logu z tego dnia.
-- U13: dekoder komend `0x08063808` nie ma żadnych warunków, zawsze woła `set_action` (`0x08076244`, zapis bajtu akcji do `[*0x200002c0 + 4]`). Ostatnia komenda nadpisuje poprzednią (jeden bajt, nie maska). Warunek wykonania jest dopiero w procesie oczekiwania (`0x0806ab90`): wywołanie `[[ctx]+4]->[+0xc]()` != 0 omija całą obsługę akcji (`0x0806abdc` → `0x0806acc0`), a `0x08027b68` != 0 wychodzi wcześniej. Co sprawdzają te funkcje — nieustalone.
+### Root cause of "the mower ignores every command"
 
-### Błędy znalezione i poprawione w komponencie
+U13 ignores all key and remote commands until it has accepted the PIN. Nothing comes back, not even an error. Right after the handshake U13 sends `0x41000002 {"lock":1}`; the ESP must answer `0x41000005 {"pwd":N}`, and U13 replies `0x41000020 {"result":1}`.
 
-| Błąd | Skutek | Commit |
-|---|---|---|
-| `0x33000021` traktowane jako wynik PIN-u | co 1 s „PIN accepted” na ack WiFi; prawdziwy wynik `0x41000020 {"result":1}` ignorowany; `Is Locked` nigdy nie gasło | `942ba1b` |
-| PIN wysyłany tylko raz, zaraz po `Link up` | wcześniej niż w oryginale (tam po `lock:1` i zapytaniach `0x300000A6/A7/A8`, gdy użytkownik wpisze PIN); możliwe, że U13 go nie przyjmuje | `050f3c1`: PIN także po `0x41000002 {"lock":1}` |
-| Start ramki na dowolnym `{` | gubienie ramek, gdy CRC = `0x7B` | `050f3c1` |
-| `kosiarka.yaml` użytkownika: GPIO22 jako zwykły czujnik, brak GPIO21, OK bez `inverted`/`key_ok()` | fizyczne przyciski nic nie wysyłały | poprawione w YAML (wzór: `snk-mower.yaml`) |
+The component had two bugs here:
+- It took `0x33000021` (U13's ack of our WiFi status, sent every second) for the PIN result, and ignored the real one, `0x41000020`. So `Is Locked` never cleared.
+- It sent the PIN once, at link up. Now it also sends it on `{"lock":1}` (`050f3c1`), and the mower unlocked at once. [I] Why U13 did not accept the earlier PIN is not established.
 
-Diagnostyka dodana do komponentu: każda nieokresowa ramka RX w logu (`RX {...}`), statystyki linku co 10 s (`b4fb306`), bufor pierwszych 80 ramek od startu wypisywany 60 s po starcie i przyciskiem „Dump Boot Trace” (`050f3c1`).
-
-### Wnioski
-
-- Handshake i utrzymanie linku są już poprawne: U13 nie wyłącza kosiarki i odpowiada na ramki stanu.
-- Brak reakcji na klawisze **nie** wynika z kodowania ramek ani z dekodera komend w U13. Bramka jest w procesie oczekiwania U13.
-- Hipoteza główna [I]: kosiarka jest zablokowana PIN-em (`lock:1`), bo U13 nie przyjął PIN-u wysłanego za wcześnie albo jego wynik (`0x41000020`) był ignorowany. Za: w oryginale między PIN-em a START jest `0x41000020 {"result":1}`, u nas nigdy go nie widzieliśmy. Przeciw: nie wiadomo, czy lock blokuje akcje w `0x0806ab90`.
-- Do sprawdzenia następnym razem: boot trace po włączeniu kosiarki (czy przychodzi `lock:1`, czy `0x41000020` ma `result:1`), potem START+OK z przycisków.
-
-### Aktualizacja 17:15: kosiarka kosi ze sterowania ESPHome ✅
-
-Po wersji `050f3c1` (PIN wysyłany po `{"lock":1}`) **koszenie, STOP i powrót do stacji działają** z HA i z przycisków na kosiarce. Hipoteza o blokadzie PIN-em potwierdzona.
-
-Boot trace (restart ESP po OTA, czasy w s od startu ESP):
+### Boot trace (ESP restart after OTA, seconds since ESP boot)
 
 ```
 0.145 TX 0x40000004 (ESP_BOOT)            0.252 RX 0x41000002 {"lock":1}
 0.146 TX 0x30000028 {"state":0}           0.253 TX 0x41000005 {"pwd":9633}
 0.147 TX 0x22000000 {"rain":1}            0.275 RX 0x330000A0 {"state":1,"bat_per":100,...}
 0.245 RX 0x20000001                       0.291 RX 0x41000020 {"result":1}
-0.247 RX 0x20000004  → link up            0.314 RX 0x330000A0 {"state":2}
-0.249 TX 0x300000A6 / A7 / A8 (zapytania) 0.416 RX 0x41000003
+0.247 RX 0x20000004  -> link up           0.314 RX 0x330000A0 {"state":2}
+0.249 TX 0x300000A6 / A7 / A8 (queries)   0.416 RX 0x41000003
                                           0.417 RX 0x330000A0 {"state":6}
-52.203 TX 0x10000007   52.710 TX 0x10000001   52.755 RX 0x41000005   52.777 RX state:8  (kosi)
+52.203 TX 0x10000007   52.710 TX 0x10000001   52.755 RX 0x41000005   52.777 RX state:8  (mowing)
 62.855 TX 0x10000023   62.954 RX 0x41000003   62.970 RX state:6                        (stop)
-71.353 TX 0x10000007   71.859 TX 0x10000002   71.897 RX 0x41000006   71.920 RX state:9  (do stacji)
+71.353 TX 0x10000007   71.859 TX 0x10000002   71.897 RX 0x41000006   71.920 RX state:9  (to station)
 ```
 
-Twarde fakty:
-- **U13 odpowiada na `ESP_BOOT` (`0x40000004`) od nowa: `0x20000001`, `0x20000004`, potem `lock:1` i pełny status**, także gdy restartuje się tylko ESP. Nie trzeba wyłączać kosiarki, żeby przejść przez blokadę.
-- **Bez `0x41000020 {"result":1}` U13 ignoruje wszystkie komendy klawiszy i zdalne** (bez żadnej odpowiedzi). To była bramka w procesie oczekiwania. Wcześniej PIN szedł raz, przy `link up`; w poprzednich próbach wynik nie przychodził albo nie był widoczny [I: dlaczego U13 nie przyjął wcześniejszego PIN-u — nieustalone; teraz PIN idzie ~1 ms po `lock:1`].
-- `0x10000023` (zdalny stop) działa: `0x41000003` + `state:6`.
-- `0x10000007` + `0x10000002` (HOME+OK) działa: `0x41000006` + `state:9`.
-- Stany: 1 = czeka na PIN, **2 = chwilowy po odblokowaniu (nie koszenie)**, 6 = stop/gotowa, 8 = koszenie, 9 = powrót. `state:2` we wszystkich 9 capture'ach występuje tylko po wyniku PIN-u. Komponent mapował 2 na koszenie; poprawione, tabela w `PROTOCOLS.md` też.
-- W trakcie koszenia MB wysyła co ~0,5 s na zmianę `0x40000020 {"lv":255}` i `0x40000021`.
-- Komenda START ma odpowiedź w ~45 ms, STOP w ~100 ms.
+### Hard facts (from the logs)
 
-Otwarte: `0x10000015` (krawędź) testowane tylko poza stacją, bez reakcji (zgodnie z firmware: tylko ze stacji). `0x10000021/22` (zdalny start/powrót) nieprzetestowane.
+- **U13 answers `ESP_BOOT` (`0x40000004`) by replaying its boot sequence** (`0x20000001`, `0x20000004`, `lock:1`, full status), also when only the ESP restarted. No power cycle is needed to unlock after an OTA.
+- **Link**: about 19 RX frames per 10 s at rest (RTC `0x40000011` every 1 s plus the `0x33000021/22` acks of our WiFi/BT status), about 40 TX frames per 10 s, 0 bad frames.
+- **Response times**: START about 45 ms (`0x41000005` + `state:8`), STOP about 100 ms (`0x41000003` + `state:6`), HOME+OK about 40 ms (`0x41000006` + `state:9`).
+- **Physical STOP** (handled by U13): `{"stop_state":1}`, `0x41000003`, `state:6`, `{"stop_state":0}`.
+- **States**: 1 = waiting for the PIN, **2 = transient after unlocking, not mowing**, 6 = stopped/ready, 8 = mowing, 9 = returning, 11 = shutting down. In all 9 captures `state:2` only follows the PIN result. The component used to map 2 to mowing; fixed in `fb79cea`, and the table in `PROTOCOLS.md` too.
+- **While mowing** U13 sends `0x40000020 {"lv":255}` and `0x40000021` alternately, about every 0.5 s.
+- **Power switch off**: U13 sends `0x41000008` (shutdown), then `0x330000A0 {"state":11,...}`.
+- **A CRC byte can be `{` (0x7B).** The parser started a frame at the CRC and lost the next frame (`RX unparsable: {#&{"cmd":1073741841,...}`). Frames now start at `&{`.
+- **The API log connects 30–40 s after power-on**, too late for the boot handshake. The component therefore keeps the first 80 non-periodic frames and logs them at DEBUG 60 s after boot.
+- **U13 command decoder** `0x08063808` has no conditions and always calls `set_action` (`0x08076244`, which writes one action byte to `[*0x200002c0 + 4]`; the last command overwrites the previous one). The gate is in the idle process (`0x0806ab90`): if `[[ctx]+4]->[+0xc]()` returns non-zero, all action handling is skipped (`0x0806abdc` → `0x0806acc0`). This is consistent with the PIN lock, though the function itself was not traced.
+
+### Component changes
+
+| Change | Commit |
+|---|---|
+| PIN result taken from `0x41000020`; `0x33000021/22` are WiFi/BT acks | `942ba1b` |
+| PIN also sent on `{"lock":1}` | `050f3c1` |
+| Frame start at `&{` | `050f3c1` |
+| Every non-periodic RX frame logged at DEBUG; link statistics at VERBOSE; boot trace | `b4fb306`, `050f3c1` |
+| `state:2` no longer maps to mowing | `fb79cea` |
+| Steady display multiplexing and a night mode switch (PR #5) | `9a67880` |
+| `pin:` is a required option (no default PIN in the component); example YAML reads it from `!secret mower_pin` | this cleanup |
+
+The user's `kosiarka.yaml` also had the front buttons wrong (GPIO22 as a plain sensor, no GPIO21, OK without `inverted` and `key_ok()`). It now matches `snk-mower.yaml`.
+
+### Still open
+
+- Edge trim `0x10000015` from the station (only tested away from it, ignored as the firmware says).
+- Remote `0x10000021/22`.
+- Docking and charging: does `station:true` / `state:10` arrive and map correctly.

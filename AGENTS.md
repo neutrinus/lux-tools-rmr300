@@ -2,14 +2,14 @@
 
 Reverse-engineering repo for the **SNK OEM robot mower** (Lux Tools A-RMR-300-24 and ~15 rebrands; same PCBs `80102372-01` / `80102373-01`). Two largely independent workstreams — read the right doc first:
 
-1. **Firmware / protocol** (reverse engineering + ESPHome replacement). Mostly wound down as of 2026-06-24.
+1. **Firmware / protocol** (reverse engineering + ESPHome replacement). The ESPHome component drives the mower as of 2026-10-10.
 2. **Used-mower price hunting** via `tools/search_mowers.py` (active).
 
 ## Read these first
 
 - `README.md` — map of the whole repo and rebrand/model table.
 - `FIRMWARE_MAP.md` — layout, modules, key functions and data structures of all three firmwares (ESP32, U13, U16).
-- `ha.md` — firmware status + history. **§14 (H3) is the current root-cause conclusion.**
+- `ha.md` — firmware status + history. **§15 is the current state** (field test 2026-10-10); earlier sections are history.
 - `PROTOCOLS.md` — **authoritative** command directions and protocol.
 - `captures/README.md` — logic-analyzer setup + scenario index.
 
@@ -20,7 +20,8 @@ ESPHome firmware (config `snk-mower.yaml`, custom component `components/snk_mowe
 esphome run snk-mower.yaml        # global ~/.local/bin/esphome 2026.6.0; run from repo root
 ```
 - `esphome` is **not** in `.venv`. As of 2026-10-09 `esphome config`/`compile` crash on Python 3.14 with a protobuf `TypeError: Metaclasses with custom tp_new are not supported` — suspect an env/protobuf issue, don't assume the YAML is broken.
-- `secrets.yaml` (gitignored, holds WiFi creds) is **required** by the YAML.
+- `secrets.yaml` (gitignored) is **required** by the YAML: `wifi_ssid`, `wifi_password`, `mower_pin` (4 digits).
+- The user's HA builds `kosiarka.yaml` on another machine from `github://neutrinus/lux-tools-rmr300@main`: a fix reaches the mower only after commit + push. For a local build: `uv venv --python 3.13 .venv-esphome && VIRTUAL_ENV=.venv-esphome uv pip install esphome` (locally excluded from git) with `source: {type: local, path: components}` and a dummy `secrets.yaml`.
 
 Offer scan (`.venv` exists only for this; Python is system 3.14):
 ```bash
@@ -31,7 +32,6 @@ python3 tools/search_mowers.py --all-prices --portals olx,ka
 ```
 - Needs `curl_cffi` (installed) and Playwright Firefox. Allegro session persists in `.browser_profile_allegro/`.
 - Playwright Firefox can fail to launch from a dangling lock: `rm -f ~/.cache/ms-playwright/firefox-1522/firefox/lock`.
-- Stale shells `tools/search_mowers.sh`, `tools/olx_search.sh`, `tools/olx_weekly_search.sh` are superseded — use the Python script.
 
 Other tools:
 ```bash

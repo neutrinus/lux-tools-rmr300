@@ -56,7 +56,7 @@ uart:
 snk_mower:
   id: my_mower
   uart_id: mower_uart
-  pin: "9633"
+  pin: !secret mower_pin  # 4-digit PIN set on the mower
   display_clk: 33
   display_mosi: 25
   display_cs: 32
@@ -182,22 +182,6 @@ button:
     on_press:
       - lambda: 'id(my_mower).trim_edge();'
 
-
-  # Logs the frames recorded since boot (the API log connects too late to see them).
-  - platform: template
-    name: "${friendly_name} Dump Boot Trace"
-    icon: "mdi:text-box-search-outline"
-    entity_category: diagnostic
-    on_press:
-      - lambda: 'id(my_mower).dump_trace();'
-
-  # === Send Raw JSON button (reads from text field below) ===
-  - platform: template
-    name: "${friendly_name} Send Raw JSON"
-    icon: "mdi:send"
-    on_press:
-      - lambda: 'id(my_mower).send_raw_json(id(raw_json_buf));'
-
 switch:
   # Dims the front display (display_night_brightness, default 20 %).
   # Schedule it from Home Assistant, e.g. on at sunset, off at sunrise.
@@ -211,20 +195,3 @@ switch:
     turn_off_action:
       - lambda: 'id(my_mower).set_display_night(false);'
 
-globals:
-  - id: raw_json_buf
-    type: std::string
-    restore_value: no
-    initial_value: ''
-
-text:
-  - platform: template
-    name: "${friendly_name} Raw JSON"
-    icon: "mdi:code-json"
-    mode: text
-    optimistic: true
-    initial_value: '{"cmd":1090519050,"action":1}'
-    on_value:
-      - lambda: |
-          id(raw_json_buf) = x;
-          ESP_LOGI("ha", "Raw JSON buffer updated: %s", x.c_str());

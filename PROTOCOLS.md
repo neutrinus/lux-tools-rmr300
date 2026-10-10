@@ -3,7 +3,7 @@
 > **Korekta 2026-10-09** (szczegóły i dowody: [`20261009_claude_investigation.md`](20261009_claude_investigation.md)):
 > 1. ESP32 rozmawia **bezpośrednio z U13** (`driver_dpport`, USART0). U16 nie jest mostem: to MCU czujników przewodu i podnoszenia, podłączony do U13 osobnym portem (`bdport`, USART1 w U13, USART2 w U16).
 > 2. Przyciski START/HOME/OK czyta **ESP32** (GPIO22/21/19). Klawisze wysyła do MB jako `0x1000000x`. To **nie są** "error ACK".
-> 3. Koszenie **da się** uruchomić po UART: `0x10000007`, potem `0x10000001` (START, a potem OK). Powrót do stacji: `0x10000007`, potem `0x10000002` (HOME, a potem OK).
+> 3. Mowing **can** be started over UART: `0x10000007`, then `0x10000001` (START, then OK). Return to station: `0x10000007`, then `0x10000002` (HOME, then OK). **Confirmed on the mower on 2026-10-10**, once U13 has accepted the PIN (`ha.md` §15).
 
 > **Krzyżowa weryfikacja kierunków (2026-06-22):**
 > Kierunki poniżej zostały zweryfikowane z **trzech niezależnych źródeł**:
@@ -149,7 +149,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x40000013` | 1073741843 | `len` | CUT_TIME_QUERY | MB queries max cut time (min) |
 | `0x40000014` | 1073741844 | — | UNKNOWN_14 | Nieznane |
 | `0x40000020` | 1073741856 | `lv` | LIGHT | Light sensor level |
-| `0x40000021` | 1073741857 | — | BOOT_ACK? | Przy starcie, ale też co ~0,5 s w trakcie koszenia (z `0x40000020 {"lv":255}`); znaczenie niepewne |
+| `0x40000021` | 1073741857 | — | BOOT_ACK? | At boot, and also every ~0.5 s while mowing (alternating with `0x40000020 {"lv":255}`); meaning uncertain |
 | `0x41000002` | 1090519042 | `lock:0/1` | LOCK | Lock state |
 | `0x41000003` | 1090519043 | — | EXEC_ACTION | Akcja wykonana (po STOP/akcji) |
 | `0x41000004` | 1090519044 | `err` | ERROR_NOTIFY | Error code notification |
@@ -209,12 +209,12 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 
 | State | Znaczenie |
 |-------|-----------|
-| 0 | Po włączeniu, przed `{"lock":1}` |
-| 1 | Czeka na PIN (po `{"lock":1}`, przed `0x41000020`) |
-| 2 | Chwilowy, zaraz po `0x41000020 {"result":1}`; potem zawsze `0x41000003` i `state:6`. **Nie koszenie** (wszystkie capture'y i test 2026-10-10) |
-| 6 | Stop / gotowa (stan spoczynkowy po odblokowaniu i po każdym STOP) |
-| 7 | Error (z polem `error:N`) |
-| 8 | **Koszenie**: po `0x10000001` przychodzi `0x41000005` (odjazd) i `state:8` (potwierdzone na kosiarce 2026-10-10) |
+| 0 | After power-on, before `{"lock":1}` |
+| 1 | Waiting for the PIN (after `{"lock":1}`, before `0x41000020`) |
+| 2 | Transient, right after `0x41000020 {"result":1}`; always followed by `0x41000003` and `state:6`. **Not mowing** (all captures and the 2026-10-10 test) |
+| 6 | Stopped / ready (rest state after unlocking and after every STOP) |
+| 7 | Error (with `error:N`) |
+| 8 | **Mowing**: `0x10000001` is answered by `0x41000005` (departure) and `state:8` (confirmed on the mower 2026-10-10) |
 | 9 | **RETURNING TO DOCK** |
 | 10 | **CHARGING** |
 | 11 | **SHUTDOWN / POWER OFF** |
@@ -371,6 +371,8 @@ Step   ESP32                                   U13 (dpport)
 3.     ◀──────── 0x41000020 {"result":1}
 ```
 
+U13 asks for the PIN with `0x41000002 {"lock":1}` right after the handshake. Until it answers `0x41000020 {"result":1}` it ignores key and remote commands. After `result:1` it sends `state:2`, `0x41000003` and `state:6`.
+
 PIN jest przechowywany w U13 (KV-store, key `"pwd"`, adres RAM `0x2000027C`), NIE na ESP32.
 ESP tylko przesyła PIN wprowadzony przez użytkownika do MB w celu weryfikacji.
 
@@ -462,60 +464,33 @@ U13 OTA framing (from `FUN_08008cb8`):
 
 ---
 
-## Project Status Summary
+## Project Status Summary (2026-10-10)
 
-### What Works (stable communication via ESPHome component)
-- ✅ **Protocol decoding** — JSON + CRC8-Dallas at 230400 8N1, full frame parsing
-- ✅ **Boot sequence** — BOOT→KEEPALIVE→STATE→RAIN→WIFI→ESP_INFO→INIT, non-blocking
-- ✅ **Handshake** — stable SYNC→DONE transition, PIN accepted → `state:1` (READY)
-- ✅ **Watchdog-safe communication** — 36+ s without watchdog (log 22), `safe_mode` counter resets
-- ✅ **Periodic reporting** — KEEPALIVE@1s, WIFI/BT@5s, ESP_INFO@30s, ESP_STATE@10s, RAIN@60s
-- ~~Error ACK~~: błędna interpretacja. `0x10000001/2/7` to komendy klawiszy, a stary `send_error_ack()` po każdym błędzie wysyłał „start koszenia” + „do stacji”. Usunięte 2026-10-09
-- ✅ **Display** — 4-digit 7-segment LED (SPI 2 MHz, 3× 74HC595). Multiplexed 2 ms per digit from a GPTimer alarm and a top-priority task on core 1, like the original "tube scan" task. Night mode dims it by shortening the lit part of each slot
-- ✅ **Sensors** — rain (GPIO36), light, battery, device-info, schedule parsing
-- ✅ **HA integration** — full sensor/binary_sensor/text_sensor publishing
-- ✅ **Boot delay (30s)** — OTA-safe window, configurable
+The ESPHome component `components/snk_mower` drives the mower. Confirmed on the hardware on 2026-10-10 (details and trace: `ha.md` §15).
 
-### What Does NOT Work
-- 🔄 **START/HOME/OK buttons** (poprawione 2026-10-09, niezweryfikowane na sprzęcie): przyciski są na ESP32 GPIO22/21/19 i wymagają `INPUT_PULLUP`. Komponent obsługuje je teraz tak jak oryginał (`key_start/key_home/key_ok`).
-- 🔄 **Software mowing start** (poprawione 2026-10-09, niezweryfikowane na sprzęcie): `start_mowing()` wysyła `0x10000007`, a po 500 ms `0x10000001`. `return_to_dock()` wysyła `0x10000007`, a po 500 ms `0x10000002`. Wcześniejsze metody 1–5 nie działały, bo używały komend MB→ESP albo harmonogramu.
-- ❌ **GPIO mowing trigger (method 6)** — untested. Would require a jumper wire from a free ESP32 pin to J8 pin 6 (START button line).
-- ❌ **PIN is NOT stored in original ESP32 firmware** — PIN is stored in U13 KV-store (EEPROM U22). Original ESP32 firmware only forwards user-entered PIN for verification; there is no `pwd` constant in the firmware binary.
-- ❌ **Physical START button** — does not trigger any MB response in log 23. Possible causes: J8 cable seating, GPIO interference, or MB state lock-out condition. Not resolved.
-- ❌ **Colon on display** — bit location not found (b0, U4)
-- ❌ **ESP not responding to MB queries** — `CMD_ESP_WIFI` / `CMD_ESP_BT` queries are sent by MB but ESP does not track/respond to them in time
+### Works (confirmed on the mower)
+- ✅ **U13 handshake**: `ESP_BOOT`, answers to `0x40000009`/`0x40000008`, KEEPALIVE every 500 ms, WiFi/BT every 1 s. Stable link, 0 bad frames. After an ESP-only restart (OTA), U13 answers `ESP_BOOT` by replaying its whole boot sequence.
+- ✅ **PIN**: U13 sends `0x41000002 {"lock":1}`, the ESP answers `0x41000005 {"pwd":N}`, U13 replies `0x41000020 {"result":1}`. The PIN is a required YAML option (`pin:`).
+- ✅ **Start mowing**: `0x10000007` + `0x10000001` → `0x41000005` + `state:8`, from HA and from START→OK.
+- ✅ **Return to station**: `0x10000007` + `0x10000002` → `0x41000006` + `state:9`, from HA and from HOME→OK.
+- ✅ **Remote stop**: `0x10000023` → `0x41000003` + `state:6`. The physical STOP is handled by U13 (`stop_state:1/0`).
+- ✅ **Buttons** START/HOME/OK on ESP32 GPIO22/21/19.
+- ✅ **Display**, buzzer, rain sensor, battery, statistics.
 
-### Key Architectural Constraints
-1. ~~ESP cannot start mowing via UART~~: nieprawda, patrz „Action Flow”. START+OK = `0x10000007` + `0x10000001`.
-2. **MB watchdog ~30s from power-on** — only `BOOT` (`0x40000004`) resets it. Boot_delay keeps MB alive with POLL/KEEPALIVE but does NOT reset the watchdog.
-3. **POLL in DONE causes DEVICE_INFO flood** — MB interprets periodic `CMD_ESP_POLL` as "ESP requests device info" and re-sends `DEVICE_INFO` + `HW_VERSIONS` indefinitely. POLL must be restricted to PRE/SYNC phases.
-4. **`0x41xxxxxx` commands are MB→ESP** — all except `PIN_SEND` (`0x41000005`). Sending them reverse (ESP→MB) has no effect.
-5. **U16 max 128 bytes/frame** — mport driver limitation.
-6. **PIN is stored in U13, not on ESP32** — ESP only forwards user-entered PIN.
+### Untested
+- `0x10000015` (edge trim) from the station. Outside the station U13 ignores it, as the firmware says.
+- `0x10000021/22` (remote start/home, as sent by the app).
+- Docking and charging (`station:true`, `state:10`) in the component.
+- Display colon (bit not found).
 
-### Root Cause: Boot Protocol Mismatch (Found 2026-06-24)
-
-**Our custom ESPHome firmware does NOT implement the MB boot protocol correctly.** Analysis of all 5 LA captures (drugi, pierwszy, trzeci, czwarty, 02-boot-pin) vs our log 23 revealed:
-
-- **Zero MB→ESP frames** in our log 23 — MB never responds to our ESP
-- **Missing handshake frames**: `ESP_BOOT` (`0x40000004`), `ESP_KEEPALIVE` (`0x30000005`), `ESP_INIT` (`0x40000001`), `ESP_POLL` (`0x300000A1`)
-- **Wrong state**: our firmware sends `ESP_STATE state=1` immediately; original sends `state=0` first
-- **Wrong order**: our firmware jumps to `ESP_WIFI/BT/STATE=1` without waiting for MB boot sequence
-
-The MB (U13, dpport) expects: `MB boot ──→ ESP_BOOT ──→ ESP_KEEPALIVE ──→ ESP_STATE=0 ──→ ESP_POLL ──→ ESP_INIT ──→ ...`
-
-Our firmware never sends `ESP_BOOT`, so MB ignores all communication. Physical START didn't respond because the buttons are read by the ESP32 itself (GPIO22/21/19) and our firmware did not send the key commands `0x10000007` → `0x10000001` (correction 2026-10-09).
-
-See `ha.md §14` for full analysis.
-
-### Future Work (if continuing)
-1. **Fix boot protocol in ESPHome component** — add handlers for MB boot frames, send correct `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` sequence
-2. ~~Method 6 (GPIO jumper to J8 START)~~: not needed, START+OK is a UART command (see Action Flow)
-3. **Find colon bit** on display (b0, U4)
-4. **Implement MB query tracking** — respond to `CMD_ESP_WIFI` / `CMD_ESP_BT` in DONE phase
-
-### Current Decision (updated 2026-06-24)
-H3 analysis identified the root cause: **boot protocol mismatch**. The MB ignored our ESP because it never completed the boot handshake; buttons additionally need the ESP-side key commands (see Action Flow). The fix is in software (implement correct boot protocol in ESPHome component), not hardware. Original firmware still on mower for now; testing requires OTA update with fixed firmware.
+### Protocol constraints
+1. **Until U13 accepts the PIN it silently ignores every key and remote command.**
+2. **U13 powers the mower off ~16 s after boot without the handshake**, and sends `0x20000004` after 3 s without frames from the ESP (`20261009_claude_investigation.md` §10).
+3. **POLL (`0x300000A1`) only before the handshake.** Afterwards U13 answers every POLL with `DEVICE_INFO` + `HW_VERSIONS` again.
+4. **`0x41xxxxxx` are MB→ESP commands**, except `0x41000005` (PIN). Sending them to the MB does nothing.
+5. **`0x10000004/14/24` power the mower off.**
+6. **The PIN lives in U13**; the ESP only forwards it.
+7. **A CRC byte can equal `{`**: the parser must start a frame at `&{`.
 
 ---
 
