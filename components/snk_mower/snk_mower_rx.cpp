@@ -43,6 +43,11 @@ void SnkMower::read_uart() {
     rx_frames_++;
     last_rx_ms_ = millis();
     uint32_t cmd = doc["cmd"];
+    if (proto::is_esp_command(cmd, doc["pwd"].is<int>())) {
+      ESP_LOGD(TAG, "RX echo of our own frame, ignored: %s", rx_buf_);
+      trace("RX echo", rx_buf_);
+      continue;
+    }
     if (cmd == proto::MB_RTC || cmd == proto::MB_WIFI_ACK || cmd == proto::MB_BT_ACK)
       ESP_LOGV(TAG, "RX %s", rx_buf_);
     else {
@@ -149,6 +154,9 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case proto::MB_BT_ACK:
       if (!doc["result"].as<bool>())
         ESP_LOGW(TAG, "MB rejected our %s status: %s", cmd == proto::MB_WIFI_ACK ? "WiFi" : "BT", rx_buf_);
+      break;
+    case proto::MB_LOG:
+      ESP_LOGI(TAG, "MB log: %s", doc["log"] | "");
       break;
     case proto::MB_SHUTDOWN:
       ESP_LOGI(TAG, "MB shutting down");

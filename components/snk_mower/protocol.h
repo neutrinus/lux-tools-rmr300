@@ -14,6 +14,7 @@ namespace snk_mower {
 namespace proto {
 
 // ── U13 → ESP ────────────────────────────────────────────────────
+static constexpr uint32_t MB_LOG           = 0x15000001;  // {"log":"..."}, a U13 log line
 static constexpr uint32_t MB_POWER_ON      = 0x20000001;
 static constexpr uint32_t MB_INIT_ERROR    = 0x20000002;  // rw_init failed, {"error":bits}, every 2 s
 static constexpr uint32_t MB_LINK_UP       = 0x20000004;  // handshake done, or "no ESP frame for 3 s"
@@ -34,6 +35,7 @@ static constexpr uint32_t MB_LIGHT         = 0x40000020;
 static constexpr uint32_t MB_LOCK          = 0x41000002;
 static constexpr uint32_t MB_ERROR_NOTIFY  = 0x41000004;
 static constexpr uint32_t MB_SHUTDOWN      = 0x41000008;
+static constexpr uint32_t MB_DOCKED        = 0x41000007;  // reached the station, followed by state 10
 static constexpr uint32_t MB_PIN_ACK       = 0x41000020;  // {"result":1} after a PIN
 static constexpr uint32_t MB_BATTERY       = 0x50000021;
 
@@ -63,6 +65,20 @@ static constexpr uint32_t REMOTE_STOP       = 0x10000023;
 // 0x10000004, 0x10000014 and 0x10000024 set action bit 0x10, which powers the
 // mower off in every U13 process ("Robot manual power off"). Never send them
 // by accident.
+
+// True for frames only the ESP sends. For about 2 s after U13 powers on, our
+// own frames come back on RX (seen 2026-10-10); they must not count as U13
+// traffic. U13 also sends 0x41000005, but without "pwd".
+inline bool is_esp_command(uint32_t cmd, bool has_pwd) {
+  switch (cmd >> 24) {
+    case 0x10:
+    case 0x22:
+    case 0x30:
+      return true;
+    default:
+      return cmd == ESP_INIT || cmd == ESP_BOOT || cmd == ESP_INFO || (cmd == ESP_PIN && has_pwd);
+  }
+}
 
 // Values the original display firmware 3.02.02 reports in ESP_INFO.
 static constexpr int DISPLAY_HW_VERSION = 60400;

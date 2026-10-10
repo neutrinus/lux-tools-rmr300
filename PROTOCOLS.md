@@ -155,7 +155,8 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x41000004` | 1090519044 | `err` | ERROR_NOTIFY | Error code notification |
 | `0x41000005` | 1090519045 | (brak `pwd`) | **DEPARTURE** | MB→ESP zaraz po `0x10000001` (START+OK), przed `state:8` — odjazd do koszenia |
 | `0x41000006` | 1090519046 | — | RETURN_HOME | Home/return to dock notification |
-| `0x41000007` | 1090519047 | — | DOCKED_CHARGE | Docked / charge start |
+| `0x15000001` | 352321537 | `log` | MB_LOG | U13 log line, e.g. `"W/dpport drv [...] receivce message parse error=..."` (seen 2026-10-10 during U13 boot) |
+| `0x41000007` | 1090519047 | — | DOCKED_CHARGE | Reached the station: `{"station":true}`, `{"border_state":0}`, then `0x41000007` ~2 s later and `state:10` (confirmed 2026-10-10) |
 | `0x41000008` | 1090519048 | — | SHUTDOWN | Power-off command |
 | `0x41000020` | 1090519072 | `result` | PIN_UNLOCK_RESULT | Wysyłane ~10 ms po `0x41000005 {"pwd"}` z ESP (wszystkie captures). Wcześniej nazwane START_ACK, ale nigdy nie następuje po naciśnięciu START |
 | `0x50000021` | 1342177313 | `bat:0..3` | BATTERY | Battery level |
@@ -474,13 +475,13 @@ The ESPHome component `components/snk_mower` drives the mower. Confirmed on the 
 - ✅ **Start mowing**: `0x10000007` + `0x10000001` → `0x41000005` + `state:8`, from HA and from START→OK.
 - ✅ **Return to station**: `0x10000007` + `0x10000002` → `0x41000006` + `state:9`, from HA and from HOME→OK.
 - ✅ **Remote stop**: `0x10000023` → `0x41000003` + `state:6`. The physical STOP is handled by U13 (`stop_state:1/0`).
+- ✅ **Docking and charging**: `{"station":true}`, `0x41000007`, `state:10` → Is Docked / Is Charging.
 - ✅ **Buttons** START/HOME/OK on ESP32 GPIO22/21/19.
 - ✅ **Display**, buzzer, rain sensor, battery, statistics.
 
 ### Untested
 - `0x10000015` (edge trim) from the station. Outside the station U13 ignores it, as the firmware says.
 - `0x10000021/22` (remote start/home, as sent by the app).
-- Docking and charging (`station:true`, `state:10`) in the component.
 - Display colon (bit not found).
 
 ### Protocol constraints
@@ -491,6 +492,7 @@ The ESPHome component `components/snk_mower` drives the mower. Confirmed on the 
 5. **`0x10000004/14/24` power the mower off.**
 6. **The PIN lives in U13**; the ESP only forwards it.
 7. **A CRC byte can equal `{`**: the parser must start a frame at `&{`.
+8. **For ~2 s after U13 powers on, our own TX frames come back on RX** (verbatim echo, before U13 starts its handshake). They must not be taken for U13 traffic.
 
 ---
 

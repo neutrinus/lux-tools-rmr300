@@ -1299,8 +1299,33 @@ The component had two bugs here:
 
 The user's `kosiarka.yaml` also had the front buttons wrong (GPIO22 as a plain sensor, no GPIO21, OK without `inverted` and `key_ok()`). It now matches `snk-mower.yaml`.
 
+### Docking (17:54)
+
+Return to station from HA, then docking and charging, all mapped correctly:
+
+```
+17:54:29.929 TX 0x10000002      17:54:29.960 RX 0x41000006   17:54:29.982 RX state:9
+17:56:21.826 RX {"station":true,...}   17:56:21.952 RX {"border_state":0}
+17:56:23.691 RX 0x41000007              17:56:23.713 RX state:10  -> Is Docked, Is Charging
+```
+
+### Echo of our own frames during U13 boot
+
+Power-on trace (ESP and U13 boot together):
+
+```
+0.249 RX 0x20000001 {"action":0}           U13 powered on
+2.031 RX 0x300000A1                        <- our POLL, echoed back
+2.039..2.050 RX 0x22000000, 0x300000A6/A7/A8, 0x30000005, 0x30000021/22, 0x41000005 {"pwd":9633}  <- all ours
+4.057 RX 0x15000001 {"log":"W/dpport drv [...] (806)receivce message parse error=&{\"cmd\":805306373}\n#&{...wifi...}#&{...bt...}#, len=92\n"}
+5.119 RX 0x40000009 (handshake starts)    ... 6.073 RX 0x20000004   6.647 RX lock:1   6.679 RX result:1
+```
+
+- **Around 2 s after power-on our own TX frames come back on RX verbatim.** [I] Probably U13's USART0 in loopback or the bootloader echoing while the app starts; not traced. The component took the echoed POLL for "MB already running" and went to `UP` 3 s early. The real handshake still followed and was answered, so no harm this time. Fixed: frames only the ESP sends (`0x10xxxxxx`, `0x22xxxxxx`, `0x30xxxxxx`, `0x40000001/4/6`, `0x41000005` with `pwd`) are logged as echo and ignored.
+- **U13 sends its own log lines over dpport** as `0x15000001 {"log":"..."}`. This one says it got three of our frames glued together and could not parse them. The component now logs them at INFO (`MB log: ...`).
+
 ### Still open
 
 - Edge trim `0x10000015` from the station (only tested away from it, ignored as the firmware says).
 - Remote `0x10000021/22`.
-- Docking and charging: does `station:true` / `state:10` arrive and map correctly.
+- Mower state after charging completes.
