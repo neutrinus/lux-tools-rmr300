@@ -183,6 +183,14 @@ button:
       - lambda: 'id(my_mower).trim_edge();'
 
 
+  # Logs the frames recorded since boot (the API log connects too late to see them).
+  - platform: template
+    name: "${friendly_name} Dump Boot Trace"
+    icon: "mdi:text-box-search-outline"
+    entity_category: diagnostic
+    on_press:
+      - lambda: 'id(my_mower).dump_trace();'
+
   # === Send Raw JSON button (reads from text field below) ===
   - platform: template
     name: "${friendly_name} Send Raw JSON"

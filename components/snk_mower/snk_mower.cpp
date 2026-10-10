@@ -18,6 +18,7 @@ static constexpr uint32_t KEEPALIVE_INTERVAL_MS = 500;
 static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;
 static constexpr uint32_t KEY_CONFIRM_WINDOW_MS = 3000;  // 300 ticks of 10 ms in the original
 static constexpr uint32_t STATS_INTERVAL_MS = 10000;
+static constexpr uint32_t TRACE_DUMP_AFTER_MS = 60000;
 
 void SnkMower::setup() {
   ESP_LOGI(TAG, "Setting up SNK mower link (230400 8N1)");
@@ -71,11 +72,32 @@ void SnkMower::loop() {
   display_loop(now);
   if (now - last_stats_ms_ >= STATS_INTERVAL_MS)
     log_link_stats(now);
+  if (!trace_dumped_ && now >= TRACE_DUMP_AFTER_MS) {
+    trace_dumped_ = true;
+    dump_trace();
+  }
+}
+
+void SnkMower::trace(const char *dir, const char *json) {
+  if (trace_.size() >= TRACE_MAX)
+    return;
+  char head[24];
+  snprintf(head, sizeof(head), "%7.3f %s ", millis() / 1000.0f, dir);
+  trace_.push_back(std::string(head) + json);
+}
+
+void SnkMower::dump_trace() {
+  ESP_LOGI(TAG, "Trace of the first %u frames since boot (s, direction, JSON):", (unsigned) trace_.size());
+  for (const auto &line : trace_) {
+    ESP_LOGI(TAG, "  %s", line.c_str());
+    delay(2);  // let the API log keep up
+  }
 }
 
 void SnkMower::log_link_stats(uint32_t now) {
   static const char *const LINK_NAMES[] = {"WAIT_MB", "HANDSHAKE", "UP"};
   last_stats_ms_ = now;
+  now = millis();  // read_uart() may have set last_rx_ms_ after `now`
   if (last_rx_ms_ == 0)
     ESP_LOGD(TAG, "Link %s: nothing received yet, tx %u frames", LINK_NAMES[static_cast<int>(link_)],
              (unsigned) tx_frames_);
@@ -112,6 +134,10 @@ void SnkMower::link_up(const char *why) {
   if (link_ == Link::UP)
     return;
   ESP_LOGI(TAG, "Link up (%s)", why);
+  trace("--", why);
+  // After an ESP-only restart U13 sends no status until something changes,
+  // so drop the "boot" text instead of leaving it up.
+  set_display_text("----");
   link_ = Link::UP;
   uint32_t now = millis();
   link_up_ms_ = now;
@@ -158,8 +184,10 @@ void SnkMower::send_json(const JsonDocument &doc) {
   uint32_t cmd = doc["cmd"] | 0;
   if (cmd == proto::ESP_POLL || cmd == proto::ESP_KEEPALIVE || cmd == proto::ESP_WIFI || cmd == proto::ESP_BT)
     ESP_LOGV(TAG, "TX %s", json);
-  else
+  else {
     ESP_LOGD(TAG, "TX %s", json);
+    trace("TX", json);
+  }
 }
 
 void SnkMower::send_cmd(uint32_t cmd) {

@@ -10,6 +10,8 @@
 #include <driver/spi_master.h>
 #include <esp_adc/adc_oneshot.h>
 #include <ArduinoJson.h>
+#include <string>
+#include <vector>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -85,6 +87,8 @@ class SnkMower : public Component, public uart::UARTDevice {
   void key_ok();
   // Debugging: sends any JSON object as a frame
   void send_raw_json(const std::string &json);
+  // Debugging: logs the frames recorded since boot (also done once, 60 s after boot)
+  void dump_trace();
 
  protected:
   // ── Link to U13 (snk_mower.cpp) ──────────────────────────────
@@ -128,6 +132,12 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t rx_frames_{0};
   uint32_t rx_bad_{0};
   uint32_t tx_frames_{0};
+  // The API log usually connects 30 s after a power-on, too late for the boot
+  // handshake, so the first non-periodic frames are kept and logged later.
+  void trace(const char *dir, const char *json);
+  static constexpr size_t TRACE_MAX = 80;
+  std::vector<std::string> trace_;
+  bool trace_dumped_{false};
 
   SemaphoreHandle_t tx_mutex_{nullptr};
   esp_timer_handle_t link_guard_timer_{nullptr};
@@ -147,6 +157,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   char rx_buf_[BUF_SIZE];
   size_t rx_index_{0};
   bool rx_in_json_{false};
+  bool rx_after_amp_{false};
   bool rx_in_string_{false};
 
   int state_{0};

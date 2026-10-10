@@ -10,13 +10,15 @@ static const char *const TAG = "snk_mower";
 
 void SnkMower::read_uart() {
   // Frames are `&{json}<crc>#`; only the JSON object is needed, so collect
-  // from '{' to the matching '}' outside strings.
+  // from "&{" to the matching '}' outside strings. A lone '{' can be a CRC byte.
   int budget = 256;
   uint8_t byte;
   while (budget-- > 0 && available() > 0 && read_byte(&byte)) {
     rx_bytes_++;
     if (!rx_in_json_) {
-      if (byte != '{')
+      bool start = rx_after_amp_ && byte == '{';
+      rx_after_amp_ = byte == '&';
+      if (!start)
         continue;
       rx_index_ = 0;
       rx_in_string_ = false;
@@ -35,6 +37,7 @@ void SnkMower::read_uart() {
     if (deserializeJson(doc, rx_buf_) != DeserializationError::Ok || !doc["cmd"].is<uint32_t>()) {
       rx_bad_++;
       ESP_LOGW(TAG, "RX unparsable: %s", rx_buf_);
+      trace("RX?", rx_buf_);
       continue;
     }
     rx_frames_++;
@@ -42,8 +45,10 @@ void SnkMower::read_uart() {
     uint32_t cmd = doc["cmd"];
     if (cmd == proto::MB_RTC || cmd == proto::MB_WIFI_ACK || cmd == proto::MB_BT_ACK)
       ESP_LOGV(TAG, "RX %s", rx_buf_);
-    else
+    else {
       ESP_LOGD(TAG, "RX %s", rx_buf_);
+      trace("RX", rx_buf_);
+    }
     handle_json(doc);
   }
 }
@@ -113,6 +118,11 @@ void SnkMower::handle_json(const JsonDocument &doc) {
       bool locked = (doc["lock"] | 0) != 0;
       if (is_locked_sensor_)
         is_locked_sensor_->publish_state(locked);
+      // U13 asks for the PIN; the original sends it once the user has typed it.
+      if (locked && pin_retries_ < 5) {
+        ESP_LOGI(TAG, "MB locked, sending PIN");
+        send_pin();
+      }
       break;
     }
     case proto::MB_BATTERY:
