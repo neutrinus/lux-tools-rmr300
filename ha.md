@@ -1324,8 +1324,19 @@ Power-on trace (ESP and U13 boot together):
 - **Around 2 s after power-on our own TX frames come back on RX verbatim.** [I] Probably U13's USART0 in loopback or the bootloader echoing while the app starts; not traced. The component took the echoed POLL for "MB already running" and went to `UP` 3 s early. The real handshake still followed and was answered, so no harm this time. Fixed: frames only the ESP sends (`0x10xxxxxx`, `0x22xxxxxx`, `0x30xxxxxx`, `0x40000001/4/6`, `0x41000005` with `pwd`) are logged as echo and ignored.
 - **U13 sends its own log lines over dpport** as `0x15000001 {"log":"..."}`. This one says it got three of our frames glued together and could not parse them. The component now logs them at INFO (`MB log: ...`).
 
+### Edge trim from the station (18:03)
+
+```
+18:03:42.290 TX 0x10000015
+18:03:42.395 RX {"border_state":1,...}   18:03:42.434 RX 0x41000013   18:03:42.450 RX state:16
+18:03:43.617 RX {"station":false}
+18:04:49.265 TX 0x10000023 (stop)        18:04:49.300 RX 0x41000003   18:04:49.364 RX state:6
+```
+
+- **Edge trim works from the station.** U13 answers `0x10000015` with `0x41000013` and `state:16` within 160 ms, then leaves the station. While trimming it sends the same `0x40000020`/`0x40000021` pair as when mowing. Remote stop and return work from this state too.
+- The component showed state 16 as idle; it is now a separate `trimming` state that also sets Is Mowing.
+
 ### Still open
 
-- Edge trim `0x10000015` from the station (only tested away from it, ignored as the firmware says).
 - Remote `0x10000021/22`.
 - Mower state after charging completes.

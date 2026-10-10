@@ -158,6 +158,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x15000001` | 352321537 | `log` | MB_LOG | U13 log line, e.g. `"W/dpport drv [...] receivce message parse error=..."` (seen 2026-10-10 during U13 boot) |
 | `0x41000007` | 1090519047 | — | DOCKED_CHARGE | Reached the station: `{"station":true}`, `{"border_state":0}`, then `0x41000007` ~2 s later and `state:10` (confirmed 2026-10-10) |
 | `0x41000008` | 1090519048 | — | SHUTDOWN | Power-off command |
+| `0x41000013` | 1090519059 | — | TRIM_START | Leaving the station to trim the edge, before `state:16` (confirmed 2026-10-10) |
 | `0x41000020` | 1090519072 | `result` | PIN_UNLOCK_RESULT | Wysyłane ~10 ms po `0x41000005 {"pwd"}` z ESP (wszystkie captures). Wcześniej nazwane START_ACK, ale nigdy nie następuje po naciśnięciu START |
 | `0x50000021` | 1342177313 | `bat:0..3` | BATTERY | Battery level |
 
@@ -215,6 +216,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | 2 | Transient, right after `0x41000020 {"result":1}`; always followed by `0x41000003` and `state:6`. **Not mowing** (all captures and the 2026-10-10 test) |
 | 6 | Stopped / ready (rest state after unlocking and after every STOP) |
 | 7 | Error (with `error:N`) |
+| 16 | **Edge trim**: `0x10000015` from the station is answered by `0x41000013` and `state:16`, then `{"station":false}` (confirmed 2026-10-10) |
 | 8 | **Mowing**: `0x10000001` is answered by `0x41000005` (departure) and `state:8` (confirmed on the mower 2026-10-10) |
 | 9 | **RETURNING TO DOCK** |
 | 10 | **CHARGING** |
@@ -475,12 +477,12 @@ The ESPHome component `components/snk_mower` drives the mower. Confirmed on the 
 - ✅ **Start mowing**: `0x10000007` + `0x10000001` → `0x41000005` + `state:8`, from HA and from START→OK.
 - ✅ **Return to station**: `0x10000007` + `0x10000002` → `0x41000006` + `state:9`, from HA and from HOME→OK.
 - ✅ **Remote stop**: `0x10000023` → `0x41000003` + `state:6`. The physical STOP is handled by U13 (`stop_state:1/0`).
+- ✅ **Edge trim** from the station: `0x10000015` → `0x41000013` + `state:16`. Away from the station U13 ignores it.
 - ✅ **Docking and charging**: `{"station":true}`, `0x41000007`, `state:10` → Is Docked / Is Charging.
 - ✅ **Buttons** START/HOME/OK on ESP32 GPIO22/21/19.
 - ✅ **Display**, buzzer, rain sensor, battery, statistics.
 
 ### Untested
-- `0x10000015` (edge trim) from the station. Outside the station U13 ignores it, as the firmware says.
 - `0x10000021/22` (remote start/home, as sent by the app).
 - Display colon (bit not found).
 

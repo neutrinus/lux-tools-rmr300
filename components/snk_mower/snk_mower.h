@@ -30,6 +30,7 @@ enum class MowerState : uint8_t {
   DOCKED,
   ERROR_STATE,
   LOCKED,
+  TRIMMING,  // edge trim from the station (U13 state 16)
 };
 
 class SnkMower : public Component, public uart::UARTDevice {

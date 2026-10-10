@@ -204,6 +204,9 @@ void SnkMower::handle_status(const JsonDocument &doc) {
       case 8:  // mowing, sent right after 0x41000005 (departure)
         s = MowerState::MOWING;
         break;
+      case 16:  // edge trim: 0x10000015 from the station, answered by 0x41000013
+        s = MowerState::TRIMMING;
+        break;
       case 9:  // returning (captures/2026-06-21/czwarty)
         s = MowerState::RETURNING;
         break;
@@ -222,7 +225,7 @@ void SnkMower::handle_status(const JsonDocument &doc) {
     }
   }
 
-  if (s != current_state_ && (s == MowerState::ERROR_STATE || s == MowerState::MOWING))
+  if (s != current_state_ && (s == MowerState::ERROR_STATE || s == MowerState::MOWING || s == MowerState::TRIMMING))
     buzz(s == MowerState::ERROR_STATE ? 300 : 100);
   publish_mower_state(s);
 

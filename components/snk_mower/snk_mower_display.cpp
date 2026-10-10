@@ -15,8 +15,8 @@ static constexpr uint32_t DISPLAY_MIN_ON_US = 50;
 static constexpr uint32_t STATE_CYCLE_MS = 5000;     // state text <-> battery %
 
 static const char *const STATE_NAMES[] = {"unknown", "idle", "mowing", "returning",
-                                          "charging", "docked", "error", "locked"};
-static const char *const STATE_DISPLAY[] = {"----", "IdLE", "Mow ", "HoME", "ChAr", "dock", "Err ", "LoCK"};
+                                          "charging", "docked", "error", "locked", "trimming"};
+static const char *const STATE_DISPLAY[] = {"----", "IdLE", "Mow ", "HoME", "ChAr", "dock", "Err ", "LoCK", "Cut "};
 
 static uint8_t char_to_segments(char c) {
   switch (c) {
@@ -198,7 +198,8 @@ void SnkMower::display_loop(uint32_t now) {
   if (shutdown_pending_ && now - shutdown_start_ms_ > 3000)
     shutdown_pending_ = false;
 
-  bool busy = current_state_ == MowerState::MOWING || current_state_ == MowerState::CHARGING ||
+  bool busy = current_state_ == MowerState::MOWING || current_state_ == MowerState::TRIMMING ||
+              current_state_ == MowerState::CHARGING ||
               current_state_ == MowerState::RETURNING || current_state_ == MowerState::ERROR_STATE ||
               current_state_ == MowerState::LOCKED;
   if (display_off_timeout_ms_ > 0 && !display_off_ && !busy && now - last_activity_ms_ > display_off_timeout_ms_) {
@@ -227,7 +228,7 @@ void SnkMower::publish_mower_state(MowerState state) {
   display_off_ = false;
 
   if (is_mowing_sensor_)
-    is_mowing_sensor_->publish_state(state == MowerState::MOWING);
+    is_mowing_sensor_->publish_state(state == MowerState::MOWING || state == MowerState::TRIMMING);
   if (is_charging_sensor_)
     is_charging_sensor_->publish_state(state == MowerState::CHARGING);
   if (is_docked_sensor_)
@@ -246,14 +247,15 @@ void SnkMower::publish_mower_state(MowerState state) {
     snprintf(buf, sizeof(buf), "E%-3d", std::min(999, std::max(0, error_code_)));
     set_display_text(buf);
   } else if (changed) {
-    if (state == MowerState::MOWING || state == MowerState::CHARGING)
+    if (state == MowerState::MOWING || state == MowerState::TRIMMING || state == MowerState::CHARGING)
       set_display_number(battery_percent_);
     else
       set_display_text(STATE_DISPLAY[static_cast<int>(state)]);
   }
   if (changed) {
     state_display_cycle_ms_ = millis() + STATE_CYCLE_MS;
-    state_show_alt_ = state == MowerState::MOWING || state == MowerState::CHARGING;
+    state_show_alt_ =
+        state == MowerState::MOWING || state == MowerState::TRIMMING || state == MowerState::CHARGING;
   }
 }
 

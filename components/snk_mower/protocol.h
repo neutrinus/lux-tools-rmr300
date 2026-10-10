@@ -35,6 +35,7 @@ static constexpr uint32_t MB_LIGHT         = 0x40000020;
 static constexpr uint32_t MB_LOCK          = 0x41000002;
 static constexpr uint32_t MB_ERROR_NOTIFY  = 0x41000004;
 static constexpr uint32_t MB_SHUTDOWN      = 0x41000008;
+static constexpr uint32_t MB_TRIM_START    = 0x41000013;  // leaving the station to trim the edge, then state 16
 static constexpr uint32_t MB_DOCKED        = 0x41000007;  // reached the station, followed by state 10
 static constexpr uint32_t MB_PIN_ACK       = 0x41000020;  // {"result":1} after a PIN
 static constexpr uint32_t MB_BATTERY       = 0x50000021;
