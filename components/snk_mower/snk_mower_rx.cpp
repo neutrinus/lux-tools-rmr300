@@ -31,8 +31,16 @@ void SnkMower::read_uart() {
     rx_buf_[rx_index_] = '\0';
     rx_in_json_ = false;
     JsonDocument doc;
-    if (deserializeJson(doc, rx_buf_) == DeserializationError::Ok && doc["cmd"].is<uint32_t>())
-      handle_json(doc);
+    if (deserializeJson(doc, rx_buf_) != DeserializationError::Ok || !doc["cmd"].is<uint32_t>()) {
+      ESP_LOGW(TAG, "RX unparsable: %s", rx_buf_);
+      continue;
+    }
+    uint32_t cmd = doc["cmd"];
+    if (cmd == proto::MB_RTC || cmd == proto::MB_WIFI_ACK || cmd == proto::MB_BT_ACK)
+      ESP_LOGV(TAG, "RX %s", rx_buf_);
+    else
+      ESP_LOGD(TAG, "RX %s", rx_buf_);
+    handle_json(doc);
   }
 }
 
@@ -91,7 +99,7 @@ void SnkMower::handle_json(const JsonDocument &doc) {
     case proto::MB_DEVICE_INFO:
       handle_device_info(doc);
       break;
-    case proto::MB_PIN_RESULT:
+    case proto::MB_PIN_ACK:
       handle_pin_result(doc);
       break;
     case proto::MB_ERROR_NOTIFY:
@@ -129,10 +137,7 @@ void SnkMower::handle_json(const JsonDocument &doc) {
       shutdown_pending_ = true;
       shutdown_start_ms_ = millis();
       break;
-    case proto::MB_RTC:
-      break;
     default:
-      ESP_LOGD(TAG, "RX 0x%08lX", (unsigned long) cmd);
       break;
   }
 }
@@ -212,9 +217,12 @@ void SnkMower::handle_device_info(const JsonDocument &doc) {
 }
 
 void SnkMower::handle_pin_result(const JsonDocument &doc) {
-  if (doc["result"] | false) {
+  // {"result":1}; as<bool>() also accepts true.
+  if (doc["result"].as<bool>()) {
     ESP_LOGI(TAG, "PIN accepted");
     pin_retries_ = 0;
+    if (is_locked_sensor_)
+      is_locked_sensor_->publish_state(false);
     publish_mower_state(MowerState::IDLE);
     return;
   }

@@ -17,8 +17,8 @@ namespace proto {
 static constexpr uint32_t MB_POWER_ON      = 0x20000001;
 static constexpr uint32_t MB_INIT_ERROR    = 0x20000002;  // rw_init failed, {"error":bits}, every 2 s
 static constexpr uint32_t MB_LINK_UP       = 0x20000004;  // handshake done, or "no ESP frame for 3 s"
-static constexpr uint32_t MB_PIN_RESULT    = 0x33000021;
-static constexpr uint32_t MB_PIN_RESULT2   = 0x33000022;
+static constexpr uint32_t MB_WIFI_ACK      = 0x33000021;  // {"result":true}, answer to ESP_WIFI
+static constexpr uint32_t MB_BT_ACK        = 0x33000022;  // {"result":true}, answer to ESP_BT
 static constexpr uint32_t MB_STATUS        = 0x330000A0;
 static constexpr uint32_t MB_DEVICE_INFO   = 0x330000A1;
 static constexpr uint32_t MB_HW_VERSIONS   = 0x330000A2;
