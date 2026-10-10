@@ -38,6 +38,32 @@ captive_portal:
 time:
   - platform: sntp
     id: mower_time
+    # Night mode for the display from 20:00 to 06:00. It can still be
+    # toggled by hand in between; the next boundary sets it again.
+    on_time:
+      - seconds: 0
+        minutes: 0
+        hours: 20
+        then:
+          - switch.turn_on: display_night
+      - seconds: 0
+        minutes: 0
+        hours: 6
+        then:
+          - switch.turn_off: display_night
+    # After boot, once the clock is known, pick the mode for the current hour.
+    on_time_sync:
+      - if:
+          condition:
+            lambda: 'return !id(night_mode_initialized);'
+          then:
+            - lambda: |-
+                id(night_mode_initialized) = true;
+                int h = id(mower_time).now().hour;
+                if (h >= 20 || h < 6)
+                  id(display_night).turn_on();
+                else
+                  id(display_night).turn_off();
 
 api:
   encryption:
@@ -184,8 +210,9 @@ button:
 
 switch:
   # Dims the front display (display_night_brightness, default 20 %).
-  # Schedule it from Home Assistant, e.g. on at sunset, off at sunrise.
+  # Switched automatically at 20:00 and 06:00, see time: above.
   - platform: template
+    id: display_night
     name: "${friendly_name} Display Night Mode"
     icon: "mdi:weather-night"
     optimistic: true
@@ -195,3 +222,8 @@ switch:
     turn_off_action:
       - lambda: 'id(my_mower).set_display_night(false);'
 
+globals:
+  - id: night_mode_initialized
+    type: bool
+    restore_value: no
+    initial_value: 'false'
