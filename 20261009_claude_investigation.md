@@ -79,6 +79,19 @@ Na `img/display_back.jpg` opis 7-pinowego złącza (od góry) to: `OK`, `ST`, `G
 
 Wcześniejszy skan GPIO w repo widział tylko GPIO19. Najpewniej dlatego, że nie włączał pull-upów: GPIO21 i 22 pływały, a linia OK ma podciągnięcie po stronie MB [W].
 
+### Śledzenie ścieżek na zdjęciach (2026-10-10) [Z]
+
+Płytka jest polakierowana, więc zamiast przedzwaniania nałożyłem `display_back.jpg` na `display_front2.jpg` (transformacja perspektywiczna po 7 otworach i pinach J1, błąd ~0,2 mm) i prześledziłem ścieżki.
+
+| Przycisk | Wynik | Pewność |
+|---|---|---|
+| K4 ON | przelotka pod przyciskiem → prosto do pinu `ON` złącza, bez elementów po drodze, nie idzie do ESP32 | widoczne |
+| K1 START | pod dolną krawędzią modułu, mostek na spodzie pod J1, do wiązki przy sieci RC (R1/R23/R30); koniec przy IO22 (pin 36) zasłania klej anteny | prawdopodobne |
+| K2 HOME | zgubione przy przycisku (przelotki pod obudową przełącznika); brak ścieżki do złącza | nieprześledzone |
+| K3 OK | w stronę dolnej krawędzi pod brzęczykiem i naklejką, tam zgubione | nieprześledzone |
+
+Wyraźnie widać krótkie ścieżki z pinu 31 (IO19) do C13 i z pinu 33 (IO21) do C10 (filtry RC wejść, rezystory „101” = 100 Ω). Dwie ścieżki z pinów `ST` i `OK` złącza dochodzą do tej samej wiązki. Żaden przycisk nie przechodzi przez tranzystor ani obwód zasilania. Zdjęcia są zgodne z GPIO22/21/19 z firmware i niczemu nie przeczą, ale nie domykają ścieżek. Rozstrzygnęłoby zdjęcie bez kleju na antenie (piny 35–38) albo z odłączonym złączem, robione prosto z góry.
+
 ## 3. Płyta główna [F]
 
 **U13 (GD32F305):**
