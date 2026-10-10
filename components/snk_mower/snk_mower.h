@@ -7,12 +7,14 @@
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <driver/gpio.h>
+#include <driver/gptimer.h>
 #include <driver/spi_master.h>
 #include <esp_adc/adc_oneshot.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 
 namespace esphome {
 namespace snk_mower {
@@ -46,6 +48,10 @@ class SnkMower : public Component, public uart::UARTDevice {
   }
   void set_rain_threshold(int raw) { rain_threshold_ = raw; }
   void set_display_off_timeout(uint32_t minutes) { display_off_timeout_ms_ = minutes * 60000UL; }
+  void set_display_night_brightness(uint8_t percent) { display_night_brightness_ = percent; }
+
+  // Night mode: dims the display to display_night_brightness percent.
+  void set_display_night(bool night);
 
   void set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
   void set_error_code_sensor(sensor::Sensor *s) { error_code_sensor_ = s; }
@@ -172,9 +178,13 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t rain_adc_published_ms_{0};
 
   // ── Display, buzzer, HA state (snk_mower_display.cpp) ────────
+  // Multiplexing: a GPTimer alarm marks every digit slot (and, when dimmed,
+  // the end of the lit part of the slot); the ISR picks the frame and wakes
+  // display_task_, which shifts it out over SPI.
   void setup_display();
-  static void display_timer_callback(void *arg);
-  void refresh_display();
+  static bool display_alarm_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *arg);
+  static void display_task(void *arg);
+  void update_display_on_time();
   void display_loop(uint32_t now);
   void set_display_text(const char *text);
   void set_display_number(int value);
@@ -188,10 +198,16 @@ class SnkMower : public Component, public uart::UARTDevice {
   gpio_num_t buzzer_pin_{GPIO_NUM_NC};
   gpio_num_t rain_pin_{GPIO_NUM_NC};
   spi_device_handle_t spi_dev_{nullptr};
-  esp_timer_handle_t display_timer_{nullptr};
+  gptimer_handle_t display_timer_{nullptr};
+  TaskHandle_t display_task_{nullptr};
   volatile uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
   volatile uint8_t current_digit_{0};
+  volatile uint16_t display_frame_{0};  // digit select << 8 | segments
+  volatile bool display_blank_next_{false};
+  volatile uint32_t display_on_us_{0};
   volatile bool display_off_{false};
+  bool display_night_{false};
+  uint8_t display_night_brightness_{20};
   uint32_t display_off_timeout_ms_{0};
   uint32_t last_activity_ms_{0};
   uint32_t state_display_cycle_ms_{0};

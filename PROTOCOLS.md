@@ -471,7 +471,7 @@ U13 OTA framing (from `FUN_08008cb8`):
 - ✅ **Watchdog-safe communication** — 36+ s without watchdog (log 22), `safe_mode` counter resets
 - ✅ **Periodic reporting** — KEEPALIVE@1s, WIFI/BT@5s, ESP_INFO@30s, ESP_STATE@10s, RAIN@60s
 - ~~Error ACK~~: błędna interpretacja. `0x10000001/2/7` to komendy klawiszy, a stary `send_error_ack()` po każdym błędzie wysyłał „start koszenia” + „do stacji”. Usunięte 2026-10-09
-- ✅ **Display** — 4-digit 7-segment LED (SPI, 3× 74HC595, 2MHz, hardware timer)
+- ✅ **Display** — 4-digit 7-segment LED (SPI 2 MHz, 3× 74HC595). Multiplexed 2 ms per digit from a GPTimer alarm and a top-priority task on core 1, like the original "tube scan" task. Night mode dims it by shortening the lit part of each slot
 - ✅ **Sensors** — rain (GPIO36), light, battery, device-info, schedule parsing
 - ✅ **HA integration** — full sensor/binary_sensor/text_sensor publishing
 - ✅ **Boot delay (30s)** — OTA-safe window, configurable
