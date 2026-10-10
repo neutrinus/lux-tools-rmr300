@@ -120,7 +120,8 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | CMD HEX | DEC | JSON Fields | Nazwa | Opis |
 |---------|-----|-------------|-------|------|
 | `0x20000001` | 536870913 | `action` | POWER_ON | Power-on wake (action:0) |
-| `0x20000004` | 536870916 | — | POWER_READY | Ready signal |
+| `0x20000002` | 536870914 | `error` | INIT_ERROR | Błąd inicjalizacji U13 (bit 0x4 = brak płytki wyświetlacza), co 2 s, potem reset przez watchdog |
+| `0x20000004` | 536870916 | — | LINK_UP | Koniec handshake (×2); także „brak ramek od ESP przez 3 s” |
 | `0x33000009` | 855638025 | `result` | SETTING_OK_09 | Setting confirm (unknown) |
 | `0x33000010` | 855638032 | `result` | PIN_CHANGE_OK | PIN change confirmed |
 | `0x33000011` | 855638033 | `result` | RTC_SET_OK | Year/time set confirmed |
@@ -169,7 +170,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x10000001` | 268435457 | — | KEY_START_CONFIRM | OK po START (≤3 s): **start koszenia** |
 | `0x10000002` | 268435458 | — | KEY_HOME_CONFIRM | OK po HOME (≤3 s): **powrót do stacji** |
 | `0x10000003` | 268435459 | — | KEY_EVT_3 | Zdarzenie UI 3 (wyzwalacz nieustalony) |
-| `0x10000004` | 268435460 | — | KEY_EVT_4 | Zdarzenie UI 4 (wyzwalacz nieustalony) |
+| `0x10000004` | 268435460 | — | POWER_OFF | **Wyłącza kosiarkę** (bit akcji 0x10, „Robot manual power off” we wszystkich procesach U13). Tak samo `0x10000014` i `0x10000024` |
 | `0x10000007` | 268435463 | — | KEY_SELECT | Wciśnięto START lub HOME (otwiera okno 3 s na OK) |
 | `0x10000008` | 268435464 | — | CLEAR_USER_SETTINGS | log ESP: "send command clear user setting" |
 | `0x10000009` | 268435465 | — | MEMS_CORRECTION | log ESP: "send command mems correction" |
@@ -229,6 +230,16 @@ Dodatkowe pola w `0x330000A0`:
 
 ## Boot Sequence (zweryfikowane przez LA captures)
 
+**Handshake jest pytanie-odpowiedź** (`captures/02-boot-pin`, la_decode, oraz U13 `0x080446e4`):
+
+| MB wysyła | ESP odpowiada w ~3 ms | Limit w U13 |
+|---|---|---|
+| `0x40000009` BOOT_HEART, co ~100 ms | `0x40000006` ESP_INFO `{hv,sv,spw,mac}` | 25 prób (~2,5 s) |
+| `0x40000008` BOOT_INIT, co ~20 ms | `0x40000001` ESP_INIT `{"init":3}` | 50 prób (~1 s) |
+| `0x20000004` ×2 | — (łącze gotowe, potem DEVICE_INFO) | |
+
+Bez tych odpowiedzi U13 uznaje płytkę wyświetlacza za odłączoną, wysyła co 2 s `0x20000002 {"error":…}` i nie karmi watchdoga sprzętowego, więc po ~16 s resetuje się i odcina zasilanie. Szczegóły: `20261009_claude_investigation.md` §10.
+
 ```
 MB starts on its own (D0 w captures 01-06, D2 w captures 2026-06-21):
   0x20000001 {"action":0}          ← power-on wake
@@ -264,11 +275,12 @@ ESP responds (D1 w captures 01-06, D1 w captures 2026-06-21):
   0x30000022 {"bt":0,"str":0}      ← BT disconnected
   0x40000006 {"hv":60400,"sv":30202,"mac":"08-f9-e0-b3-da-70"} ← ESP info
   0x40000001 {"init":3}            ← init complete
-  0x300000A6 (ESP_TRIM)            ← trim request
+  0x300000A6 (bez pól)             ← zapytanie o harmonogram (z polami nadpisuje harmonogram!)
+  0x300000A7, 0x300000A8 (bez pól) ← zapytania o deszcz i strefy
   0x41000005 {"pwd":9633}          ← PIN sent
 
 Steady state:
-  ESP: 0x30000005 / 0x300000A1 co ~100-200ms
+  ESP: przed handshake 0x300000A1 co 100 ms; po nim 0x30000005 co ~500 ms, 0x30000021/22 co 1 s
   MB:  0x40000011 {"rtc":...} co ~1s
   MB:  0x22000000 {"rain":0/1} — przy zmianie (UWAGA: deszcz jest wysyłany przez ESP, nie MB)
 ```

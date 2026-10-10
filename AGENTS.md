@@ -52,6 +52,7 @@ python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> 
 ## Hard-won constraints (don't re-litigate)
 
 - **Corrected 2026-10-09:** mowing *can* be started over UART. The original firmware does it on START→OK: `0x10000007`, then `0x10000001` (capture `2026-06-21/trzeci`, MB answers `state:8`). Earlier attempts failed because they used MB→ESP commands. Buttons START/HOME/OK are on ESP32 GPIO22/21/19 (pull-up, active low), not on U16. Remote app commands map to `0x10000021` start, `0x10000022` home, `0x10000023` stop, `0x10000015` edge trim (firmware only, untested). See `20261009_claude_investigation.md`.
+- **U13 shuts the mower off ~16 s after boot if the ESP misses the handshake**: answer every `0x40000009` with ESP_INFO and every `0x40000008` with ESP_INIT `{"init":3}`, within ~2.5 s / ~1 s. Never stay silent for >3 s while running. `0x10000004/14/24` is a **power-off** command. See `20261009_claude_investigation.md` §10.
 - **PIN is not in the ESP32**; it lives in the U13 KV-store / EEPROM U22. The ESP only forwards an entered PIN.
 - Root cause of the last failure: custom firmware never sent the `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` handshake, so the MB (U13) ignored it (`ha.md` §14).
 

@@ -29,240 +29,149 @@ enum class MowerState : uint8_t {
 
 class SnkMower : public Component, public uart::UARTDevice {
  public:
-  explicit SnkMower(const std::string &pin);
+  explicit SnkMower(const std::string &pin) : pin_(pin) {}
 
   void setup() override;
   void loop() override;
+  float get_setup_priority() const override { return setup_priority::DATA; }
 
+  // Config
   void set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs);
+  void set_buzzer_pin(gpio_num_t pin) { buzzer_pin_ = pin; }
+  void set_rain_pin(gpio_num_t pin) { rain_pin_ = pin; }
+  void set_display_off_timeout(uint32_t minutes) { display_off_timeout_ms_ = minutes * 60000UL; }
 
-  void set_battery_level_sensor(sensor::Sensor *s);
-  void set_battery_voltage_sensor(sensor::Sensor *s);
-  void set_error_code_sensor(sensor::Sensor *s);
-  void set_light_level_sensor(sensor::Sensor *s);
-  void set_signal_level_sensor(sensor::Sensor *s);
-  void set_work_area_sensor(sensor::Sensor *s);
-  void set_cut_area_sensor(sensor::Sensor *s);
-  void set_total_minutes_sensor(sensor::Sensor *s);
-  void set_on_minutes_sensor(sensor::Sensor *s);
-  void set_bat_health_sensor(sensor::Sensor *s);
-  void set_bat_level_bars_sensor(sensor::Sensor *s);
-  void set_rain_delay_sensor(sensor::Sensor *s);
+  void set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
+  void set_error_code_sensor(sensor::Sensor *s) { error_code_sensor_ = s; }
+  void set_light_level_sensor(sensor::Sensor *s) { light_level_sensor_ = s; }
+  void set_work_area_sensor(sensor::Sensor *s) { work_area_sensor_ = s; }
+  void set_cut_area_sensor(sensor::Sensor *s) { cut_area_sensor_ = s; }
+  void set_total_minutes_sensor(sensor::Sensor *s) { total_minutes_sensor_ = s; }
+  void set_on_minutes_sensor(sensor::Sensor *s) { on_minutes_sensor_ = s; }
+  void set_bat_health_sensor(sensor::Sensor *s) { bat_health_sensor_ = s; }
+  void set_bat_level_bars_sensor(sensor::Sensor *s) { bat_level_bars_sensor_ = s; }
+  void set_rain_delay_sensor(sensor::Sensor *s) { rain_delay_sensor_ = s; }
 
-  void set_is_mowing_sensor(binary_sensor::BinarySensor *s);
-  void set_is_charging_sensor(binary_sensor::BinarySensor *s);
-  void set_is_docked_sensor(binary_sensor::BinarySensor *s);
-  void set_has_error_sensor(binary_sensor::BinarySensor *s);
-  void set_is_locked_sensor(binary_sensor::BinarySensor *s);
-  void set_is_returning_sensor(binary_sensor::BinarySensor *s);
+  void set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
+  void set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
+  void set_is_docked_sensor(binary_sensor::BinarySensor *s) { is_docked_sensor_ = s; }
+  void set_has_error_sensor(binary_sensor::BinarySensor *s) { has_error_sensor_ = s; }
+  void set_is_locked_sensor(binary_sensor::BinarySensor *s) { is_locked_sensor_ = s; }
+  void set_is_returning_sensor(binary_sensor::BinarySensor *s) { is_returning_sensor_ = s; }
 
-  void set_device_name_sensor(text_sensor::TextSensor *s);
-  void set_model_sensor(text_sensor::TextSensor *s);
-  void set_serial_sensor(text_sensor::TextSensor *s);
-  void set_firmware_version_sensor(text_sensor::TextSensor *s);
-  void set_battery_name_sensor(text_sensor::TextSensor *s);
-  void set_mower_state_sensor(text_sensor::TextSensor *s);
+  void set_device_name_sensor(text_sensor::TextSensor *s) { device_name_sensor_ = s; }
+  void set_model_sensor(text_sensor::TextSensor *s) { model_sensor_ = s; }
+  void set_serial_sensor(text_sensor::TextSensor *s) { serial_sensor_ = s; }
+  void set_firmware_version_sensor(text_sensor::TextSensor *s) { firmware_version_sensor_ = s; }
+  void set_battery_name_sensor(text_sensor::TextSensor *s) { battery_name_sensor_ = s; }
+  void set_mower_state_sensor(text_sensor::TextSensor *s) { mower_state_sensor_ = s; }
 
+  // Actions (HA buttons)
   void start_mowing();
   void return_to_dock();
   void stop_mowing();
   void trim_edge();
   // Front-panel buttons, call from binary_sensor on_press
-  void key_start();
-  void key_home();
+  void key_start() { arm_key(KEY_START); }
+  void key_home() { arm_key(KEY_HOME); }
   void key_ok();
-  void send_action(int action_value);
-  void send_raw_json(const std::string &json_str);
-  void buzz(int duration_ms);
-  void set_buzzer_pin(gpio_num_t pin);
-  void set_display_off_timeout(uint32_t minutes);
-  void set_rain_pin(gpio_num_t pin);
-  void set_boot_delay(uint32_t seconds);
-  void set_compat_mode(bool mode);
+  // Debugging: sends any JSON object as a frame
+  void send_raw_json(const std::string &json);
 
  protected:
-  std::string pin_;
+  // ── Link to U13 (snk_mower.cpp) ──────────────────────────────
+  // WAIT_MB:   ESP is up, U13 not seen yet. POLL every 100 ms like the original.
+  // HANDSHAKE: U13 is booting and sends BOOT_HEART / BOOT_INIT; each must be
+  //            answered at once or U13 gives up on the display board.
+  // UP:        link established, KEEPALIVE every 500 ms.
+  enum class Link : uint8_t { WAIT_MB, HANDSHAKE, UP };
 
+  void link_up(const char *why);
+  void link_loop(uint32_t now);
+  static void link_guard_callback(void *arg);
+
+  void write_frame(const uint8_t *data, size_t len);
   void send_json(const JsonDocument &doc);
-  void send_boot();
+  void send_cmd(uint32_t cmd);
+  void send_esp_info();
   void send_init();
   void send_pin();
-  void send_keepalive();
-  void send_poll();
   void send_wifi_status();
-  void send_esp_info();
-  void send_cmd(uint32_t cmd);
-  void arm_key(uint8_t key);
-  void send_trim();
-  void send_esp_state(int state);
-  void send_rain_status(int rain);
-  void send_rain_cfg_cmd();
-  void send_multizone_cmd();
-
-  void handle_json(const JsonDocument &doc);
-
-  void handle_status(const JsonDocument &doc);
-  void handle_pin_result(const JsonDocument &doc);
-  void handle_error_notify(const JsonDocument &doc);
-  void handle_rtc(const JsonDocument &doc);
-  void handle_device_info(const JsonDocument &doc);
-  void handle_hw_versions(const JsonDocument &doc);
-  void handle_battery_info(const JsonDocument &doc);
-  void handle_map_cfg(const JsonDocument &doc);
-  void handle_schedule(const JsonDocument &doc);
-  void handle_rain_cfg(const JsonDocument &doc);
-  void handle_multizone(const JsonDocument &doc);
-  void handle_light(const JsonDocument &doc);
-  void handle_power_on(const JsonDocument &doc);
-  void handle_power_ready(const JsonDocument &doc);
-  void handle_boot_heart(const JsonDocument &doc);
-  void handle_boot_init(const JsonDocument &doc);
-  void handle_lock(const JsonDocument &doc);
-  void handle_start_ack(const JsonDocument &doc);
-  void handle_exec_action(const JsonDocument &doc);
-  void handle_shutdown(const JsonDocument &doc);
-  void handle_return_home(const JsonDocument &doc);
-  void handle_docked_charge(const JsonDocument &doc);
-  void handle_seek_wire(const JsonDocument &doc);
-  void handle_pin_result2(const JsonDocument &doc);
-  void handle_schedule_end(const JsonDocument &doc);
-  void handle_setting_ack(const JsonDocument &doc, uint32_t cmd);
-  void handle_signal_level(const JsonDocument &doc);
-  void handle_cut_time_query(const JsonDocument &doc);
-  void handle_start_time_query(const JsonDocument &doc);
-
-  void publish_mower_state(MowerState state);
-  void read_rain_sensor();
-
-  enum class BootPhase : uint8_t {
-    PRE,   // waiting for DEVICE_INFO from MB
-    SYNC,  // DEVICE_INFO received, sending ESP_INFO/INIT burst
-    DONE,  // handshake complete, normal keepalive operation
-  };
+  void send_rain_status();
 
   static const uint8_t KEY_NONE = 0, KEY_START = 1, KEY_HOME = 2;
+  void arm_key(uint8_t key);
+
+  std::string pin_;
+  Link link_{Link::WAIT_MB};
+  bool pin_sent_{false};
+  int pin_retries_{0};
   uint8_t armed_key_{KEY_NONE};
   uint32_t armed_at_ms_{0};
-
-  BootPhase boot_phase_{BootPhase::PRE};
-  uint32_t phase_start_ms_{0};
-  uint32_t device_info_arrived_ms_{0};
-  int info_burst_count_{0};
-  int init_burst_count_{0};
-  bool pin_sent_{false};
-  bool pin_ok_{false};
-  bool device_info_received_{false};
-  bool boot_sent_{false};
-  bool mb_boot_detected_{false};
-  int pin_retries_{0};
-  bool power_ready_{false};
-
+  uint32_t link_up_ms_{0};
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
   uint32_t last_wifi_status_{0};
-  uint32_t last_esp_info_{0};
-  uint32_t last_esp_state_{0};
-  uint32_t last_activity_ms_{0};
   uint32_t last_rain_read_{0};
-  uint32_t last_boot_ms_{0};
+  int last_rain_{-1};
 
-  int state_{0};
-  int error_code_{0};
-  int bat_lv_{0};
-  int bat_per_{0};
-  int light_lv_{0};
-  int signal_lv_{0};
-  int work_area_{0};
-  int cut_area_{0};
-  int total_minutes_{0};
-  int on_minutes_{0};
-  int bat_health_{0};
-  int rain_delay_{0};
-  int rain_state_{0};
-  int bat_ctime_{0};
-  int bat_dtime_{0};
-  int cur_minutes_{0};
-  int bat_min_temp_{0};
-  bool station_{false};
-  int lock_{0};
+  SemaphoreHandle_t tx_mutex_{nullptr};
+  esp_timer_handle_t link_guard_timer_{nullptr};
+  volatile uint32_t last_tx_ms_{0};
+  uint8_t keepalive_frame_[32];
+  size_t keepalive_frame_len_{0};
 
-  gpio_num_t buzzer_pin_{GPIO_NUM_NC};
-  gpio_num_t rain_pin_{GPIO_NUM_NC};
-
-  uint32_t display_off_timeout_ms_{0};
-  volatile bool display_off_{false};
-
-  uint32_t boot_delay_ms_{0};
-  bool shutdown_pending_{false};
-  uint32_t shutdown_start_ms_{0};
-  bool compat_mode_{false};
+  // ── RX (snk_mower_rx.cpp) ────────────────────────────────────
+  void read_uart();
+  void handle_json(const JsonDocument &doc);
+  void handle_status(const JsonDocument &doc);
+  void handle_device_info(const JsonDocument &doc);
+  void handle_pin_result(const JsonDocument &doc);
+  void handle_error_notify(const JsonDocument &doc);
 
   static constexpr size_t BUF_SIZE = 512;
   char rx_buf_[BUF_SIZE];
   size_t rx_index_{0};
   bool rx_in_json_{false};
   bool rx_in_string_{false};
-  char tx_buf_[BUF_SIZE];
 
-  void finish_setup();
+  int state_{0};
+  int error_code_{0};
+  int battery_percent_{0};
+  bool station_{false};
+
+  // ── Display, buzzer, HA state (snk_mower_display.cpp) ────────
   void setup_display();
-  void refresh_display_impl();
   static void display_timer_callback(void *arg);
-  void set_display_text(const char *text, bool colon = false);
-  void set_display_battery(int percent);
-  void set_charging_display(int percent);
-
-  static uint8_t char_to_segments_(char c);
+  void refresh_display();
+  void display_loop(uint32_t now);
+  void set_display_text(const char *text);
+  void set_display_number(int value);
+  void publish_mower_state(MowerState state);
+  void buzz(int duration_ms);
 
   static constexpr uint8_t DIGITS = 4;
-  static constexpr uint8_t DISPLAY_REFRESH_MS = 2;
-
-  spi_device_handle_t spi_dev_{nullptr};
-
-  static constexpr uint8_t CHG_FRAMES[3] = {
-      0b00001000,
-      0b01001000,
-      0b01001001,
-  };
-  static constexpr uint32_t CHG_FRAME_MS = 350;
-
   gpio_num_t display_clk_{GPIO_NUM_NC};
   gpio_num_t display_mosi_{GPIO_NUM_NC};
   gpio_num_t display_cs_{GPIO_NUM_NC};
+  gpio_num_t buzzer_pin_{GPIO_NUM_NC};
+  gpio_num_t rain_pin_{GPIO_NUM_NC};
+  spi_device_handle_t spi_dev_{nullptr};
   esp_timer_handle_t display_timer_{nullptr};
-
-  // Link guard: U13 flags the display link as lost after 3 s without any
-  // frame from the ESP (dpport receive overtime, 0x08044164). A separate
-  // esp_timer keeps KEEPALIVE going while loop() is blocked (OTA upload,
-  // WiFi reconnect, slow API calls).
-  static void link_guard_callback(void *arg);
-  void start_link_guard();
-  void write_frame(const uint8_t *data, size_t len);
-  esp_timer_handle_t link_guard_timer_{nullptr};
-  SemaphoreHandle_t tx_mutex_{nullptr};
-  volatile uint32_t last_tx_ms_{0};
-  volatile bool link_guard_active_{false};
-  uint8_t keepalive_frame_[48];
-  size_t keepalive_frame_len_{0};
-
   volatile uint8_t display_segments_[DIGITS]{0, 0, 0, 0};
-  volatile uint8_t display_colon_{0};
   volatile uint8_t current_digit_{0};
-  uint32_t last_display_ms_{0};
-
-  uint8_t charging_frame_{0};
-  uint32_t last_charging_frame_ms_{0};
-
-  MowerState current_state_{MowerState::UNKNOWN};
-  int last_battery_percent_{0};
+  volatile bool display_off_{false};
+  uint32_t display_off_timeout_ms_{0};
+  uint32_t last_activity_ms_{0};
   uint32_t state_display_cycle_ms_{0};
   bool state_show_alt_{false};
+  bool shutdown_pending_{false};
+  uint32_t shutdown_start_ms_{0};
+  MowerState current_state_{MowerState::UNKNOWN};
 
   sensor::Sensor *battery_level_sensor_{nullptr};
-  sensor::Sensor *battery_voltage_sensor_{nullptr};
   sensor::Sensor *error_code_sensor_{nullptr};
   sensor::Sensor *light_level_sensor_{nullptr};
-  sensor::Sensor *signal_level_sensor_{nullptr};
   sensor::Sensor *work_area_sensor_{nullptr};
   sensor::Sensor *cut_area_sensor_{nullptr};
   sensor::Sensor *total_minutes_sensor_{nullptr};

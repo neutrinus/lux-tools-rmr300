@@ -62,18 +62,13 @@ snk_mower:
   display_cs: 32
   buzzer_pin: 27
   rain_pin: 36
-  compat_mode: true
 
   battery_level:
     name: "${friendly_name} Battery Level"
-  battery_voltage:
-    name: "${friendly_name} Battery Voltage"
   error_code:
     name: "${friendly_name} Error Code"
   light_level:
     name: "${friendly_name} Light Level"
-  signal_level:
-    name: "${friendly_name} Signal Level"
   work_area:
     name: "${friendly_name} Work Area"
   cut_area:

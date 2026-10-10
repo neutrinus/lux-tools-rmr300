@@ -154,6 +154,14 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | `080706a0` | dpport service config: receive timeout `0xbb8` (3000 ms), period `0x1f4` (500 ms) |
 | `08044164` | dpport receive-overtime callback: link status 4, sends `0x20000004` to the ESP |
 | `08072558` | Send `{"cmd":x}` on dpport |
+| `080446e4` | dpport boot handshake: `0x40000009` every 100 ms ×25 until the ESP answers (ESP_INFO), then `0x40000008` every 20 ms ×50 until ESP_INIT sets link state 2; then `0x20000004` ×2. On timeout state 4 |
+| `08046e00` | dpport receive task: 3 s queue timeout, counts unparseable frames at drv `+0x48` |
+| `08046f94` | dpport receive callback: more than 10 bad frames in a row sets link state 6 ("receive display board message error overtime") |
+| `08070f18` | Port check at manager start: dpport state 6 (or bdport/ledport 4/5/6) logs "communication failed" and cuts power |
+| `08070d3c` | Power cut: clears PB12, PE9, PD11 (power latch) |
+| `0804b7f0` / `0804b840` | FWDGT config / reload. `0805deba` = 16 s (÷256, 2500) during `rw_init`, `0805dea6` = 1.6 s (÷32, 2000) once the config service runs |
+| `0805b974` | `rw_init` error loop: `0x20000002` every 2 s, blinks, **does not feed FWDGT**, so U13 resets after ~16 s |
+| `08060a44` | Logs `rw_init` error bits: 0x1 ultrasonic, 0x2 MB version, **0x4 display board disconnect**, 0x8 border board disconnect, … |
 | `080395a4` | `deal_safety`. dpport is the first checked object (getter `080509a0`); link lost sets error `0x400000` |
 | `08068622` | `process_error` power-off counter `[ctx+0x24]` vs limit `[ctx+0x28]` (`0xbb80`, set at `08068756`). State `0xa` = power off. About 20 min [I] |
 | `080726fc` | Sends `0x20000002` `{"error":bits}`: driver init error, from `rw_init` (`0805b8a4`, `0805b970`) every 2 s |
@@ -166,14 +174,18 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | 0x02 | `0x10000001` | `0x10000011`, `0x10000021` | Start mowing |
 | 0x04 | `0x10000002` | `0x10000012`, `0x10000022` | Return home |
 | 0x08 | `0x10000003` | `0x10000013`, `0x10000023` | Stop/pause [I] |
-| 0x10 | `0x10000004` | `0x10000014`, `0x10000024` | Callback, unknown |
+| 0x10 | `0x10000004` | `0x10000014`, `0x10000024` | **Power off** ("Robot manual power off", `set_process_state(0xa)` in every process) |
 | 0x20 | `0x10000006` | — | Unknown |
 | 0x40 | `0x10000007` | — | Select (START/HOME pressed) |
 | 0x80 | `0x10000008` | — | Clear user setting [I: matches the ESP log] |
 
 The three groups bump separate counters at +0x08, +0x0c and +0x10 of the same context [I: statistics per source].
 
-**Display link watchdog** [F]: U13 expects some frame from the ESP at least every 3 s. Otherwise it sends `0x20000004`, raises `0x400000` (display_error) and, after about 20 min in error, powers off [I]. It recovers when frames return ("recover dpport"). The ESPHome component keeps the link alive from an `esp_timer` task during OTA. Details are in the investigation report §10.
+**Display link and watchdogs** [F]:
+- At U13 boot the ESP must answer each `0x40000009` with ESP_INFO and each `0x40000008` with ESP_INIT. If it does not, `rw_init` records "display board disconnect" and loops on `0x20000002` without feeding FWDGT, so U13 resets after ~16 s and the mower loses power [I: the step from handshake timeout to init error bit 0x4 is not traced].
+- Running: U13 expects a frame at least every 3 s. Otherwise it sends `0x20000004`, raises `0x400000` (display_error) and powers off after ~20 min in error (48000 ticks of 25 ms; 25 ms from the 2400-ticks-per-minute counter at `0802772e`). It recovers when frames return ("recover dpport").
+- More than 10 unparseable frames in a row set link state 6. If that is the state when the process manager starts, `08070f18` cuts power.
+Details are in the investigation report §10.
 
 **Error codes** are a bitmask. They match the Sunseeker OLD list: 1 updown, 2 trapped, 4 lift, 16 no border, 32 out of area, 64 sensor timeout, …
 
@@ -195,6 +207,6 @@ More detail is in [`u16/notes/U16.md`](u16/notes/U16.md). Its diagram was correc
 
 ## Open items
 
-- Which of U13 PE10/PE11 is `ST` and which is `OK` (J8). The trigger for `0x10000003`/`0x10000004` in the ESP32 UI.
+- Which of U13 PE10/PE11 is `ST` and which is `OK` (J8). The trigger for `0x10000003`/`0x10000004` (power off) in the ESP32 UI.
 - The meaning of U13 process-state numbers passed to `08078f3c`. They are not the same as the `state` in `0x330000A0`.
 - Remote commands `0x10000021/22/23/15` have not been seen on the wire yet.

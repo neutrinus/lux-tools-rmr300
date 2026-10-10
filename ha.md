@@ -368,6 +368,8 @@ In latest code (after commits):
 
 ## 4. MB Power-off Mystery
 
+> **Resolved 2026-10-10** (`20261009_claude_investigation.md` §10): `0x20000002` is U13's init-error report. U13 waits at boot for ESP_INFO in reply to each `0x40000009` and ESP_INIT in reply to each `0x40000008`. Without them it flags the display board as missing, loops on `0x20000002` without feeding its hardware watchdog and resets after ~16 s, which cuts power. The hypotheses below are kept for history.
+
 ### Symptoms
 MB sends `0x20000002` (SUPERVISION) and cuts power ~3-6s after PIN send / DEVICE_INFO reception. This happens in all logs 6-9.
 
@@ -517,6 +519,8 @@ PRE ──→ DONE
 - MB also monitors responses to its queries (WiFi, BT, ESP_INFO)
 
 ### Boot Delay (30s)
+
+> Removed 2026-10-10: the silent window is exactly what triggered the power-off above.
 
 - Configured to 30s in YAML (`boot_delay: 30`)
 - During this time ESP sends only POLL and KEEPALIVE, not boot_seq

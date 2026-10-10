@@ -245,44 +245,50 @@ Mapowanie `mode` w chmurze (Sunseeker, `lawn_mower.py`) to: 0 czuwanie, 1 koszen
 
 ESPHome nie ma platformy `lawn_mower`. Komponent wystawia przyciski Start Mowing, Stop, Return to Dock i Trim Edge, sensor Mower State oraz sensory baterii. Do encji `lawn_mower` w HA trzeba osobnej integracji (np. MQTT `lawn_mower`) albo szablonu po stronie HA. Tego nie zrobiłem.
 
-## 10. Dopisek 2026-10-10: watchdog łącza ESP ↔ U13 i OTA
+## 10. Dopisek 2026-10-10: watchdogi U13, szybkie wyłączenie i OTA
 
-### Jak to działa w U13
+Pierwsza wersja tej sekcji opisywała tylko 3-sekundowy limit łącza i wyłączenie po ~20 minutach. Marek widział wyłączenie po kilkunastu sekundach, gdy ESPHome nie trzymał się protokołu. To osobna ścieżka, opisana niżej.
 
-| Element | Adres / wartość | Pewność |
+### Handshake przy starcie U13 [F] [C]
+
+`0x080446e4` (dpport) przy starcie U13:
+
+1. Wysyła `0x40000009` (BOOT_HEART) co 100 ms, najwyżej 25 razy (~2,5 s), aż ESP odpowie.
+2. Wysyła `0x40000008` (BOOT_INIT) co 20 ms, najwyżej 50 razy (~1 s), aż ESP_INIT `{"init":3}` ustawi stan łącza 2.
+3. Po sukcesie wysyła `0x20000004` dwa razy. Potem idzie DEVICE_INFO.
+4. Po porażce ustawia stan 4 i sygnalizuje to `rw_init`.
+
+Capture `02-boot-pin` (la_decode, oba kierunki w jednej osi czasu) pokazuje, że oryginalny ESP odpowiada w ~3 ms na każdą ramkę: ESP_INFO na BOOT_HEART i ESP_INIT na BOOT_INIT. Stary komponent wysyłał ESP_INFO i ESP_INIT dopiero po DEVICE_INFO, a DEVICE_INFO przychodzi dopiero po udanym handshake.
+
+### Szybkie wyłączenie: watchdog sprzętowy [F]
+
+| Element | Adres | Opis |
 |---|---|---|
-| Konfiguracja usługi `dpport` (USART0, ESP32) | `0x080706a0`: timeout odbioru `0xbb8` = 3000 ms, okres `0x1f4` = 500 ms | [F] |
-| Callback „dpport receive overtime” | `0x08044164`: status łącza = 4 i wysyłka `{"cmd":0x20000004}` do ESP (helper `0x08072558`) | [F] |
-| `deal_safety` | `0x080395a4`: pierwszym sprawdzanym obiektem jest dpport (getter `0x080509a0`). Zerwane łącze ustawia błąd `0x400000` (display_error) | [F] |
-| `process_error` | `0x08068622`: licznik `[ctx+0x24]` porównywany z limitem `[ctx+0x28]`. Limit `0xbb80` ustawiany w `0x08068756`. Po przekroczeniu stan `0xa` = wyłączenie zasilania | [F] |
-| Czas do wyłączenia | `0xbb80` = 48000 tyknięć. Przy 25 ms/tyknięcie to około 20 min | [I: okres tyknięcia nie jest potwierdzony] |
-| Powrót | Gdy ramki z ESP wracają, U13 loguje „recover dpport, change to process=%d” i wychodzi z błędu | [F: string i ścieżka] |
-| `0x20000002` | Wysyłane z `0x080726fc`, wołane z `rw_init` (`0x0805b8a4`, `0x0805b970`) co 2 s. To raport błędu inicjalizacji sterowników `{"error":bity}`, a nie „SUPERVISION” | [F] |
+| FWDGT 16 s | `0x0805b7ac` → `0x0805deba` | dzielnik ÷256, reload 2500 (IRC40K), ustawiany na początku `rw_init` |
+| FWDGT 1,6 s | `0x0806ff0a` → `0x0805dea6` | ÷32, reload 2000, po starcie usługi konfiguracji |
+| Pętla błędu `rw_init` | `0x0805b974` | gdy `[ctx+8]` (bity błędów inicjalizacji) ≠ 0: co 2 s `0x20000002 {"error":bity}` i miganie, **bez karmienia watchdoga** |
+| Bity błędów | `0x08060a44` | 0x1 ultradźwięki, 0x2 wersja MB, **0x4 „display borad disconnect”**, 0x8 płytka przewodu, 0x10 flash, … |
+| Odcięcie zasilania | `0x08070d3c` | zeruje PB12, PE9, PD11 (podtrzymanie zasilania) |
 
-Każda ramka od ESP zeruje timer. W praktyce oryginalny firmware wysyła `ESP_KEEPALIVE` (`0x30000005`) co 1 s.
+Gdy ESP nie odpowie na handshake, U13 kończy inicjalizację z błędem, wysyła `0x20000002` i po ~16 s resetuje się przez watchdog. Reset zwalnia podtrzymanie zasilania, więc kosiarka gaśnie. To zgadza się z „kilkunastoma sekundami” i z `ha.md` §4 („MB wysyła 0x20000002 i odcina zasilanie”) [W: przejścia od porażki handshake do bitu 0x4 nie prześledziłem do końca].
 
-Skutki ciszy od ESP:
-- Po 3 s U13 uznaje łącze za zerwane i wysyła `0x20000004`. Komponent logował to wcześniej jako „Power READY”, co było mylące.
-- U13 wchodzi w błąd display_error (`0x400000`) i zatrzymuje pracę.
-- Jeśli łącze nie wróci, po około 20 minutach U13 wyłącza zasilanie [I].
+Okno ciszy `boot_delay: 30` dokładnie wywoływało ten scenariusz: ESP milczał akurat wtedy, gdy U13 czekał na odpowiedź.
 
-Osobno `process_security` wyłącza kosiarkę po około 20 minutach czekania na PIN [I: ten sam mechanizm licznika].
+### Inne ścieżki wyłączenia [F]
 
-### Dlaczego OTA było trudne
-
-Stary komponent celowo milczał przez pierwsze 30 s po starcie (`boot_delay: 30`, „LISTEN ONLY”). To okno miało chronić OTA. Dwa problemy:
-- Cisza dłuższa niż 3 s to dokładnie warunek zerwania łącza. U13 przechodził w błąd jeszcze przed handshake.
-- W czasie uploadu OTA ESPHome blokuje `loop()`, więc KEEPALIVE nie szedł. Upload trwa dłużej niż 3 s, więc OTA w trakcie pracy zawsze zrywało łącze.
-
-Po restarcie ESP U13 działa dalej i nie wysyła ponownie `DEVICE_INFO`. Stary komponent czekał na `DEVICE_INFO`, więc handshake nigdy się nie kończył i ESP zostawał w fazie PRE.
+- **`0x10000004`, `0x10000014`, `0x10000024`** ustawiają bit akcji 0x10. Każdy proces U13 (security, wait, charging, error, find_bd i inne) reaguje na niego „Robot manual power off” i stanem 0xa (wyłączenie). To polecenie wyłączenia, a nie nieznane zdarzenie UI. Stary komponent go nie wysyłał (sprawdziłem historię gita).
+- **Ponad 10 nieparsowalnych ramek z rzędu** (`0x08046f94`, licznik w `0x08046e8a`) ustawia stan łącza 6. Jeśli tak jest w chwili startu menedżera procesów, `0x08070f18` loguje „communication failed” i odcina zasilanie.
+- **3 s bez żadnej ramki** w trakcie pracy: `0x08044164` ustawia stan 4 i wysyła `0x20000004`, `deal_safety` zgłasza `0x400000` (display_error), a `process_error` wyłącza zasilanie po 48000 tyknięciach. Tyknięcie ma 25 ms (licznik minut pracy w `0x0802772e` dzieli przez 2400), więc to 20 minut. Po powrocie ramek U13 sam wychodzi z błędu („recover dpport”).
+- `process_security` wyłącza po 20 minutach czekania na PIN („Robot wait input passwaord >20minutes”).
 
 ### Co zmieniłem w komponencie
 
-- **Strażnik łącza.** Osobny `esp_timer` (zadanie `esp_timer`, nie `loop()`) co 500 ms sprawdza, kiedy poszła ostatnia ramka. Po 1,5 s ciszy wysyła gotową ramkę KEEPALIVE. Działa też wtedy, gdy `loop()` stoi na OTA. Wszystkie zapisy na UART idą przez `write_frame()` z mutexem, żeby ramki z dwóch zadań się nie przeplatały.
-- **Brak okna ciszy.** `ESP_BOOT`, KEEPALIVE, `ESP_STATE`, POLL i RAIN idą od razu po starcie, raz (wcześniej `ESP_BOOT` szedł w każdej iteracji `loop()` w fazie PRE). `boot_delay` jest ignorowany z ostrzeżeniem w logu. Klucz zostaje w schemacie, żeby stare YAML-e się walidowały. Usunąłem go z `snk-mower.yaml`.
-- **Ciepły restart.** Jeśli w fazie PRE przyjdzie `0x330000A0` STATUS zanim przyjdzie `DEVICE_INFO`, to U13 już działa (np. po OTA ESP). Komponent przechodzi wtedy prosto do DONE, zeruje liczniki okresowe i wysyła PIN.
-- **Nazwy w logach.** `0x20000004` jest logowane jako „Power READY / link restart”, a `0x20000002` jako „MB init error” z polem `error`.
+- **Handshake na zasadzie pytanie-odpowiedź**, jak w oryginale: BOOT_HEART → ESP_INFO, BOOT_INIT → ESP_INIT, `0x20000004` → łącze gotowe. Po tym zapytania o harmonogram, deszcz i strefy oraz PIN.
+- **Strażnik łącza**: osobny `esp_timer` wysyła KEEPALIVE, gdy przez 1,5 s nic nie poszło (np. w trakcie uploadu OTA, który blokuje `loop()`). Zapisy na UART są chronione mutexem.
+- **Ciepły restart**: jeśli po starcie ESP przyjdzie zwykła ramka (np. RTC albo STATUS), U13 już działa, więc komponent od razu przechodzi w tryb pracy.
+- **Interwały jak w oryginale**: POLL co 100 ms przed handshake, KEEPALIVE co 500 ms i status WiFi/BT co 1 s po nim. Usunąłem okresowe ESP_INFO i ESP_STATE, których oryginał po starcie nie wysyła.
+- **Błąd, który nadpisywał harmonogram**: stary `send_trim()` wysyłał `0x300000A6` z `"auto":1` i godziną startu równą bieżącej, czyli przy każdym starcie włączał automatyczne koszenie o tej porze codziennie. Oryginał wysyła `0x300000A6` bez pól, jako zapytanie. Teraz komponent robi tak samo.
+- **Stan 8** (wyjazd ze stacji do koszenia, capture `trzeci`) jest teraz pokazywany jako koszenie, a nie powrót.
+- **Sprzątanie**: usunięte `boot_delay`, `compat_mode`, sensory `battery_voltage` i `signal_level` (nigdy nie publikowane), `send_action` i nieużywane pola. Kod podzielony na `protocol.{h,cpp}` (stałe i ramki), `snk_mower.cpp` (łącze, wysyłanie, akcje), `snk_mower_rx.cpp` (odbiór) i `snk_mower_display.cpp` (wyświetlacz, brzęczyk, stan w HA).
 
-OTA nadal restartuje ESP, a restart trwa kilka sekund. Przez ten czas U13 może na chwilę zgłosić display_error. Po starcie komponent od razu wysyła ramki, więc U13 powinien wrócić sam („recover dpport”) [I]. Do wyłączenia zasilania potrzeba około 20 minut ciszy, więc restart ESP jest daleko od tej granicy.
-
-**Nie testowane na sprzęcie.** `esphome config` przechodzi; pełnej kompilacji nie dało się tu zrobić (PlatformIO zablokowany w sandboksie).
+**Weryfikacja:** `esphome config` przechodzi. Pełnej kompilacji nie da się tu zrobić (rejestr PlatformIO jest zablokowany), więc kod sprawdziłem `g++ -fsyntax-only` na atrapach nagłówków i w symulacji na hoście, która odtwarza ramki MB z `02-boot-pin`. Komponent odpowiada na każde BOOT_HEART i BOOT_INIT, łącze wstaje po `0x20000004`, a po restarcie samego ESP wraca do pracy na pierwszej ramce RTC. Na kosiarce nie testowane.

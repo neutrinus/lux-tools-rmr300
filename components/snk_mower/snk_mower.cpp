@@ -1,418 +1,43 @@
 #include "snk_mower.h"
+#include "protocol.h"
 #include "esphome/core/log.h"
-#include "esphome/core/helpers.h"
-#include "esphome/core/application.h"
-#include "esphome/components/wifi/wifi_component.h"
 #include <esp_mac.h>
-#include <time.h>
 
 namespace esphome {
 namespace snk_mower {
 
 static const char *const TAG = "snk_mower";
 
-static const uint32_t CMD_POWER_ON       = 0x20000001;
-static const uint32_t CMD_POWER_READY    = 0x20000004;  // U13 also sends this when it got no ESP frame for 3 s (link lost)
-static const uint32_t CMD_MB_INIT_ERROR  = 0x20000002;  // U13 rw_init: driver init failed, {"error":bits}, repeated every 2 s
-static const uint32_t CMD_RAIN           = 0x22000000;
-static const uint32_t CMD_ESP_KEEPALIVE  = 0x30000005;
-static const uint32_t CMD_SETTING_MODE   = 0x30000006;
-static const uint32_t CMD_SETTING_APPLY  = 0x30000007;
-static const uint32_t CMD_ESP_STATE      = 0x30000028;
-static const uint32_t CMD_ESP_WIFI       = 0x30000021;
-static const uint32_t CMD_ESP_BT         = 0x30000022;
-static const uint32_t CMD_ESP_POLL       = 0x300000A1;
-static const uint32_t CMD_ESP_TRIM       = 0x300000A6;
-static const uint32_t CMD_ESP_RAIN_CFG   = 0x300000A7;
-static const uint32_t CMD_ESP_MULTIZONE  = 0x300000A8;
-static const uint32_t CMD_SETTING_START  = 0x31000016;
-static const uint32_t CMD_SETTING_SUB    = 0x31000017;
-static const uint32_t CMD_PIN_RESULT     = 0x33000021;
-static const uint32_t CMD_PIN_RESULT2    = 0x33000022;
-static const uint32_t CMD_STATUS         = 0x330000A0;
-static const uint32_t CMD_DEVICE_INFO    = 0x330000A1;
-static const uint32_t CMD_MB_DEVICE_INFO = 0x330000A9;
-static const uint32_t CMD_HW_VERSIONS    = 0x330000A2;
-static const uint32_t CMD_SCHEDULE       = 0x330000A6;
-static const uint32_t CMD_RAIN_CFG_RSP   = 0x330000A7;
-static const uint32_t CMD_MULTIZONE_RSP  = 0x330000A8;
-static const uint32_t CMD_SCHEDULE_END   = 0x330000AA;
-static const uint32_t CMD_MAP_CFG        = 0x330000B0;
-static const uint32_t CMD_ESP_BOOT       = 0x40000004;
-static const uint32_t CMD_ESP_INIT       = 0x40000001;
-static const uint32_t CMD_ESP_INFO       = 0x40000006;
-static const uint32_t CMD_BOOT_INIT      = 0x40000008;
-static const uint32_t CMD_BOOT_HEART     = 0x40000009;
-static const uint32_t CMD_RTC            = 0x40000011;
-static const uint32_t CMD_START_TIME_Q   = 0x40000012;
-static const uint32_t CMD_CUT_TIME_Q     = 0x40000013;
-static const uint32_t CMD_UNKNOWN_14     = 0x40000014;
-static const uint32_t CMD_LIGHT          = 0x40000020;
-static const uint32_t CMD_BOOT_ACK       = 0x40000021;
-static const uint32_t CMD_LOCK           = 0x41000002;
-static const uint32_t CMD_EXEC_ACTION    = 0x41000003;
-static const uint32_t CMD_ERROR_NOTIFY   = 0x41000004;
-static const uint32_t CMD_PIN_SEND       = 0x41000005;
-static const uint32_t CMD_SHUTDOWN       = 0x41000008;
-static const uint32_t CMD_START_ACK      = 0x41000020;
-static const uint32_t CMD_BATTERY        = 0x50000021;
-static const uint32_t CMD_RETURN_HOME    = 0x41000006;  // MB->ESP notification only
-static const uint32_t CMD_DOCKED_CHARGE  = 0x41000007;
-// ESP->MB key/action commands. These are NOT error acks. Original ESP firmware
-// (ota_0.bin 3.02.02, dispatcher 0x400e2194, see 20261009_claude_investigation.md)
-// sends KEY_SELECT when START or HOME is pressed, then START_CONFIRM / HOME_CONFIRM
-// when OK follows within 3 s. Verified in captures/2026-06-21/trzeci: START,
-// 0x10000007, OK, 0x10000001, then MB state 8 (leaving to cut).
-static const uint32_t CMD_KEY_START_CONFIRM = 0x10000001;  // START then OK: start mowing
-static const uint32_t CMD_KEY_HOME_CONFIRM  = 0x10000002;  // HOME then OK: return to station
-static const uint32_t CMD_KEY_SELECT        = 0x10000007;  // START or HOME pressed
-// ESP->MB remote (cloud) actions. The original firmware's IoT task maps the
-// app's "mode" (cmd 101) through a table at 0x3f4046b4: 0 pause, 1 start,
-// 2 home, 3 select, 4 border. U13 dpport (0x08063808) maps them to the same
-// action bits as the keys. Found in firmware, not seen in a capture yet.
-static const uint32_t CMD_REMOTE_START = 0x10000021;  // action bit 0x02
-static const uint32_t CMD_REMOTE_HOME  = 0x10000022;  // action bit 0x04
-static const uint32_t CMD_REMOTE_STOP  = 0x10000023;  // action bit 0x08 (app "pause")
-static const uint32_t CMD_REMOTE_EDGE  = 0x10000015;  // action bit 0x01: edge trim, only from the station
-static const uint32_t KEY_CONFIRM_WINDOW_MS = 3000;        // 300 ticks of 10 ms in original fw
-
-static const uint32_t CMD_SETTING_ACK_BASE = 0x33000000;
-
-static const char *const STATE_NAMES[] = {
-    "unknown", "idle",    "mowing", "returning",
-    "charging", "docked", "error",  "locked",
-};
-
-static const char *const STATE_DISPLAY[] = {
-    "----", "IdLE", "Mow ", "HoME",
-    "ChAr", "dock", "Err ", "LoCK",
-};
-
-static const float VOLTAGE_LUT[101] = {
-    15.0f, 15.05f, 15.1f, 15.15f, 15.2f, 15.25f, 15.3f, 15.35f, 15.4f, 15.5f,
-    15.6f, 15.7f,  15.8f, 15.85f, 15.9f, 16.0f,  16.1f, 16.15f, 16.2f, 16.25f,
-    16.3f, 16.4f,  16.5f, 16.55f, 16.6f, 16.65f, 16.7f, 16.75f, 16.8f, 16.85f,
-    16.9f, 16.95f, 17.0f, 17.05f, 17.1f, 17.15f, 17.2f, 17.25f, 17.3f, 17.35f,
-    17.4f, 17.45f, 17.5f, 17.55f, 17.6f, 17.65f, 17.7f, 17.75f, 17.8f, 17.85f,
-    17.9f, 17.95f, 18.0f, 18.05f, 18.1f, 18.15f, 18.2f, 18.25f, 18.3f, 18.35f,
-    18.4f, 18.45f, 18.5f, 18.55f, 18.6f, 18.65f, 18.7f, 18.75f, 18.8f, 18.85f,
-    18.9f, 18.95f, 19.0f, 19.05f, 19.1f, 19.15f, 19.2f, 19.25f, 19.3f, 19.35f,
-    19.4f, 19.45f, 19.5f, 19.55f, 19.6f, 19.65f, 19.7f, 19.75f, 19.8f, 19.85f,
-    19.9f, 19.95f, 20.0f, 20.05f, 20.1f, 20.15f, 20.2f, 20.25f, 20.3f, 20.35f,
-    20.4f,
-};
-
-static int voltage_to_percent(float v) {
-  if (v >= VOLTAGE_LUT[100]) return 100;
-  if (v <= VOLTAGE_LUT[0]) return 0;
-  for (int i = 0; i < 100; i++) {
-    if (v >= VOLTAGE_LUT[i] && v < VOLTAGE_LUT[i + 1]) return i;
-  }
-  return 50;
-}
-
-SnkMower::SnkMower(const std::string &pin) : pin_(pin) {}
+// U13 drops the display link after 3 s without any frame from us (dpport
+// receive timeout, 0x080706a0). The guard steps in after 1.5 s of silence.
+static constexpr uint32_t LINK_GUARD_PERIOD_MS = 500;
+static constexpr uint32_t LINK_GUARD_SILENCE_MS = 1500;
+// Intervals measured on the original firmware (captures/02-boot-pin).
+static constexpr uint32_t POLL_INTERVAL_MS = 100;
+static constexpr uint32_t KEEPALIVE_INTERVAL_MS = 500;
+static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;
+static constexpr uint32_t RAIN_READ_INTERVAL_MS = 1000;
+static constexpr uint32_t KEY_CONFIRM_WINDOW_MS = 3000;  // 300 ticks of 10 ms in the original
 
 void SnkMower::setup() {
-  ESP_LOGI(TAG, "SNK Mower starting (PIN: %s, JSON at 230400)", pin_.c_str());
-
+  ESP_LOGI(TAG, "Setting up SNK mower link (230400 8N1)");
   tx_mutex_ = xSemaphoreCreateMutex();
-  setup_display();
-  set_display_text("8888", true);
-  start_link_guard();
-
-  finish_setup();
-}
-
-void SnkMower::finish_setup() {
-  last_activity_ms_ = millis();
-  last_boot_ms_ = millis();
 
   if (buzzer_pin_ != GPIO_NUM_NC) {
     gpio_set_direction(buzzer_pin_, GPIO_MODE_OUTPUT);
     gpio_set_level(buzzer_pin_, 0);
-    ESP_LOGI(TAG, "Buzzer on GPIO%d", (int)buzzer_pin_);
   }
-
-  if (rain_pin_ != GPIO_NUM_NC) {
+  if (rain_pin_ != GPIO_NUM_NC)
     gpio_set_direction(rain_pin_, GPIO_MODE_INPUT);
-    ESP_LOGI(TAG, "Rain sensor on GPIO%d", (int)rain_pin_);
-  }
 
+  setup_display();
   set_display_text("boot");
+  last_activity_ms_ = millis();
 
-  if (boot_delay_ms_ > 0)
-    ESP_LOGW(TAG, "boot_delay is ignored: staying silent makes U13 drop the display link after 3 s");
-  ESP_LOGI(TAG, "Boot phase PRE: sending ESP_BOOT, then waiting for DEVICE_INFO");
-
-  boot_phase_ = BootPhase::PRE;
-  phase_start_ms_ = millis();
-}
-
-void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
-  display_clk_ = (gpio_num_t)clk;
-  display_mosi_ = (gpio_num_t)mosi;
-  display_cs_ = (gpio_num_t)cs;
-}
-
-void SnkMower::setup_display() {
-  if (display_clk_ == GPIO_NUM_NC) {
-    ESP_LOGW(TAG, "Display pins not configured, skipping display init");
-    return;
-  }
-
-  spi_bus_config_t bus_cfg = {};
-  bus_cfg.mosi_io_num = display_mosi_;
-  bus_cfg.miso_io_num = -1;
-  bus_cfg.sclk_io_num = display_clk_;
-  bus_cfg.quadwp_io_num = -1;
-  bus_cfg.quadhd_io_num = -1;
-  bus_cfg.max_transfer_sz = 4;
-
-  esp_err_t ret = spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_DISABLED);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "SPI bus init failed: %d", ret);
-    return;
-  }
-
-  spi_device_interface_config_t dev_cfg = {};
-  dev_cfg.clock_speed_hz = 2000000;
-  dev_cfg.mode = 0;
-  dev_cfg.spics_io_num = display_cs_;
-  dev_cfg.queue_size = 1;
-
-  ret = spi_bus_add_device(SPI2_HOST, &dev_cfg, &spi_dev_);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "SPI device add failed: %d", ret);
-    return;
-  }
-
-  ESP_LOGI(TAG, "Display initialized (SPI2: CLK=%d, MOSI=%d, CS=%d, 1MHz)",
-           (int)display_clk_, (int)display_mosi_, (int)display_cs_);
-
-  if (display_timer_ == nullptr) {
-    esp_timer_create_args_t timer_args = {
-        .callback = &SnkMower::display_timer_callback,
-        .arg = this,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "display_timer",
-        .skip_unhandled_events = true
-    };
-    esp_err_t err = esp_timer_create(&timer_args, &display_timer_);
-    if (err == ESP_OK) {
-      esp_timer_start_periodic(display_timer_, DISPLAY_REFRESH_MS * 1000ULL);
-      ESP_LOGI(TAG, "Display hardware timer started (refresh %d ms)", (int)DISPLAY_REFRESH_MS);
-    } else {
-      ESP_LOGE(TAG, "Failed to create display hardware timer! err=%d", err);
-    }
-  }
-}
-
-void SnkMower::display_timer_callback(void *arg) {
-  auto *self = static_cast<SnkMower *>(arg);
-  self->refresh_display_impl();
-}
-
-void SnkMower::refresh_display_impl() {
-  if (display_clk_ == GPIO_NUM_NC) return;
-  if (display_off_) return;
-  if (spi_dev_ == nullptr) return;
-
-  static const uint8_t DIGIT_B0_MAP[4] = {0x00, 0x00, 0x00, 0x00};
-  static const uint8_t DIGIT_B1_MAP[4] = {0x20, 0x10, 0x08, 0x04};
-
-  uint8_t seg = display_segments_[current_digit_];
-  uint8_t b0 = DIGIT_B0_MAP[current_digit_];
-  uint8_t b1 = DIGIT_B1_MAP[current_digit_] | display_colon_;
-
-  current_digit_ = (current_digit_ + 1) % DIGITS;
-
-  spi_transaction_t trans = {};
-  trans.length = 24;
-  trans.flags = SPI_TRANS_USE_TXDATA;
-  trans.tx_data[0] = b0;
-  trans.tx_data[1] = b1;
-  trans.tx_data[2] = seg;
-
-  spi_device_polling_transmit(spi_dev_, &trans);
-}
-
-void SnkMower::set_display_text(const char *text, bool colon) {
-  for (uint8_t i = 0; i < DIGITS; i++) {
-    char c = text[i] ? text[i] : ' ';
-    display_segments_[i] = char_to_segments_(c);
-  }
-  // TODO: colon on b0 (U4) — find correct bit
-  display_colon_ = 0;
-}
-
-void SnkMower::set_display_battery(int percent) {
-  percent = std::min(100, std::max(0, percent));
-  display_segments_[0] = 0;
-  if (percent == 100) {
-    display_segments_[1] = char_to_segments_('1');
-    display_segments_[2] = char_to_segments_('0');
-    display_segments_[3] = char_to_segments_('0');
-  } else if (percent >= 10) {
-    display_segments_[1] = char_to_segments_(' ');
-    display_segments_[2] = char_to_segments_('0' + (percent / 10));
-    display_segments_[3] = char_to_segments_('0' + (percent % 10));
-  } else {
-    display_segments_[1] = char_to_segments_(' ');
-    display_segments_[2] = char_to_segments_(' ');
-    display_segments_[3] = char_to_segments_('0' + percent);
-  }
-  display_colon_ = 0;
-}
-
-void SnkMower::set_charging_display(int percent) {
-  percent = std::min(100, std::max(0, percent));
-  display_segments_[0] = 0;
-  if (percent == 100) {
-    display_segments_[1] = char_to_segments_('1');
-    display_segments_[2] = char_to_segments_('0');
-    display_segments_[3] = char_to_segments_('0');
-  } else if (percent >= 10) {
-    display_segments_[1] = char_to_segments_(' ');
-    display_segments_[2] = char_to_segments_('0' + (percent / 10));
-    display_segments_[3] = char_to_segments_('0' + (percent % 10));
-  } else {
-    display_segments_[1] = char_to_segments_(' ');
-    display_segments_[2] = char_to_segments_(' ');
-    display_segments_[3] = char_to_segments_('0' + percent);
-  }
-}
-
-uint8_t SnkMower::char_to_segments_(char c) {
-  switch (c) {
-    case ' ': return 0b00000000;
-    case '-': return 0b01000000;
-    case '_': return 0b00001000;
-    case '0': return 0b00111111;
-    case '1': return 0b00000110;
-    case '2': return 0b01011011;
-    case '3': return 0b01001111;
-    case '4': return 0b01100110;
-    case '5': return 0b01101101;
-    case '6': return 0b01111101;
-    case '7': return 0b00000111;
-    case '8': return 0b01111111;
-    case '9': return 0b01101111;
-    case 'A': return 0b01110111;
-    case 'b': return 0b01111100;
-    case 'C': return 0b00111001;
-    case 'c': return 0b01011000;
-    case 'd': return 0b01011110;
-    case 'E': return 0b01111001;
-    case 'F': return 0b01110001;
-    case 'H': return 0b01110110;
-    case 'h': return 0b01110100;
-    case 'I': return 0b00110000;
-    case 'J': return 0b00011110;
-    case 'L': return 0b00111000;
-    case 'n': return 0b01010100;
-    case 'o': return 0b01011100;
-    case 'P': return 0b01110011;
-    case 'r': return 0b01010000;
-    case 'S': return 0b01101101;
-    case 't': return 0b01111000;
-    case 'U': return 0b00111110;
-    case 'u': return 0b00011100;
-    case 'y': return 0b01100110;
-    case 'Y': return 0b01100110;
-    default: return 0;
-  }
-}
-
-void SnkMower::set_buzzer_pin(gpio_num_t pin) {
-  buzzer_pin_ = pin;
-}
-
-void SnkMower::set_rain_pin(gpio_num_t pin) {
-  rain_pin_ = pin;
-}
-
-void SnkMower::set_boot_delay(uint32_t seconds) {
-  boot_delay_ms_ = seconds * 1000;
-}
-
-void SnkMower::set_display_off_timeout(uint32_t minutes) {
-  display_off_timeout_ms_ = minutes * 60000UL;
-  ESP_LOGI(TAG, "Display auto-off: %u min (%u ms)",
-           (unsigned)minutes, (unsigned)display_off_timeout_ms_);
-}
-
-void SnkMower::buzz(int duration_ms) {
-  if (buzzer_pin_ == GPIO_NUM_NC) return;
-  gpio_set_level(buzzer_pin_, 1);
-  delay(duration_ms);
-  gpio_set_level(buzzer_pin_, 0);
-}
-
-static const uint8_t CRC8_DALLAS_TABLE[256] = {
-    0x00, 0x5E, 0xBC, 0xE2, 0x61, 0x3F, 0xDD, 0x83, 0xC2, 0x9C, 0x7E, 0x20, 0xA3, 0xFD, 0x1F, 0x41,
-    0x9D, 0xC3, 0x21, 0x7F, 0xFC, 0xA2, 0x40, 0x1E, 0x5F, 0x01, 0xE3, 0xBD, 0x3E, 0x60, 0x82, 0xDC,
-    0x23, 0x7D, 0x9F, 0xC1, 0x42, 0x1C, 0xFE, 0xA0, 0xE1, 0xBF, 0x5D, 0x03, 0x80, 0xDE, 0x3C, 0x62,
-    0xBE, 0xE0, 0x02, 0x5C, 0xDF, 0x81, 0x63, 0x3D, 0x7C, 0x22, 0xC0, 0x9E, 0x1D, 0x43, 0xA1, 0xFF,
-    0x46, 0x18, 0xFA, 0xA4, 0x27, 0x79, 0x9B, 0xC5, 0x84, 0xDA, 0x38, 0x66, 0xE5, 0xBB, 0x59, 0x07,
-    0xDB, 0x85, 0x67, 0x39, 0xBA, 0xE4, 0x06, 0x58, 0x19, 0x47, 0xA5, 0xFB, 0x78, 0x26, 0xC4, 0x9A,
-    0x65, 0x3B, 0xD9, 0x87, 0x04, 0x5A, 0xB8, 0xE6, 0xA7, 0xF9, 0x1B, 0x45, 0xC6, 0x98, 0x7A, 0x24,
-    0xF8, 0xA6, 0x44, 0x1A, 0x99, 0xC7, 0x25, 0x7B, 0x3A, 0x64, 0x86, 0xD8, 0x5B, 0x05, 0xE7, 0xB9,
-    0x8C, 0xD2, 0x30, 0x6E, 0xED, 0xB3, 0x51, 0x0F, 0x4E, 0x10, 0xF2, 0xAC, 0x2F, 0x71, 0x93, 0xCD,
-    0x11, 0x4F, 0xAD, 0xF3, 0x70, 0x2E, 0xCC, 0x92, 0xD3, 0x8D, 0x6F, 0x31, 0xB2, 0xEC, 0x0E, 0x50,
-    0xAF, 0xF1, 0x13, 0x4D, 0xCE, 0x90, 0x72, 0x2C, 0x6D, 0x33, 0xD1, 0x8F, 0x0C, 0x52, 0xB0, 0xEE,
-    0x32, 0x6C, 0x8E, 0xD0, 0x53, 0x0D, 0xEF, 0xB1, 0xF0, 0xAE, 0x4C, 0x12, 0x91, 0xCF, 0x2D, 0x73,
-    0xCA, 0x94, 0x76, 0x28, 0xAB, 0xF5, 0x17, 0x49, 0x08, 0x56, 0xB4, 0xEA, 0x69, 0x37, 0xD5, 0x8B,
-    0x57, 0x09, 0xEB, 0xB5, 0x36, 0x68, 0x8A, 0xD4, 0x95, 0xCB, 0x29, 0x77, 0xF4, 0xAA, 0x48, 0x16,
-    0xE9, 0xB7, 0x55, 0x0B, 0x88, 0xD6, 0x34, 0x6A, 0x2B, 0x75, 0x97, 0xC9, 0x4A, 0x14, 0xF6, 0xA8,
-    0x74, 0x2A, 0xC8, 0x96, 0x15, 0x4B, 0xA9, 0xF7, 0xB6, 0xE8, 0x0A, 0x54, 0xD7, 0x89, 0x6B, 0x35
-};
-
-uint8_t dallas_crc8(const uint8_t *data, size_t len) {
-  uint8_t crc = 0x00;
-  for (size_t i = 0; i < len; i++) {
-    crc = CRC8_DALLAS_TABLE[crc ^ data[i]];
-  }
-  return crc;
-}
-
-void SnkMower::send_json(const JsonDocument &doc) {
-  tx_buf_[0] = '&';
-  size_t n = serializeJson(doc, tx_buf_ + 1, BUF_SIZE - 4);
-  if (n > 0) {
-    uint8_t crc = dallas_crc8((const uint8_t *)(tx_buf_ + 1), n);
-    tx_buf_[n + 1] = crc;
-    tx_buf_[n + 2] = '#';
-    size_t total_len = n + 3;
-    write_frame((const uint8_t *)tx_buf_, total_len);
-    tx_buf_[n + 1] = '\0';
-    uint32_t cmd = doc["cmd"] | 0;
-    if (cmd == CMD_ESP_POLL || cmd == CMD_ESP_KEEPALIVE)
-      ESP_LOGV(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
-    else
-      ESP_LOGD(TAG, "TX: %s [CRC: 0x%02X]", tx_buf_ + 1, crc);
-  }
-}
-
-void SnkMower::write_frame(const uint8_t *data, size_t len) {
-  // Frames come from loop() and from the link guard timer task; never interleave them.
-  if (tx_mutex_ != nullptr)
-    xSemaphoreTake(tx_mutex_, portMAX_DELAY);
-  write_array(data, len);
-  last_tx_ms_ = millis();
-  if (tx_mutex_ != nullptr)
-    xSemaphoreGive(tx_mutex_);
-}
-
-void SnkMower::start_link_guard() {
-  // Prebuild the KEEPALIVE frame so the timer task never touches ArduinoJson or tx_buf_.
+  // Prebuilt so the guard task never touches ArduinoJson.
   char json[32];
-  int n = snprintf(json, sizeof(json), "{\"cmd\":%lu}", (unsigned long)CMD_ESP_KEEPALIVE);
-  keepalive_frame_[0] = '&';
-  memcpy(keepalive_frame_ + 1, json, n);
-  keepalive_frame_[n + 1] = dallas_crc8((const uint8_t *)json, n);
-  keepalive_frame_[n + 2] = '#';
-  keepalive_frame_len_ = n + 3;
+  int n = snprintf(json, sizeof(json), "{\"cmd\":%lu}", (unsigned long) proto::ESP_KEEPALIVE);
+  keepalive_frame_len_ = proto::encode_frame(json, n, keepalive_frame_, sizeof(keepalive_frame_));
 
   esp_timer_create_args_t args = {
       .callback = &SnkMower::link_guard_callback,
@@ -422,86 +47,108 @@ void SnkMower::start_link_guard() {
       .skip_unhandled_events = true,
   };
   if (esp_timer_create(&args, &link_guard_timer_) == ESP_OK)
-    esp_timer_start_periodic(link_guard_timer_, 500 * 1000);
+    esp_timer_start_periodic(link_guard_timer_, LINK_GUARD_PERIOD_MS * 1000ULL);
   else
     ESP_LOGE(TAG, "Link guard timer create failed");
+
+  // Same opening as the original firmware. If U13 is already running (ESP
+  // restart after OTA), any normal frame from it moves us to UP.
+  send_cmd(proto::ESP_BOOT);
+  send_cmd(proto::ESP_KEEPALIVE);
+  JsonDocument doc;
+  doc["cmd"] = proto::ESP_STATE;
+  doc["state"] = 0;
+  send_json(doc);
+  send_rain_status();
+}
+
+void SnkMower::loop() {
+  uint32_t now = millis();
+  read_uart();
+  link_loop(now);
+  display_loop(now);
+}
+
+// ── Link ──────────────────────────────────────────────────────────
+
+void SnkMower::link_loop(uint32_t now) {
+  if (link_ != Link::UP) {
+    if (now - last_poll_ >= POLL_INTERVAL_MS) {
+      last_poll_ = now;
+      send_cmd(proto::ESP_POLL);
+    }
+    return;
+  }
+
+  if (now - last_keepalive_ >= KEEPALIVE_INTERVAL_MS) {
+    last_keepalive_ = now;
+    send_cmd(proto::ESP_KEEPALIVE);
+  }
+  if (now - last_wifi_status_ >= WIFI_STATUS_INTERVAL_MS) {
+    last_wifi_status_ = now;
+    send_wifi_status();
+  }
+  if (rain_pin_ != GPIO_NUM_NC && now - last_rain_read_ >= RAIN_READ_INTERVAL_MS) {
+    last_rain_read_ = now;
+    if (gpio_get_level(rain_pin_) != last_rain_)
+      send_rain_status();
+  }
+  if (!pin_sent_)
+    send_pin();
+}
+
+void SnkMower::link_up(const char *why) {
+  if (link_ == Link::UP)
+    return;
+  ESP_LOGI(TAG, "Link up (%s)", why);
+  link_ = Link::UP;
+  uint32_t now = millis();
+  link_up_ms_ = now;
+  last_keepalive_ = now;
+  last_wifi_status_ = now;
+  last_rain_read_ = now;
+  // The original queries settings once the link is up. Bare commands are
+  // queries; ESP_GET_SCHEDULE with fields would overwrite the mower's schedule.
+  send_rain_status();
+  send_cmd(proto::ESP_GET_SCHEDULE);
+  send_cmd(proto::ESP_GET_RAIN_CFG);
+  send_cmd(proto::ESP_GET_ZONES);
 }
 
 void SnkMower::link_guard_callback(void *arg) {
   auto *self = static_cast<SnkMower *>(arg);
-  if (!self->link_guard_active_)
-    return;
-  // loop() normally sends KEEPALIVE every 1 s. Only step in when it has been
-  // quiet for 1.5 s, well inside U13's 3 s receive timeout.
-  if (millis() - self->last_tx_ms_ < 1500)
+  // loop() normally sends something every 100-500 ms. This only fires while
+  // loop() is blocked, e.g. during an OTA upload.
+  if (millis() - self->last_tx_ms_ < LINK_GUARD_SILENCE_MS)
     return;
   self->write_frame(self->keepalive_frame_, self->keepalive_frame_len_);
 }
 
-void SnkMower::send_boot() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_ESP_BOOT;
-  send_json(doc);
+// ── TX ────────────────────────────────────────────────────────────
+
+void SnkMower::write_frame(const uint8_t *data, size_t len) {
+  // loop() and the link guard task both write; never interleave frames.
+  xSemaphoreTake(tx_mutex_, portMAX_DELAY);
+  write_array(data, len);
+  last_tx_ms_ = millis();
+  xSemaphoreGive(tx_mutex_);
 }
 
-void SnkMower::send_init() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_ESP_INIT;
-  doc["init"] = 3;
-  send_json(doc);
-}
-
-void SnkMower::send_pin() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_PIN_SEND;
-  doc["pwd"] = atoi(pin_.c_str());
-  send_json(doc);
-  pin_sent_ = true;
-}
-
-void SnkMower::send_keepalive() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_ESP_KEEPALIVE;
-  send_json(doc);
-}
-
-void SnkMower::send_poll() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_ESP_POLL;
-  send_json(doc);
-}
-
-void SnkMower::send_wifi_status() {
-  JsonDocument doc;
-  auto *wifi = wifi::global_wifi_component;
-  bool wifi_connected = wifi && wifi->is_connected();
-  int wifi_str = (compat_mode_) ? 0 : (wifi_connected ? 1 : 0);
-
-  doc["cmd"] = CMD_ESP_WIFI;
-  doc["wifi"] = wifi_str;
-  doc["str"] = wifi_str;
-  send_json(doc);
-
-  doc.clear();
-  doc["cmd"] = CMD_ESP_BT;
-  doc["bt"] = 0;
-  doc["str"] = 0;
-  send_json(doc);
-}
-
-void SnkMower::send_esp_info() {
-  JsonDocument doc;
-  doc["cmd"] = CMD_ESP_INFO;
-  doc["hv"] = 60400;
-  doc["sv"] = 30202;
-  doc["spw"] = 0;
-  uint8_t mac[6];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
-  char mac_str[18];
-  snprintf(mac_str, sizeof(mac_str), "%02x-%02x-%02x-%02x-%02x-%02x",
-           mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  doc["mac"] = mac_str;
-  send_json(doc);
+void SnkMower::send_json(const JsonDocument &doc) {
+  char json[BUF_SIZE];
+  size_t n = serializeJson(doc, json, sizeof(json));
+  uint8_t frame[BUF_SIZE + 3];
+  size_t len = proto::encode_frame(json, n, frame, sizeof(frame));
+  if (n == 0 || len == 0) {
+    ESP_LOGE(TAG, "Frame too long, not sent");
+    return;
+  }
+  write_frame(frame, len);
+  uint32_t cmd = doc["cmd"] | 0;
+  if (cmd == proto::ESP_POLL || cmd == proto::ESP_KEEPALIVE || cmd == proto::ESP_WIFI || cmd == proto::ESP_BT)
+    ESP_LOGV(TAG, "TX %s", json);
+  else
+    ESP_LOGD(TAG, "TX %s", json);
 }
 
 void SnkMower::send_cmd(uint32_t cmd) {
@@ -510,710 +157,104 @@ void SnkMower::send_cmd(uint32_t cmd) {
   send_json(doc);
 }
 
-void SnkMower::send_trim() {
+void SnkMower::send_esp_info() {
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char mac_str[18];
+  snprintf(mac_str, sizeof(mac_str), "%02x-%02x-%02x-%02x-%02x-%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
+           mac[5]);
   JsonDocument doc;
-  doc["cmd"] = CMD_ESP_TRIM;
-  doc["auto"] = 1;
-  doc["trim"] = 120;
-  time_t now = time(nullptr);
-  struct tm *t = localtime(&now);
-  int st = t->tm_hour * 60 + t->tm_min;
-  const char *days[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
-  for (int i = 0; i < 7; i++) {
-    char st_key[8];
-    snprintf(st_key, sizeof(st_key), "%s_st", days[i]);
-    doc[st_key] = st;
-    char len_key[8];
-    snprintf(len_key, sizeof(len_key), "%s_len", days[i]);
-    doc[len_key] = 120;
-  }
+  doc["cmd"] = proto::ESP_INFO;
+  doc["hv"] = proto::DISPLAY_HW_VERSION;
+  doc["sv"] = proto::DISPLAY_SW_VERSION;
+  doc["spw"] = 0;
+  doc["mac"] = mac_str;
   send_json(doc);
 }
 
-void SnkMower::send_esp_state(int state) {
+void SnkMower::send_init() {
   JsonDocument doc;
-  doc["cmd"] = CMD_ESP_STATE;
-  doc["state"] = state;
+  doc["cmd"] = proto::ESP_INIT;
+  doc["init"] = 3;
   send_json(doc);
 }
 
-void SnkMower::send_rain_status(int rain) {
+void SnkMower::send_pin() {
   JsonDocument doc;
-  doc["cmd"] = CMD_RAIN;
-  doc["rain"] = rain;
+  doc["cmd"] = proto::ESP_PIN;
+  doc["pwd"] = atoi(pin_.c_str());
+  send_json(doc);
+  pin_sent_ = true;
+}
+
+void SnkMower::send_wifi_status() {
+  // Always "no WiFi / no BT", like the original without a cloud connection.
+  JsonDocument doc;
+  doc["cmd"] = proto::ESP_WIFI;
+  doc["wifi"] = 0;
+  doc["str"] = 0;
+  send_json(doc);
+  doc.clear();
+  doc["cmd"] = proto::ESP_BT;
+  doc["bt"] = 0;
+  doc["str"] = 0;
   send_json(doc);
 }
 
-void SnkMower::send_rain_cfg_cmd() {
+void SnkMower::send_rain_status() {
+  // The original reports 1 on a dry bench, so 1 is the sensor's idle level.
+  last_rain_ = rain_pin_ != GPIO_NUM_NC ? gpio_get_level(rain_pin_) : 1;
   JsonDocument doc;
-  doc["cmd"] = CMD_ESP_RAIN_CFG;
+  doc["cmd"] = proto::ESP_RAIN;
+  doc["rain"] = last_rain_;
   send_json(doc);
 }
 
-void SnkMower::send_multizone_cmd() {
+void SnkMower::send_raw_json(const std::string &json) {
   JsonDocument doc;
-  doc["cmd"] = CMD_ESP_MULTIZONE;
+  DeserializationError err = deserializeJson(doc, json);
+  if (err) {
+    ESP_LOGE(TAG, "Raw JSON parse error: %s", err.c_str());
+    return;
+  }
+  ESP_LOGI(TAG, "Sending raw JSON: %s", json.c_str());
   send_json(doc);
 }
 
-void SnkMower::read_rain_sensor() {
-  if (rain_pin_ == GPIO_NUM_NC) return;
-  int rain = gpio_get_level(rain_pin_);
-  send_rain_status(rain);
-}
-
-void SnkMower::loop() {
-  uint32_t now = millis();
-
-  int rx_count = 0;
-  while (available() > 0 && rx_count < 256) {
-    uint8_t byte;
-    read_byte(&byte);
-    rx_count++;
-
-    if (!rx_in_json_ && byte == '{') {
-      rx_index_ = 0;
-      rx_in_string_ = false;
-      rx_in_json_ = true;
-    }
-
-    if (rx_in_json_) {
-      if (byte == '"' && (rx_index_ == 0 || rx_buf_[rx_index_-1] != '\\')) {
-        rx_in_string_ = !rx_in_string_;
-      }
-
-      if (rx_index_ < BUF_SIZE - 1) {
-        rx_buf_[rx_index_++] = (char)byte;
-      }
-
-      if (!rx_in_string_ && byte == '}') {
-        rx_buf_[rx_index_] = '\0';
-        rx_in_json_ = false;
-
-        JsonDocument doc;
-        DeserializationError err = deserializeJson(doc, rx_buf_);
-        if (!err && doc.containsKey("cmd")) {
-          handle_json(doc);
-        }
-      }
-    }
-  }
-
-  // ── Boot phase state machine ──────────────────────────────────
-
-  if (boot_phase_ == BootPhase::PRE && !boot_sent_) {
-    boot_sent_ = true;
-    // No listen-only window: U13 treats 3 s of silence as a lost display
-    // link (error 0x400000). OTA no longer needs a quiet window because the
-    // link guard keeps KEEPALIVE going while an upload blocks loop().
-    boot_delay_ms_ = 0;
-
-    // Send ESP_BOOT as first handshake frame
-    ESP_LOGI(TAG, "Boot: sending ESP_BOOT");
-    send_boot();
-    delay(1);
-    send_keepalive();
-    delay(1);
-    send_esp_state(0);
-    delay(1);
-    send_poll();
-    delay(1);
-    send_rain_status(1);
-    link_guard_active_ = true;
-
-    // Start POLL spam (original firmware sends POLL ~every 200ms during init)
-    last_poll_ = now;
-    last_keepalive_ = now;
-
-    if (device_info_received_) {
-      ESP_LOGI(TAG, "DEVICE_INFO already received — entering SYNC phase");
-      boot_phase_ = BootPhase::SYNC;
-      device_info_arrived_ms_ = now;
-      info_burst_count_ = 0;
-      init_burst_count_ = 0;
-    } else {
-      // Stay in PRE until we get DEVICE_INFO, but keep sending POLLs
-      phase_start_ms_ = now;
-      ESP_LOGI(TAG, "Boot: waiting for DEVICE_INFO from MB");
-    }
-  }
-
-  // In PRE-after-boot or SYNC: send POLLs at ~200ms to keep MB happy
-  if (boot_phase_ == BootPhase::PRE || boot_phase_ == BootPhase::SYNC) {
-    if (now - last_poll_ > 200) {
-      last_poll_ = now;
-      send_poll();
-    }
-    if (now - last_keepalive_ > 1000) {
-      last_keepalive_ = now;
-      send_keepalive();
-    }
-  }
-
-  if (boot_phase_ == BootPhase::SYNC) {
-    // Send ESP_INFO/INIT burst immediately (MB sends DEVICE_INFO every ~30ms)
-    uint32_t burst_elapsed = now - device_info_arrived_ms_;
-    if (info_burst_count_ < 5 && burst_elapsed > (uint32_t)info_burst_count_ * 45) {
-      send_esp_info();
-      info_burst_count_++;
-      ESP_LOGI(TAG, "Boot SYNC: ESP_INFO #%d", info_burst_count_);
-    }
-    if (info_burst_count_ >= 5 && init_burst_count_ < 6 && burst_elapsed > 250 + (uint32_t)init_burst_count_ * 40) {
-      send_init();
-      init_burst_count_++;
-      ESP_LOGI(TAG, "Boot SYNC: INIT #%d", init_burst_count_);
-    }
-    if (info_burst_count_ >= 5 && init_burst_count_ >= 6 && burst_elapsed > 800) {
-      // After INFO+INIT bursts, send TRIM + RAIN_CFG + MULTIZONE like original firmware does
-      ESP_LOGI(TAG, "Boot SYNC: sending TRIM + RAIN_CFG + MULTIZONE");
-      send_trim();
-      delay(1);
-      send_rain_cfg_cmd();
-      delay(1);
-      send_multizone_cmd();
-      delay(1);
-
-      boot_phase_ = BootPhase::DONE;
-      phase_start_ms_ = now;
-      // Reset periodic timers to prevent burst of ESP_INFO/ESP_STATE
-      // right after PIN (which causes MB to re-init in a loop)
-      last_wifi_status_ = now;
-      last_esp_info_ = now;
-      last_esp_state_ = now;
-      ESP_LOGI(TAG, "Boot DONE — switching to keepalive mode");
-    }
-  }
-
-  if (boot_phase_ == BootPhase::DONE) {
-    // Normal operation: KEEPALIVE at ~1s interval (matches original)
-    if (now - last_keepalive_ > 1000) {
-      last_keepalive_ = now;
-      send_keepalive();
-    }
-    // Send POLL periodically (original firmware sends it during all phases)
-    if (now - last_poll_ > 30000) {
-      last_poll_ = now;
-      send_poll();
-    }
-    if (!pin_sent_) {
-      send_pin();
-      pin_sent_ = true;
-      ESP_LOGI(TAG, "PIN sent after boot handshake");
-    }
-    if (now - last_wifi_status_ > 5000) {
-      last_wifi_status_ = now;
-      send_wifi_status();
-    }
-    if (now - last_esp_info_ > 30000) {
-      last_esp_info_ = now;
-      send_esp_info();
-    }
-    if (now - last_esp_state_ > 10000) {
-      last_esp_state_ = now;
-      send_esp_state(state_);
-    }
-    if (now - last_rain_read_ > 60000) {
-      last_rain_read_ = now;
-      read_rain_sensor();
-    }
-  }
-
-  // ── Display auto-off ──────────────────────────────────────────
-
-  if (display_off_timeout_ms_ > 0 && !display_off_ &&
-      current_state_ != MowerState::MOWING &&
-      current_state_ != MowerState::CHARGING &&
-      current_state_ != MowerState::RETURNING &&
-      current_state_ != MowerState::ERROR_STATE &&
-      current_state_ != MowerState::LOCKED) {
-    uint32_t idle = millis() - last_activity_ms_;
-    if (idle > display_off_timeout_ms_ && idle < display_off_timeout_ms_ * 2) {
-      ESP_LOGD(TAG, "Display auto-off (idle %ums)", (unsigned)idle);
-      display_off_ = true;
-    }
-  }
-
-  // ── State display cycling: text ↔ battery ─────────────────────
-
-  if (!display_off_ && !shutdown_pending_ &&
-      current_state_ != MowerState::UNKNOWN &&
-      current_state_ != MowerState::ERROR_STATE &&
-      current_state_ != MowerState::LOCKED) {
-    uint32_t now = millis();
-    if (now >= state_display_cycle_ms_) {
-      state_display_cycle_ms_ = now + 5000;
-      state_show_alt_ = !state_show_alt_;
-      if (state_show_alt_) {
-        if (current_state_ == MowerState::CHARGING)
-          set_charging_display(last_battery_percent_);
-        else
-          set_display_battery(last_battery_percent_);
-      } else {
-        set_display_text(STATE_DISPLAY[static_cast<int>(current_state_)]);
-      }
-    }
-  }
-}
-
-void SnkMower::handle_json(const JsonDocument &doc) {
-  uint32_t cmd = doc["cmd"];
-
-  switch (cmd) {
-    case CMD_PIN_RESULT:       handle_pin_result(doc); break;
-    case CMD_PIN_RESULT2:      handle_pin_result2(doc); break;
-    case CMD_STATUS:           handle_status(doc); break;
-    case CMD_ERROR_NOTIFY:     handle_error_notify(doc); break;
-    case CMD_RTC:              handle_rtc(doc); break;
-    case CMD_DEVICE_INFO:      handle_device_info(doc); break;
-    case CMD_MB_DEVICE_INFO:   ESP_LOGV(TAG, "MB device info: sw=%s hv=%d sv=%d",
-                                        doc["sw"] | "?", doc["hv"] | 0, doc["sv"] | 0); break;
-    case CMD_HW_VERSIONS:      handle_hw_versions(doc); break;
-    case CMD_BATTERY:          handle_battery_info(doc); break;
-    case CMD_MAP_CFG:          handle_map_cfg(doc); break;
-    case CMD_SCHEDULE:         handle_schedule(doc); break;
-    case CMD_SCHEDULE_END:     handle_schedule_end(doc); break;
-    case CMD_RAIN_CFG_RSP:     handle_rain_cfg(doc); break;
-    case CMD_MULTIZONE_RSP:    handle_multizone(doc); break;
-    case CMD_LIGHT:            handle_light(doc); break;
-    case CMD_POWER_ON:         handle_power_on(doc); break;
-    case CMD_POWER_READY:      handle_power_ready(doc); break;
-    case CMD_BOOT_HEART:       handle_boot_heart(doc); break;
-    case CMD_BOOT_INIT:        handle_boot_init(doc); break;
-    case CMD_LOCK:             handle_lock(doc); break;
-    case CMD_START_ACK:        handle_start_ack(doc); break;
-    case CMD_EXEC_ACTION:      handle_exec_action(doc); break;
-    case CMD_SHUTDOWN:         handle_shutdown(doc); break;
-    case CMD_RETURN_HOME:      handle_return_home(doc); break;
-    case CMD_DOCKED_CHARGE:    handle_docked_charge(doc); break;
-    case CMD_PIN_SEND:         handle_seek_wire(doc); break;
-    case CMD_BOOT_ACK:         ESP_LOGD(TAG, "Boot ACK"); break;
-    case CMD_START_TIME_Q:     handle_start_time_query(doc); break;
-    case CMD_CUT_TIME_Q:       handle_cut_time_query(doc); break;
-    case CMD_UNKNOWN_14:       ESP_LOGV(TAG, "Unknown 0x40000014"); break;
-    default:
-      if (cmd == CMD_MB_INIT_ERROR) {
-        ESP_LOGW(TAG, "MB init error 0x20000002: error=0x%lX (U13 driver init failed, it stays in init)",
-                 (unsigned long)(doc["error"] | 0UL));
-      } else if (cmd == 0x15000001) {
-        ESP_LOGW(TAG, "U16 FRAME ERROR: 0x15000001 — our frames may be malformed");
-      } else if ((cmd & 0xFFFFFF00) == CMD_SETTING_ACK_BASE && (cmd & 0xFF) >= 0x09 && (cmd & 0xFF) <= 0x27) {
-        handle_setting_ack(doc, cmd);
-      } else {
-        ESP_LOGD(TAG, "RX: 0x%08lX", (unsigned long)cmd);
-      }
-      break;
-  }
-}
-
-void SnkMower::handle_status(const JsonDocument &doc) {
-  // Warm restart: the ESP rebooted (OTA, crash) while U13 kept running. U13
-  // does not send DEVICE_INFO again, it just keeps reporting STATUS, so the
-  // INFO/INIT burst would never start. Resume in DONE instead.
-  if (boot_phase_ == BootPhase::PRE && boot_sent_ && !device_info_received_) {
-    uint32_t now = millis();
-    ESP_LOGI(TAG, "STATUS before DEVICE_INFO — MB already running (warm restart), resuming");
-    boot_phase_ = BootPhase::DONE;
-    phase_start_ms_ = now;
-    last_keepalive_ = now;
-    last_poll_ = now;
-    last_wifi_status_ = now;
-    last_esp_info_ = now;
-    last_esp_state_ = now;
-  }
-  if (doc.containsKey("state")) {
-    state_ = doc["state"];
-  }
-  if (doc.containsKey("error")) {
-    error_code_ = doc["error"];
-    if (error_code_sensor_)
-      error_code_sensor_->publish_state(error_code_);
-  }
-  if (doc.containsKey("bat_lv")) {
-    bat_lv_ = doc["bat_lv"];
-    if (bat_level_bars_sensor_)
-      bat_level_bars_sensor_->publish_state(bat_lv_);
-  }
-  if (doc.containsKey("bat_per")) {
-    bat_per_ = doc["bat_per"];
-    last_battery_percent_ = bat_per_;
-    if (battery_level_sensor_)
-      battery_level_sensor_->publish_state(bat_per_);
-  }
-  if (doc.containsKey("rain_delay")) {
-    rain_delay_ = doc["rain_delay"];
-    if (rain_delay_sensor_)
-      rain_delay_sensor_->publish_state(rain_delay_);
-  }
-  if (doc.containsKey("rain_state")) {
-    rain_state_ = doc["rain_state"];
-  }
-  if (doc.containsKey("bat_health")) {
-    bat_health_ = doc["bat_health"];
-    if (bat_health_sensor_)
-      bat_health_sensor_->publish_state(bat_health_);
-  }
-  if (doc.containsKey("work_area")) {
-    work_area_ = doc["work_area"];
-    if (work_area_sensor_)
-      work_area_sensor_->publish_state(work_area_);
-  }
-  if (doc.containsKey("cut_area")) {
-    cut_area_ = doc["cut_area"];
-    if (cut_area_sensor_)
-      cut_area_sensor_->publish_state(cut_area_);
-  }
-  if (doc.containsKey("total_minutes")) {
-    total_minutes_ = doc["total_minutes"];
-    if (total_minutes_sensor_)
-      total_minutes_sensor_->publish_state(total_minutes_);
-  }
-  if (doc.containsKey("on_minutes")) {
-    on_minutes_ = doc["on_minutes"];
-    if (on_minutes_sensor_)
-      on_minutes_sensor_->publish_state(on_minutes_);
-  }
-  if (doc.containsKey("bat_ctime")) {
-    bat_ctime_ = doc["bat_ctime"];
-  }
-  if (doc.containsKey("bat_dtime")) {
-    bat_dtime_ = doc["bat_dtime"];
-  }
-  if (doc.containsKey("cur_minutes")) {
-    cur_minutes_ = doc["cur_minutes"];
-  }
-  if (doc.containsKey("bat_min_temp")) {
-    bat_min_temp_ = doc["bat_min_temp"];
-  }
-
-  station_ = doc["station"] | false;
-
-  MowerState s;
-  if (station_ && (state_ == 0 || state_ == 1)) {
-    s = MowerState::DOCKED;
-  } else {
-    switch (state_) {
-      case 2:  s = MowerState::MOWING; break;
-      case 8:  s = MowerState::RETURNING; break;
-      case 9:  s = MowerState::RETURNING; break;
-      case 10: s = MowerState::CHARGING; break;
-      case 7:  s = MowerState::ERROR_STATE; break;
-      case 11: s = MowerState::UNKNOWN; break;
-      case 6:  s = MowerState::IDLE; break;
-      default: s = MowerState::IDLE; break;
-    }
-  }
-
-  if (s != current_state_) {
-    if (s == MowerState::ERROR_STATE)
-      buzz(300);
-    if (s == MowerState::MOWING)
-      buzz(100);
-  }
-
-  publish_mower_state(s);
-
-  ESP_LOGD(TAG, "Status: state=%d bat_lv=%d bat_per=%d error=%d station=%d area=%d",
-           state_, bat_lv_, bat_per_, error_code_, station_, work_area_);
-}
-
-void SnkMower::handle_pin_result(const JsonDocument &doc) {
-  bool ok = doc["result"] | false;
-  if (ok) {
-    ESP_LOGI(TAG, "PIN accepted");
-    pin_ok_ = true;
-    pin_retries_ = 0;
-    publish_mower_state(MowerState::IDLE);
-  } else {
-    ESP_LOGW(TAG, "PIN rejected (attempt %d/5)", pin_retries_);
-    if (++pin_retries_ >= 5) {
-      ESP_LOGE(TAG, "PIN failed after 5 retries");
-      publish_mower_state(MowerState::LOCKED);
-    } else {
-      pin_sent_ = false;
-    }
-  }
-}
-
-void SnkMower::handle_pin_result2(const JsonDocument &doc) {
-  bool ok = doc["result"] | false;
-  ESP_LOGD(TAG, "PIN result2: %s", ok ? "OK" : "FAIL");
-}
-
-void SnkMower::handle_error_notify(const JsonDocument &doc) {
-  if (doc.containsKey("err")) {
-    error_code_ = doc["err"];
-    ESP_LOGW(TAG, "Error code: %d", error_code_);
-    if (error_code_sensor_)
-      error_code_sensor_->publish_state(error_code_);
-  }
-  buzz(300);
-  // Original firmware does not ack errors. The old send_error_ack() sent
-  // 0x10000001/0x10000002/0x10000007, i.e. "start mowing" + "go home" key commands.
-  publish_mower_state(MowerState::ERROR_STATE);
-}
-
-void SnkMower::handle_rtc(const JsonDocument &doc) {
-  if (doc.containsKey("rtc")) {
-    uint32_t rtc = doc["rtc"];
-    ESP_LOGV(TAG, "RTC: %u", (unsigned)rtc);
-  }
-}
-
-void SnkMower::handle_device_info(const JsonDocument &doc) {
-  if (doc.containsKey("name")) {
-    const char *name = doc["name"];
-    const char *model = doc["model"] | "";
-    const char *sn = doc["sn"] | "";
-    int version = doc["version"] | 0;
-    int pwd_en = doc["pwd_en"] | 0;
-
-    ESP_LOGI(TAG, "Device: %s (%s) S/N=%s v=%d pwd_en=%d",
-             name, model, sn, version, pwd_en);
-
-    if (device_name_sensor_)
-      device_name_sensor_->publish_state(name);
-    if (model_sensor_)
-      model_sensor_->publish_state(model);
-    if (serial_sensor_)
-      serial_sensor_->publish_state(sn);
-    if (firmware_version_sensor_) {
-      char ver_str[16];
-      snprintf(ver_str, sizeof(ver_str), "%d", version);
-      firmware_version_sensor_->publish_state(ver_str);
-    }
-    if (doc.containsKey("bat_name") && battery_name_sensor_) {
-      battery_name_sensor_->publish_state(doc["bat_name"] | "");
-    }
-  }
-
-  // DEVICE_INFO from MB — start SYNC burst
-  if (boot_phase_ == BootPhase::PRE) {
-    device_info_received_ = true;
-    {
-      ESP_LOGI(TAG, "DEVICE_INFO received — starting ESP_INFO/INIT sync burst");
-      boot_phase_ = BootPhase::SYNC;
-      phase_start_ms_ = millis();
-      device_info_arrived_ms_ = phase_start_ms_;
-      info_burst_count_ = 0;
-      init_burst_count_ = 0;
-    }
-  }
-}
-
-void SnkMower::handle_hw_versions(const JsonDocument &doc) {
-  int mb_hv = doc["mb_hv"] | 0;
-  int mb_sv = doc["mb_sv"] | 0;
-  int bb_hv = doc["bb_hv"] | 0;
-  int bb_sv = doc["bb_sv"] | 0;
-  int db_hv = doc["db_hv"] | 0;
-  int db_sv = doc["db_sv"] | 0;
-  int mblt_sv = doc["mblt_sv"] | 0;
-
-  ESP_LOGI(TAG, "HW: MB hv=%d sv=%d, BB hv=%d sv=%d, DB hv=%d sv=%d, MBLT sv=%d",
-           mb_hv, mb_sv, bb_hv, bb_sv, db_hv, db_sv, mblt_sv);
-}
-
-void SnkMower::handle_battery_info(const JsonDocument &doc) {
-  if (doc.containsKey("bat")) {
-    int bars = doc["bat"];
-    ESP_LOGD(TAG, "Battery bars: %d", bars);
-    if (bat_level_bars_sensor_)
-      bat_level_bars_sensor_->publish_state(bars);
-  }
-}
-
-void SnkMower::handle_map_cfg(const JsonDocument &doc) {
-  int area = doc["area"] | 0;
-  int map_sn = doc["map_sn"] | 0;
-  ESP_LOGI(TAG, "Map: area=%d m², map_sn=%d", area, map_sn);
-  work_area_ = area;
-  if (work_area_sensor_)
-    work_area_sensor_->publish_state(area);
-}
-
-void SnkMower::handle_schedule(const JsonDocument &doc) {
-  int trim = doc["trim"] | 0;
-  bool auto_mode = doc["auto"] | false;
-  int pause = doc["pause"] | 0;
-
-  ESP_LOGI(TAG, "Schedule: trim=%d auto=%d pause=%d", trim, auto_mode, pause);
-
-  const char *days[] = {"sun", "mon", "tue", "wed", "thu", "fri", "sat"};
-  for (int i = 0; i < 7; i++) {
-    char st_key[8], len_key[8];
-    snprintf(st_key, sizeof(st_key), "%s_st", days[i]);
-    snprintf(len_key, sizeof(len_key), "%s_len", days[i]);
-    if (doc.containsKey(st_key)) {
-      int st = doc[st_key];
-      int len = doc[len_key] | 0;
-      ESP_LOGD(TAG, "  %s: start=%d min, len=%d min", days[i], st, len);
-    }
-  }
-}
-
-void SnkMower::handle_schedule_end(const JsonDocument &doc) {
-  ESP_LOGD(TAG, "Schedule block end");
-}
-
-void SnkMower::handle_rain_cfg(const JsonDocument &doc) {
-  bool rain_en = doc["rain_en"] | false;
-  int delay = doc["rain_delay"] | 0;
-  ESP_LOGI(TAG, "Rain config: enabled=%d, delay=%d min", rain_en, delay);
-  rain_delay_ = delay;
-  if (rain_delay_sensor_)
-    rain_delay_sensor_->publish_state(delay);
-}
-
-void SnkMower::handle_multizone(const JsonDocument &doc) {
-  bool mul_en = doc["mul_en"] | false;
-  bool mul_auto = doc["mul_auto"] | false;
-  ESP_LOGI(TAG, "Multizone: enabled=%d, auto=%d", mul_en, mul_auto);
-
-  for (int i = 1; i <= 4; i++) {
-    char z_key[8], per_key[8], meter_key[8];
-    snprintf(z_key, sizeof(z_key), "mul_z%d", i);
-    snprintf(per_key, sizeof(per_key), "per_z%d", i);
-    snprintf(meter_key, sizeof(meter_key), "meter_z%d", i);
-    if (doc.containsKey(z_key)) {
-      ESP_LOGD(TAG, "  Zone %d: start=%d%%, per=%d%%, meter=%d",
-               i, doc[z_key] | 0, doc[per_key] | 0, doc[meter_key] | 0);
-    }
-  }
-}
-
-void SnkMower::handle_light(const JsonDocument &doc) {
-  if (doc.containsKey("lv")) {
-    light_lv_ = doc["lv"];
-    ESP_LOGD(TAG, "Light level: %d", light_lv_);
-    if (light_level_sensor_)
-      light_level_sensor_->publish_state(light_lv_);
-  }
-}
-
-void SnkMower::handle_signal_level(const JsonDocument &doc) {
-  if (doc.containsKey("lv")) {
-    signal_lv_ = doc["lv"];
-    ESP_LOGD(TAG, "Signal level: %d", signal_lv_);
-    if (signal_level_sensor_)
-      signal_level_sensor_->publish_state(signal_lv_);
-  }
-}
-
-void SnkMower::handle_power_on(const JsonDocument &doc) {
-  int action = doc["action"] | 0;
-  ESP_LOGI(TAG, "Power ON (action=%d)", action);
-  mb_boot_detected_ = true;
-}
-
-void SnkMower::handle_power_ready(const JsonDocument &doc) {
-  // Sent by U13 at dpport init and again whenever it got no frame from us
-  // for 3 s (0x08044164). After a warm restart this is the first sign of life.
-  ESP_LOGI(TAG, "Power READY / link restart (0x20000004)");
-  power_ready_ = true;
-  mb_boot_detected_ = true;
-}
-
-void SnkMower::handle_boot_heart(const JsonDocument &doc) {
-  ESP_LOGV(TAG, "Boot heartbeat");
-}
-
-void SnkMower::handle_boot_init(const JsonDocument &doc) {
-  ESP_LOGD(TAG, "Boot init");
-}
-
-void SnkMower::handle_lock(const JsonDocument &doc) {
-  lock_ = doc["lock"] | 0;
-  ESP_LOGD(TAG, "Lock: %d", lock_);
-  if (is_locked_sensor_)
-    is_locked_sensor_->publish_state(lock_ != 0);
-}
-
-void SnkMower::handle_start_ack(const JsonDocument &doc) {
-  int result = doc["result"] | 0;
-  ESP_LOGI(TAG, "START ACK: result=%d", result);
-}
-
-void SnkMower::handle_exec_action(const JsonDocument &doc) {
-  ESP_LOGD(TAG, "Exec action");
-}
-
-void SnkMower::handle_shutdown(const JsonDocument &doc) {
-  ESP_LOGI(TAG, "Shutdown requested");
-  set_display_text("byE ");
-  shutdown_pending_ = true;
-  shutdown_start_ms_ = millis();
-}
-
-void SnkMower::handle_return_home(const JsonDocument &doc) {
-  ESP_LOGI(TAG, "Return home notification from MB");
-}
-
-void SnkMower::handle_docked_charge(const JsonDocument &doc) {
-  ESP_LOGI(TAG, "Docked / charge start notification from MB");
-}
-
-void SnkMower::handle_seek_wire(const JsonDocument &doc) {
-  if (doc.containsKey("pwd")) {
-    ESP_LOGD(TAG, "PIN_SEND echoed back (ignoring)");
-  } else {
-    ESP_LOGI(TAG, "Seek wire notification from MB");
-  }
-}
-
-void SnkMower::handle_start_time_query(const JsonDocument &doc) {
-  int hour = doc["hour"] | 0;
-  int minute = doc["minute"] | 0;
-  ESP_LOGI(TAG, "Start time query: %02d:%02d", hour, minute);
-}
-
-void SnkMower::handle_cut_time_query(const JsonDocument &doc) {
-  int len = doc["len"] | 0;
-  ESP_LOGI(TAG, "Cut time query: %d min", len);
-}
-
-void SnkMower::handle_setting_ack(const JsonDocument &doc, uint32_t cmd) {
-  bool result = doc["result"] | false;
-  uint8_t sub = cmd & 0xFF;
-  ESP_LOGD(TAG, "Setting ACK 0x%02X: %s", sub, result ? "OK" : "FAIL");
-}
+// ── Actions and keys ──────────────────────────────────────────────
 
 void SnkMower::start_mowing() {
   // Same as a user pressing START, then OK.
-  ESP_LOGI(TAG, "Command: start mowing (KEY_SELECT, then START_CONFIRM)");
-  send_cmd(CMD_KEY_SELECT);
-  this->set_timeout("key_confirm", 500, [this]() { send_cmd(CMD_KEY_START_CONFIRM); });
-}
-
-void SnkMower::stop_mowing() {
-  ESP_LOGI(TAG, "Command: stop (REMOTE_STOP)");
-  send_cmd(CMD_REMOTE_STOP);
-}
-
-void SnkMower::trim_edge() {
-  // U13 ignores this unless the mower is in the station ("trim command, but
-  // robot not in station, ignore").
-  ESP_LOGI(TAG, "Command: edge trim (REMOTE_EDGE)");
-  send_cmd(CMD_REMOTE_EDGE);
+  ESP_LOGI(TAG, "Start mowing");
+  send_cmd(proto::KEY_SELECT);
+  set_timeout("key_confirm", 500, [this]() { send_cmd(proto::KEY_START_CONFIRM); });
 }
 
 void SnkMower::return_to_dock() {
   // Same as a user pressing HOME, then OK.
-  ESP_LOGI(TAG, "Command: return to dock (KEY_SELECT, then HOME_CONFIRM)");
-  send_cmd(CMD_KEY_SELECT);
-  this->set_timeout("key_confirm", 500, [this]() { send_cmd(CMD_KEY_HOME_CONFIRM); });
+  ESP_LOGI(TAG, "Return to dock");
+  send_cmd(proto::KEY_SELECT);
+  set_timeout("key_confirm", 500, [this]() { send_cmd(proto::KEY_HOME_CONFIRM); });
 }
 
-// Physical front buttons (display board): START=GPIO22, HOME=GPIO21, OK=GPIO19,
-// active low, internal pull-up. Mirrors the original firmware's short-press logic:
-// START/HOME arms a 3 s window and sends KEY_SELECT, OK inside the window confirms.
-void SnkMower::key_start() { arm_key(KEY_START); }
-void SnkMower::key_home() { arm_key(KEY_HOME); }
+void SnkMower::stop_mowing() {
+  ESP_LOGI(TAG, "Stop");
+  send_cmd(proto::REMOTE_STOP);
+}
 
+void SnkMower::trim_edge() {
+  // U13 ignores this outside the station ("trim command, but robot not in station, ignore").
+  ESP_LOGI(TAG, "Edge trim");
+  send_cmd(proto::REMOTE_EDGE);
+}
+
+// Front buttons: START=GPIO22, HOME=GPIO21, OK=GPIO19, active low. Like the
+// original, START/HOME sends KEY_SELECT and opens a 3 s window for OK.
 void SnkMower::arm_key(uint8_t key) {
   armed_key_ = key;
   armed_at_ms_ = millis();
   buzz(20);
-  send_cmd(CMD_KEY_SELECT);
+  send_cmd(proto::KEY_SELECT);
 }
 
 void SnkMower::key_ok() {
@@ -1221,129 +262,11 @@ void SnkMower::key_ok() {
   uint8_t key = armed_key_;
   armed_key_ = KEY_NONE;
   if (!in_window) {
-    ESP_LOGD(TAG, "OK pressed without START/HOME before it, ignored");
+    ESP_LOGD(TAG, "OK without START/HOME before it, ignored");
     return;
   }
   buzz(20);
-  if (key == KEY_START) {
-    ESP_LOGI(TAG, "Key: START+OK, start mowing");
-    send_cmd(CMD_KEY_START_CONFIRM);
-  } else {
-    ESP_LOGI(TAG, "Key: HOME+OK, return to station");
-    send_cmd(CMD_KEY_HOME_CONFIRM);
-  }
-}
-
-void SnkMower::publish_mower_state(MowerState state) {
-  bool state_changed = state != current_state_;
-  current_state_ = state;
-  last_activity_ms_ = millis();
-  display_off_ = false;
-  int idx = static_cast<int>(state);
-
-  if (is_mowing_sensor_)
-    is_mowing_sensor_->publish_state(state == MowerState::MOWING);
-  if (is_charging_sensor_)
-    is_charging_sensor_->publish_state(state == MowerState::CHARGING);
-  if (is_docked_sensor_)
-    is_docked_sensor_->publish_state(state == MowerState::DOCKED ||
-                                    state == MowerState::CHARGING);
-  if (has_error_sensor_)
-    has_error_sensor_->publish_state(state == MowerState::ERROR_STATE ||
-                                    state == MowerState::LOCKED);
-  if (is_returning_sensor_)
-    is_returning_sensor_->publish_state(state == MowerState::RETURNING);
-
-  if (mower_state_sensor_)
-    mower_state_sensor_->publish_state(STATE_NAMES[idx]);
-
-  if (shutdown_pending_) {
-    if (millis() - shutdown_start_ms_ > 3000)
-      shutdown_pending_ = false;
-    else
-      return;
-  }
-
-  if (state == MowerState::ERROR_STATE) {
-    char buf[5];
-    int err = std::max(0, std::min(error_code_, 999));
-    if (err >= 100) {
-      buf[0] = 'E'; buf[1] = '0' + (err / 100);
-      buf[2] = '0' + ((err / 10) % 10); buf[3] = '0' + (err % 10);
-    } else if (err >= 10) {
-      buf[0] = 'E'; buf[1] = '0' + (err / 10);
-      buf[2] = '0' + (err % 10); buf[3] = ' ';
-    } else {
-      buf[0] = 'E'; buf[1] = '0' + err; buf[2] = ' '; buf[3] = ' ';
-    }
-    buf[4] = '\0';
-    set_display_text(buf);
-    if (state_changed) {
-      state_display_cycle_ms_ = millis() + 5000;
-      state_show_alt_ = false;
-    }
-  } else if (state_changed) {
-    if (state == MowerState::MOWING) {
-      set_display_battery(last_battery_percent_);
-    } else if (state == MowerState::CHARGING) {
-      set_charging_display(last_battery_percent_);
-    } else {
-      set_display_text(STATE_DISPLAY[idx]);
-    }
-    state_display_cycle_ms_ = millis() + 5000;
-    state_show_alt_ = false;
-  }
-}
-
-void SnkMower::set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
-void SnkMower::set_battery_voltage_sensor(sensor::Sensor *s) { battery_voltage_sensor_ = s; }
-void SnkMower::set_error_code_sensor(sensor::Sensor *s) { error_code_sensor_ = s; }
-void SnkMower::set_light_level_sensor(sensor::Sensor *s) { light_level_sensor_ = s; }
-void SnkMower::set_signal_level_sensor(sensor::Sensor *s) { signal_level_sensor_ = s; }
-void SnkMower::set_work_area_sensor(sensor::Sensor *s) { work_area_sensor_ = s; }
-void SnkMower::set_cut_area_sensor(sensor::Sensor *s) { cut_area_sensor_ = s; }
-void SnkMower::set_total_minutes_sensor(sensor::Sensor *s) { total_minutes_sensor_ = s; }
-void SnkMower::set_on_minutes_sensor(sensor::Sensor *s) { on_minutes_sensor_ = s; }
-void SnkMower::set_bat_health_sensor(sensor::Sensor *s) { bat_health_sensor_ = s; }
-void SnkMower::set_bat_level_bars_sensor(sensor::Sensor *s) { bat_level_bars_sensor_ = s; }
-void SnkMower::set_rain_delay_sensor(sensor::Sensor *s) { rain_delay_sensor_ = s; }
-
-void SnkMower::set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
-void SnkMower::set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
-void SnkMower::set_is_docked_sensor(binary_sensor::BinarySensor *s) { is_docked_sensor_ = s; }
-void SnkMower::set_has_error_sensor(binary_sensor::BinarySensor *s) { has_error_sensor_ = s; }
-void SnkMower::set_is_locked_sensor(binary_sensor::BinarySensor *s) { is_locked_sensor_ = s; }
-void SnkMower::set_is_returning_sensor(binary_sensor::BinarySensor *s) { is_returning_sensor_ = s; }
-
-void SnkMower::set_device_name_sensor(text_sensor::TextSensor *s) { device_name_sensor_ = s; }
-void SnkMower::set_model_sensor(text_sensor::TextSensor *s) { model_sensor_ = s; }
-void SnkMower::set_serial_sensor(text_sensor::TextSensor *s) { serial_sensor_ = s; }
-void SnkMower::set_firmware_version_sensor(text_sensor::TextSensor *s) { firmware_version_sensor_ = s; }
-void SnkMower::set_battery_name_sensor(text_sensor::TextSensor *s) { battery_name_sensor_ = s; }
-void SnkMower::set_mower_state_sensor(text_sensor::TextSensor *s) { mower_state_sensor_ = s; }
-
-void SnkMower::send_action(int action_value) {
-  ESP_LOGI(TAG, "Sending action command: {\"app_main\":24.125,\"chedule\":%d}", action_value);
-  JsonDocument doc;
-  doc["app_main"] = 24.125f;
-  doc["chedule"] = action_value;
-  send_json(doc);
-}
-
-void SnkMower::send_raw_json(const std::string &json_str) {
-  ESP_LOGI(TAG, "Sending raw JSON: %s", json_str.c_str());
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, json_str);
-  if (err) {
-    ESP_LOGE(TAG, "JSON parse error: %s", err.c_str());
-    return;
-  }
-  send_json(doc);
-}
-
-void SnkMower::set_compat_mode(bool mode) {
-  compat_mode_ = mode;
-  ESP_LOGI(TAG, "Compat mode (original firmware): %s", mode ? "ON" : "OFF");
+  send_cmd(key == KEY_START ? proto::KEY_START_CONFIRM : proto::KEY_HOME_CONFIRM);
 }
 
 }  // namespace snk_mower
