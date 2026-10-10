@@ -31,9 +31,35 @@ Markers as in [`FIRMWARE_MAP.md`](FIRMWARE_MAP.md):
 - Sharper top-side photo (2026-10-10, `PXL_20260616_111216406.jpg` in the project thread): U12 sits between
   the 5V buck (U7/L1) and the J6 5V pin, with C102/C104/C105, R144, FB2 and TP48. TUS4 with R143/R153
   sits next to the data lines.
-- The silkscreen does not show which U13 pins PB2 / PB6 (below) go to. To trace them, check continuity
-  from U13 LQFP100 pins: PB2 = 37, PB6 = 92, PA11 (D-) = 70, PA12 (D+) = 71 [I: GD32F30x LQFP100
-  pinout]. Expected [I]: PB6 drives U12 EN, PB2 reads U12 FLAG or VBUS.
+- The PCB is conformal-coated, so continuity tests are not practical. PB2 / PB6 were traced visually
+  instead (below). U13 LQFP100 pins: PB2 = 37, PB6 = 92, PA11 (D-) = 70, PA12 (D+) = 71
+  [I: GD32F30x LQFP100 pinout].
+
+### Visual trace of PB2 / PB6 [P]
+
+Annotated crops: [`img/pb2_trace.jpg`](img/pb2_trace.jpg).
+
+- **U13 orientation.** The pin-1 dot is not visible under the coating. The crystals Y1 (32 kHz) and
+  Y2 (HSE) sit at the middle-left of the bottom pin row (OSC32 = pins 8/9, OSC = 12/13), so the bottom
+  row is pins 1–25 left to right. Then the right row is 26–50 bottom to top, the top row 51–75 right
+  to left, the left row 76–100 top to bottom. Pins were located by intensity peaks (pitch ≈ 12.9 px in
+  the 3472×4624 photo). Consistent with that: R141 sits at pin 94 (BOOT0, normally a pull-down) [I].
+- **PB2 (pin 37, right row, 12th from the bottom).** A short stub to a via just right of the pin row
+  (front ≈ (1645, 3402) px). The front and back photos were registered with the four mounting holes
+  and refined on this via and its three neighbours, whose pattern matches on both sides. On the back
+  the via joins a short trace to **test pad TP257**, and on to a via under the U13 body. Beyond that
+  the net is hidden by the chip. On the front the via also has a trace into the bundle running to the
+  lower right, away from J6. **No visible link from PB2 to U12 or J6.**
+- **PB6 (pin 92, left row, 17th from the top).** The trace leaves left into a bundle of parallel
+  traces that turns down between TP47 and FB5. At this resolution, and under the coating, the traces
+  of the bundle cannot be told apart, so where PB6 ends is **unresolved**.
+- U12 is SOT-23-5 (three pins up, two down), with C102 on the input side and C105/C107/FB2 towards the
+  J6 5V pin. Its control-pin traces disappear under the coating or into vias.
+
+[I] Since PB2 does not visibly go to the USB area, it is more likely a board-variant / strap input
+than a VBUS sense. TP257 is a bare test pad on the back. Measuring its voltage needs no scraping:
+power on with no stick, then with a stick. High in both cases means the strap explanation;
+a change means a sense line.
   `HARDWARE.md` names "U3" as the USB IC; on the photo the part near J6 is U12.
 
 ## Boot flow [F]
