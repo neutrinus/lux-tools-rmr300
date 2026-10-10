@@ -135,3 +135,4 @@ kosiarka/
 ## Related projects
 
 - [Sdahl1234/Sunseeker-lawn-mower](https://github.com/Sdahl1234/Sunseeker-lawn-mower): Home Assistant integration for the Sunseeker cloud. Our ESP32 speaks the same cloud protocol ("OLD" models: `mode`, `power`, `errortype`), see `20261009_claude_investigation.md` §9.
+- [salonnikov/mower-stock-reverse](https://github.com/salonnikov/mower-stock-reverse): independent teardown of the same boards (`SNK_MAINBOARD_CP_V11` / `SNK_DISPLAY_CP_V11`, sold as VILLARTEC MI 302). Decompiled U13 and U16 firmware, the battery-pack (BMS) link, the motor-driver SPI chain, SWD flash/restore tooling and a custom U13 firmware. Their "chip1" is our U13, "chip2" is our U16.
