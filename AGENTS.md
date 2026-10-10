@@ -36,21 +36,23 @@ Other tools:
 ```bash
 python3 tools/decode_capture.py captures/01-boot/capture.vcd   # sigrok-based UART decode
 python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> ELF
+# tools/re/: esp32dis.py, gd32dis.py, la_decode.py (capstone>=6), see tools/re/README.md
 # tools/*.cfg = OpenOCD/SWD scripts for dumping u13/u16 (GD32) and EEPROM
 ```
 
 ## Protocol facts that docs get wrong
 
-- Real link: **JSON over UART 230400 8N1**, frame `&{json}<CRC>#` (**single** `#`), Dallas/Maxim CRC-8 (poly 0x31) over the JSON bytes only. Bus: ESP32 ↔ U16 (GD32F303 JSON bridge) ↔ U13 (GD32F305 motors/PIN/EEPROM U22).
+- Real link: **JSON over UART 230400 8N1**, frame `&{json}<CRC>#` (**single** `#`), Dallas/Maxim CRC-8 (poly 0x31) over the JSON bytes only. Bus: ESP32 ↔ **U13** directly (GD32F305 `dpport`, USART0; motors/PIN/EEPROM U22). U16 (GD32F303) is **not** a bridge: it is the border-wire/lift MCU on a separate U13 port (`bdport`). Evidence: `20261009_claude_investigation.md`.
 - **Ignore banner direction tables in `ha.md` §2** (generated from constants; wrong). Use `PROTOCOLS.md`.
 - **Ignore the binary protocol `0xAA 0x55` @115200 in `esp32/notes/ESP32.md`** — it is wrong.
 - `captures/2026-06-21/README.md` has **reversed D1/D2 labels**; direction labels in `captures/README.md` (01–06) are correct.
+- `0x10000001/2/7` are **key commands, not error ACKs** (START/HOME → `0x10000007`, then OK → `0x10000001` mow / `0x10000002` home).
 
 ## Hard-won constraints (don't re-litigate)
 
-- **Mowing cannot be started from the ESP32 over UART.** All software methods failed (`send_action`, `ESP_TRIM`, `EXEC_ACTION`, `START_ACK`, `RETURN_HOME`, …). Original firmware was restored. Only untested route: GPIO jumper to J8 pin 6 (Method 6, `ha.md` §11). Buttons are wired to U16 through J8.
+- **Corrected 2026-10-09:** mowing *can* be started over UART. The original firmware does it on START→OK: `0x10000007`, then `0x10000001` (capture `2026-06-21/trzeci`, MB answers `state:8`). Earlier attempts failed because they used MB→ESP commands. Buttons START/HOME/OK are on ESP32 GPIO22/21/19 (pull-up, active low), not on U16. Remote app commands map to `0x10000021` start, `0x10000022` home, `0x10000023` stop, `0x10000015` edge trim (firmware only, untested). See `20261009_claude_investigation.md`.
 - **PIN is not in the ESP32**; it lives in the U13 KV-store / EEPROM U22. The ESP only forwards an entered PIN.
-- Root cause of the last failure: custom firmware never sent the `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` handshake, so U16 ignored it (`ha.md` §14).
+- Root cause of the last failure: custom firmware never sent the `ESP_BOOT`/`ESP_KEEPALIVE`/`ESP_POLL`/`ESP_INIT` handshake, so the MB (U13) ignored it (`ha.md` §14).
 
 ## Git gotchas
 
