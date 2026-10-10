@@ -69,7 +69,7 @@ CONFIG_SCHEMA = (
             # Display brightness in night mode (set_display_night), percent of full.
             cv.Optional(CONF_DISPLAY_NIGHT_BRIGHTNESS, default=20): cv.int_range(1, 100),
             # Rain sensor: ADC1 input (GPIO36 on the display board) and the
-            # two electrode drive pins, see 20261010_mower-stock-reverse-results.md.
+            # two electrode drive pins, see docs/hardware.md.
             cv.Optional(CONF_RAIN_PIN): cv.int_range(32, 39),
             cv.Optional(CONF_RAIN_DRIVE_A, default=18): cv.int_range(0, 33),
             cv.Optional(CONF_RAIN_DRIVE_B, default=5): cv.int_range(0, 33),
@@ -102,6 +102,7 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_TOTAL_MINUTES): sensor.sensor_schema(
                 unit_of_measurement="min",
+                device_class="duration",
                 icon="mdi:clock-outline",
                 accuracy_decimals=0,
                 state_class="total_increasing",
@@ -109,6 +110,7 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_ON_MINUTES): sensor.sensor_schema(
                 unit_of_measurement="min",
+                device_class="duration",
                 icon="mdi:timer-outline",
                 accuracy_decimals=0,
                 state_class="total_increasing",
@@ -122,6 +124,7 @@ CONFIG_SCHEMA = (
             ),
             cv.Optional(CONF_RAIN_DELAY): sensor.sensor_schema(
                 unit_of_measurement="min",
+                device_class="duration",
                 icon="mdi:weather-rainy",
                 accuracy_decimals=0,
                 entity_category="diagnostic",
