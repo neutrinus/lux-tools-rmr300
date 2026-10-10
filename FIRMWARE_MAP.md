@@ -68,7 +68,12 @@ Things to know before reading the disassembly:
 | `400e2194` | UI event dispatcher. Sends `0x1000000x` key commands |
 | `400e1a58` | `send_cmd(cmd)`: `{"cmd":cmd}` to the MB |
 | `400e0bc4` | Factory test (`ft-key-`) |
-| `400e6da0` | `TubeInit`: SPI display MOSI 25, SCLK 33, CS 32, 400 kHz |
+| `400e6da0` | `TubeInit`: SPI display MOSI 25, SCLK 33, CS 32, 400 kHz, queue 7. Sets GPIO26 high, writes one blank frame, sets GPIO26 low. Starts "tube LP timer" |
+| `400dfe9c` | Display start: `TubeInit`, then the "tube scan" task (`400dfe50`, 2 KB stack, priority 25, pinned to core 1) |
+| `400dfe50` | "tube scan" task: sends slot 0–3 of the frame buffer `0x3ffc5ab8` (`400e6d44`), `vTaskDelay(2)` after each, so 2 ms per digit and 125 Hz per frame at the 1 kHz tick. Also creates "tube flash timer" (`400e03a8`, 700 ms), which blinks the colon |
+| `400e6d44` | Display write: one 16-bit word, high byte first, `spi_device_transmit`. Word = digit select (bit 13/12/11/10 = digit 1/2/3/4) \| colon (bit 8) \| segments (bits 0–7) |
+| `400dfd50` | Puts a word into the frame-buffer slot given by its digit-select bit |
+| `400e6d7c` / `400e6d34` | "tube LP timer": GPIO2 high and restart the 15 s one-shot / GPIO2 low when it expires. Restarted when OK is pressed (`400daef8`). What GPIO2 drives on the board is not traced |
 | `400d9d20` | Parser for MB `0x330000A0` (MachineState). Fills the state struct |
 | `400db4c4` | Builds the cloud status report (`mode`, `power`, `errortype`, `station`, …) |
 | `400dc4a8` | IoT command task: cloud `cmd` 100–199 to UART commands. `cmd 101` = `mode`, `cmd 112` → `0x30000023` (reset PIN, `400dcfbc`), `cmd 113` → `0x10000008` (`400dcfd8`) |
@@ -101,6 +106,7 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | +0x68/+0x6c | `bat_ctime` / `bat_dtime` |
 | +0x70 | `bat_health` |
 | +0x74..+0x84 | `total_minutes`, `on_minutes`, `cut_area`, `cur_minutes`, `current_area` |
+| +0x104..+0x10c | `led_en`, `white_en`, `night_en`, `night_start`, `night_end` from MB `0x330000AB`. Settings of the optional LED lamp board on U13's `ledport` (`service_led.c`: "set led model off, night flag=%d"). The ESP only relays them to and from the cloud (`cmd 115`); they do not touch the display |
 | +0x124 | `rain_delay` |
 | +0x168..+0x18c | Board versions `mb_sv/hv`, `bb_sv/hv`, `db_sv/hv`, `lb_sv/hv` |
 

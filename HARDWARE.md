@@ -202,6 +202,8 @@ The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard 
 | **Display CS/Latch** | **32** | Pad 8 | ESP32 Pad 8 (GPIO32) → `R31` → pod `U3` → `TP27` → Pin 12 (`ST_CP`) rejestrów `U1/U3/U4` |
 | **Display SCLK** | **33** | Pad 9 | ESP32 Pad 9 (GPIO33) → `R33` → pod `U3/U4` → Pin 11 (`SH_CP`) rejestrów `U1/U3/U4` |
 | **Display MOSI** | **25** | Pad 10 | ESP32 Pad 10 (GPIO25) → `R34` → `TP29` → przelotka → Pin 14 (`DS`) rejestru `U1` |
+| Display, unknown | **26** | — | Not traced. The original firmware sets it high in `TubeInit`, then low after the first blank frame, and never touches it again |
+| Unknown | **2** | — | Not traced. The original firmware drives it high for 15 s after boot and after each OK press ("tube LP timer") |
 | **Button K3** (`OK`) | **19** | Pad 31 | Potwierdzone testem — GPIO19 zmienia stan przy naciśnięciu OK |
 | **Buzzer BU1** | **27** | Pad 12 | Buzzer PWM: ESP32 Pad 12 (GPIO27) → `R29` → transistor driver → BU1 |
 | **Button K1** (`START`) | **22** | Pad 36 | Input, internal pull-up, active low (firmware `0x400daf7c`) |
@@ -221,6 +223,8 @@ Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `
 3. **MOSI (Data) - GPIO25 (Pad 10)**: Biegnie do `R34`, punktu testowego `TP29` i przez przelotkę na drugą stronę płyty bezpośrednio do linii `DS` (Pin 14) pierwszego układu `U1`.
 4. **Master Reset (MR - Pin 10)**: Z kondensatora `C16` (bocznikującego GND/3.3V) doprowadzona jest ścieżka przez rezystor `R3` na Pin 10 (`MR`) układu `U3` (i analogicznie dla reszty). MR jest sprzętowo podciągnięte do 3.3V, co wyłącza reset sprzętowy.
 5. **OE (Output Enable - Pin 13)**: Piny 13 układów `U1/U3/U4` są sprzętowo podłączone do masy (GND), dzięki czemu wyjścia są stale aktywne.
+
+Jasności nie da się więc regulować sprzętowo (brak PWM na OE). Oryginalny firmware jej nie zmienia: każda cyfra świeci 2 ms z 8 ms. Tryb nocny w komponencie ESPHome przyciemnia wyświetlacz, gasząc cyfrę przed końcem jej 2 ms.
 
 Wszystkie układy `U1/U3/U4` są zorientowane poziomo:
 * Pin 8 (GND) to dolna skrajnie prawa nóżka.

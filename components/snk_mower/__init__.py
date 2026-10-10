@@ -19,6 +19,7 @@ CONF_DISPLAY_MOSI = "display_mosi"
 CONF_DISPLAY_CS = "display_cs"
 CONF_BUZZER_PIN = "buzzer_pin"
 CONF_DISPLAY_OFF_TIMEOUT = "display_off_timeout"
+CONF_DISPLAY_NIGHT_BRIGHTNESS = "display_night_brightness"
 CONF_RAIN_PIN = "rain_pin"
 CONF_RAIN_DRIVE_A = "rain_drive_a"
 CONF_RAIN_DRIVE_B = "rain_drive_b"
@@ -68,6 +69,8 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_DISPLAY_CS, default=32): cv.int_range(0, 39),
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
+            # Display brightness in night mode (set_display_night), percent of full.
+            cv.Optional(CONF_DISPLAY_NIGHT_BRIGHTNESS, default=20): cv.int_range(1, 100),
             # Rain sensor: ADC1 input (GPIO36 on the display board) and the
             # two electrode drive pins, see 20261010_mower-stock-reverse-results.md.
             cv.Optional(CONF_RAIN_PIN): cv.int_range(32, 39),
@@ -187,6 +190,8 @@ async def to_code(config):
         # rain sensor uses adc_oneshot, so pull esp_adc back in.
         from esphome.components.esp32 import include_builtin_idf_component
         include_builtin_idf_component("esp_adc")
+        # The display is multiplexed from a GPTimer alarm.
+        include_builtin_idf_component("esp_driver_gptimer")
 
     cg.add(var.set_display_pins(
         config[CONF_DISPLAY_CLK],
@@ -205,6 +210,8 @@ async def to_code(config):
             cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_A]}'),
             cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_B]}')))
         cg.add(var.set_rain_threshold(config[CONF_RAIN_THRESHOLD]))
+
+    cg.add(var.set_display_night_brightness(config[CONF_DISPLAY_NIGHT_BRIGHTNESS]))
 
     if config[CONF_DISPLAY_OFF_TIMEOUT] > 0:
         cg.add(var.set_display_off_timeout(config[CONF_DISPLAY_OFF_TIMEOUT]))

@@ -198,6 +198,19 @@ button:
     on_press:
       - lambda: 'id(my_mower).send_raw_json(id(raw_json_buf));'
 
+switch:
+  # Dims the front display (display_night_brightness, default 20 %).
+  # Schedule it from Home Assistant, e.g. on at sunset, off at sunrise.
+  - platform: template
+    name: "${friendly_name} Display Night Mode"
+    icon: "mdi:weather-night"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - lambda: 'id(my_mower).set_display_night(true);'
+    turn_off_action:
+      - lambda: 'id(my_mower).set_display_night(false);'
+
 globals:
   - id: raw_json_buf
     type: std::string

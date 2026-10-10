@@ -7,7 +7,11 @@ namespace snk_mower {
 
 static const char *const TAG = "snk_mower";
 
-static constexpr uint32_t DISPLAY_REFRESH_US = 2000;  // one digit per tick, multiplexed
+// One digit per slot, 4 slots per frame: 2 ms per digit, 125 Hz frame rate, as
+// the original tube scan task (vTaskDelay(2) at 1 kHz tick).
+static constexpr uint32_t DISPLAY_SLOT_US = 2000;
+// Shortest lit time when dimmed; the SPI write itself takes about 15 us.
+static constexpr uint32_t DISPLAY_MIN_ON_US = 50;
 static constexpr uint32_t STATE_CYCLE_MS = 5000;     // state text <-> battery %
 
 static const char *const STATE_NAMES[] = {"unknown", "idle", "mowing", "returning",
@@ -61,7 +65,7 @@ void SnkMower::set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs) {
 }
 
 void SnkMower::setup_display() {
-  // 7-segment display behind shift registers on SPI2 (original TubeInit 0x400e6da0).
+  // 7-segment display behind three 74HC595 on SPI2 (original TubeInit 0x400e6da0).
   spi_bus_config_t bus_cfg = {};
   bus_cfg.mosi_io_num = display_mosi_;
   bus_cfg.miso_io_num = -1;
@@ -85,35 +89,95 @@ void SnkMower::setup_display() {
     return;
   }
 
-  esp_timer_create_args_t args = {
-      .callback = &SnkMower::display_timer_callback,
-      .arg = this,
-      .dispatch_method = ESP_TIMER_TASK,
-      .name = "snk_display",
-      .skip_unhandled_events = true,
-  };
-  if (esp_timer_create(&args, &display_timer_) == ESP_OK)
-    esp_timer_start_periodic(display_timer_, DISPLAY_REFRESH_US);
-  else
-    ESP_LOGE(TAG, "Display timer create failed");
+  // The original scans from its own task ("tube scan", priority 25, core 1).
+  // Here the task sits above everything else on core 1 (no Wi-Fi there) and is
+  // paced by a hardware timer, so every digit gets the same on-time.
+#if CONFIG_FREERTOS_UNICORE
+  const BaseType_t core = tskNO_AFFINITY;
+#else
+  const BaseType_t core = 1;
+#endif
+  if (xTaskCreatePinnedToCore(&SnkMower::display_task, "snk_display", 2048, this, configMAX_PRIORITIES - 1,
+                              &display_task_, core) != pdPASS) {
+    ESP_LOGE(TAG, "Display task create failed");
+    return;
+  }
+
+  update_display_on_time();
+  gptimer_config_t timer_cfg = {};
+  timer_cfg.clk_src = GPTIMER_CLK_SRC_DEFAULT;
+  timer_cfg.direction = GPTIMER_COUNT_UP;
+  timer_cfg.resolution_hz = 1000000;
+  gptimer_event_callbacks_t cbs = {};
+  cbs.on_alarm = &SnkMower::display_alarm_isr;
+  gptimer_alarm_config_t alarm = {};
+  alarm.alarm_count = DISPLAY_SLOT_US;
+  if (gptimer_new_timer(&timer_cfg, &display_timer_) != ESP_OK ||
+      gptimer_register_event_callbacks(display_timer_, &cbs, this) != ESP_OK ||
+      gptimer_set_alarm_action(display_timer_, &alarm) != ESP_OK || gptimer_enable(display_timer_) != ESP_OK ||
+      gptimer_start(display_timer_) != ESP_OK)
+    ESP_LOGE(TAG, "Display timer setup failed");
 }
 
-void SnkMower::display_timer_callback(void *arg) { static_cast<SnkMower *>(arg)->refresh_display(); }
-
-void SnkMower::refresh_display() {
+bool IRAM_ATTR SnkMower::display_alarm_isr(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata,
+                                           void *arg) {
   static const uint8_t DIGIT_SELECT[DIGITS] = {0x20, 0x10, 0x08, 0x04};
-  if (display_off_ || spi_dev_ == nullptr)
-    return;
-  uint8_t digit = current_digit_;
-  current_digit_ = (digit + 1) % DIGITS;
+  auto *self = static_cast<SnkMower *>(arg);
+  uint32_t on_us = self->display_on_us_;
+  uint32_t next_us;
+  if (self->display_blank_next_) {
+    // End of the lit part of a dimmed slot: all digits off until the next slot.
+    self->display_blank_next_ = false;
+    self->display_frame_ = 0;
+    next_us = on_us < DISPLAY_SLOT_US ? DISPLAY_SLOT_US - on_us : DISPLAY_MIN_ON_US;
+  } else {
+    uint8_t digit = self->current_digit_;
+    self->current_digit_ = (digit + 1) % DIGITS;
+    self->display_frame_ = self->display_off_ ? 0 : (DIGIT_SELECT[digit] << 8) | self->display_segments_[digit];
+    self->display_blank_next_ = on_us < DISPLAY_SLOT_US;
+    next_us = self->display_blank_next_ ? on_us : DISPLAY_SLOT_US;
+  }
+  // Schedule from the previous alarm so the slots do not drift. If the ISR ran
+  // late (interrupts are held off while the flash cache is disabled), that
+  // target may already be behind the counter and would never fire; restart
+  // from now instead.
+  gptimer_alarm_config_t alarm = {};
+  alarm.alarm_count = edata->alarm_value + next_us;
+  if (alarm.alarm_count <= edata->count_value + DISPLAY_MIN_ON_US)
+    alarm.alarm_count = edata->count_value + next_us;
+  gptimer_set_alarm_action(timer, &alarm);
 
-  spi_transaction_t trans = {};
-  trans.length = 24;
-  trans.flags = SPI_TRANS_USE_TXDATA;
-  trans.tx_data[0] = 0;
-  trans.tx_data[1] = DIGIT_SELECT[digit];
-  trans.tx_data[2] = display_segments_[digit];
-  spi_device_polling_transmit(spi_dev_, &trans);
+  BaseType_t woken = pdFALSE;
+  vTaskNotifyGiveFromISR(self->display_task_, &woken);
+  return woken == pdTRUE;
+}
+
+void SnkMower::display_task(void *arg) {
+  auto *self = static_cast<SnkMower *>(arg);
+  for (;;) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    uint16_t frame = self->display_frame_;
+    spi_transaction_t trans = {};
+    trans.length = 24;
+    trans.flags = SPI_TRANS_USE_TXDATA;
+    trans.tx_data[0] = 0;
+    trans.tx_data[1] = frame >> 8;
+    trans.tx_data[2] = frame & 0xFF;
+    spi_device_polling_transmit(self->spi_dev_, &trans);
+  }
+}
+
+void SnkMower::update_display_on_time() {
+  uint32_t on_us = DISPLAY_SLOT_US;
+  if (display_night_)
+    on_us = std::max<uint32_t>(DISPLAY_MIN_ON_US, DISPLAY_SLOT_US * display_night_brightness_ / 100);
+  display_on_us_ = on_us;
+}
+
+void SnkMower::set_display_night(bool night) {
+  display_night_ = night;
+  update_display_on_time();
+  ESP_LOGD(TAG, "Display night mode %s", night ? "on" : "off");
 }
 
 void SnkMower::set_display_text(const char *text) {
