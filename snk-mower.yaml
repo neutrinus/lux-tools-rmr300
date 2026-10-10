@@ -61,6 +61,7 @@ snk_mower:
   display_mosi: 25
   display_cs: 32
   buzzer_pin: 27
+  # Rain sensor: electrodes driven from GPIO18/GPIO5, read on ADC GPIO36.
   rain_pin: 36
 
   battery_level:
@@ -83,6 +84,8 @@ snk_mower:
     name: "${friendly_name} Battery Bars"
   rain_delay:
     name: "${friendly_name} Rain Delay"
+  rain_adc:
+    name: "${friendly_name} Rain Sensor ADC"
 
   is_mowing:
     name: "${friendly_name} Is Mowing"
@@ -96,6 +99,8 @@ snk_mower:
     name: "${friendly_name} Is Locked"
   is_returning:
     name: "${friendly_name} Is Returning"
+  raining:
+    name: "${friendly_name} Raining"
 
   device_name:
     name: "${friendly_name} Device Name"

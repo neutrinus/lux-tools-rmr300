@@ -16,7 +16,6 @@ static constexpr uint32_t LINK_GUARD_SILENCE_MS = 1500;
 static constexpr uint32_t POLL_INTERVAL_MS = 100;
 static constexpr uint32_t KEEPALIVE_INTERVAL_MS = 500;
 static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;
-static constexpr uint32_t RAIN_READ_INTERVAL_MS = 1000;
 static constexpr uint32_t KEY_CONFIRM_WINDOW_MS = 3000;  // 300 ticks of 10 ms in the original
 
 void SnkMower::setup() {
@@ -28,7 +27,7 @@ void SnkMower::setup() {
     gpio_set_level(buzzer_pin_, 0);
   }
   if (rain_pin_ != GPIO_NUM_NC)
-    gpio_set_direction(rain_pin_, GPIO_MODE_INPUT);
+    setup_rain();
 
   setup_display();
   set_display_text("boot");
@@ -66,6 +65,8 @@ void SnkMower::loop() {
   uint32_t now = millis();
   read_uart();
   link_loop(now);
+  if (rain_adc_ != nullptr)
+    rain_loop(now);
   display_loop(now);
 }
 
@@ -88,11 +89,6 @@ void SnkMower::link_loop(uint32_t now) {
     last_wifi_status_ = now;
     send_wifi_status();
   }
-  if (rain_pin_ != GPIO_NUM_NC && now - last_rain_read_ >= RAIN_READ_INTERVAL_MS) {
-    last_rain_read_ = now;
-    if (gpio_get_level(rain_pin_) != last_rain_)
-      send_rain_status();
-  }
   if (!pin_sent_)
     send_pin();
 }
@@ -106,7 +102,6 @@ void SnkMower::link_up(const char *why) {
   link_up_ms_ = now;
   last_keepalive_ = now;
   last_wifi_status_ = now;
-  last_rain_read_ = now;
   // The original queries settings once the link is up. Bare commands are
   // queries; ESP_GET_SCHEDULE with fields would overwrite the mower's schedule.
   send_rain_status();
@@ -202,11 +197,10 @@ void SnkMower::send_wifi_status() {
 }
 
 void SnkMower::send_rain_status() {
-  // The original reports 1 on a dry bench, so 1 is the sensor's idle level.
-  last_rain_ = rain_pin_ != GPIO_NUM_NC ? gpio_get_level(rain_pin_) : 1;
+  // 1 = dry, 2 = raining (U13 service_rain, 0x08039198, only reacts to 2).
   JsonDocument doc;
   doc["cmd"] = proto::ESP_RAIN;
-  doc["rain"] = last_rain_;
+  doc["rain"] = rain_state_;
   send_json(doc);
 }
 

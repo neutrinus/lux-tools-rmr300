@@ -784,7 +784,7 @@ PRE ──→ DONE
 1. Protocol is JSON with CRC8-Dallas, `&` prefix, `#` suffix, 230400 8N1
 2. Boot sequence is required for MB to respond
 3. MB requires POLL every ~30ms — supervision timer
-4. PIN (4-digit) is stored in EEPROM U22, verified by U13
+4. PIN (4-digit) is stored in the U13 EasyFlash env on the SPI NOR, verified by U13
 5. Display is 3× 74HC595, SPI, 24 bits per digit
 
 ### What Is Uncertain
@@ -917,7 +917,7 @@ Confirmed by firmware decompilation agent:
 - Zero GPIO input reads in original ESP32 firmware
 - No `pwd` constant, no `rw_key.c`, no button matrix, no touch sensor
 - No evidence in any capture that a UART message carries button-press info during PIN entry
-- PIN is stored in **U13 KV-store (EEPROM U22)** — ESP only forwards user-entered PIN for verification
+- PIN is stored in the **U13 KV-store (EasyFlash env on the SPI NOR)** — ESP only forwards user-entered PIN for verification
 - Original firmware cannot auto-send PIN because it doesn't have it stored
 
 #### 3. No UART command triggers mowing (definitive conclusion)
@@ -1158,7 +1158,7 @@ Only if H3+H1 don't explain the issue:
 - PCB jest zalana lakierem — brak możliwości lutowania
 - `boot_delay: 30s` wymagany dla OTA (watchdog podczas rebootu ESP32)
 - **Żadna komenda UART nie może wysłać START** — to fizyczny przycisk do U16 przez J8
-- PIN **nie jest** przechowywany w ESP32 — jest w U13 (EEPROM U22); ESP tylko forwarduje PIN od użytkownika
+- PIN **nie jest** przechowywany w ESP32 — jest w env U13 na SPI NOR; ESP tylko forwarduje PIN od użytkownika
 - ESP32 firmware **ma** GPIO ISR — `gpio_install_isr_service` + `gpio_isr_handler_add` potwierdzone w binarkach
 - Wyświetlacz: timer 8ms (hardware `esp_timer`) — zbyt szybki na debounce; GPIO ISR bardziej prawdopodobny mechanizm
 - Nawet po usunięciu WSZYSTKICH `binary_sensor` GPIO, fizyczny START nie reagował → MB state-machine mismatch to główna hipoteza dla H3

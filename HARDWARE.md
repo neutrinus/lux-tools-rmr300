@@ -36,18 +36,42 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 | Ref | Package | Likely Type | Role |
 |-----|---------|-------------|------|
 | — | 8-pin | SPI NOR, Winbond W25Q64JVSIQ (8 MB) | EasyFlash env/KV store of U13: **PIN (`pwd`)**, user settings, schedule, product config (`cfgstr`, `pdt_ver`, feature flags), event log, firmware staging for USB/UART updates. Erased whole by `FORMATFLASH.json` |
-| **U22** | 8-pin, below U13 next to J7 | I²C device on I2C2 (PB10/PB11), 7-bit address `0x68` | Content not identified. The PIN is not here: the firmware keeps `pwd` in the SPI NOR env (U22 bytes `0x00–0x5F` were read, see [`u13/notes/eeprom_dumping.md`](u13/notes/eeprom_dumping.md)). PCB is conformal-coated, so clip probing is difficult |
+| **U22** | 8-pin, below U13 next to J7 | Not identified | Not the PIN store: the firmware keeps `pwd` in the SPI NOR env. The I²C device at `0x68` that was read earlier is the IMU (below), not U22 |
+
+### IMU
+
+U13 talks to a **TDK ICM-426xx** 6-axis IMU (accelerometer + gyroscope) on I²C at 7-bit address **`0x68`** (control byte `0xD0`), pins PB10 = SCL, PB11 = SDA (peripheral `0x40005800`, GD32 I2C1). Firmware: driver `tdk42688_lib\IcmAlgo.c`, WHO_AM_I check at `0x0807ce6a` accepting `0x47` (ICM-42688-P) or `0x6F`, message "Check ICM whoami value ERROR". It feeds tilt, slope and lift-by-attitude detection. A Bosch BNO055 driver (`driver_mems_snk_v13.c`) is also compiled in, for boards with that part at `0x28`. Which package on the PCB is the IMU has not been located on the photos (ICM-42688 is LGA-14, 2.5 × 3 mm).
 
 ### Power
 
 | Ref | Function |
 |-----|----------|
 | **U7** | Buck converter — 20V battery → 3.3V/5V logic rails |
-| **J5** (`BATTERY`) | Main 20V Li-Ion battery input (4-pin white connector — V+, GND, SDA, SCL or UART) |
+| **J5** (`BATTERY`) | Main 20V Li-Ion battery input (4-pin white connector: V+, GND and the pack data line). The pack's BMS talks to U13 USART2 (PD8/PD9, 19200 8N1, half-duplex), see [BATTERY.md](BATTERY.md#communication-protocol) |
+
+U13 holds its own power on (from the U13 bootloader `0x08000f38` and the shutdown at `0x0807e72c`):
+
+| U13 pin | Role |
+|---------|------|
+| **PE12** | Main power latch. Raised first thing by the bootloader; power-off holds it low until the rail collapses |
+| PE7 | Auxiliary rail, raised by the bootloader, dropped first on power-off |
+| PB0 | Secondary latch, raised by the bootloader on a power-on reset |
+| PE10, PE11 | Key inputs, active low (bootloader "key press power on", app button driver) |
+| PE8 | Charger present, active high |
 
 ### BLDC Motor Drivers
 
-Three 3-phase brushless motors, controlled by MOSFET banks (bottom edge with heatsinks):
+Three 3-phase brushless motors, controlled by MOSFET banks (bottom edge with heatsinks). Each motor has its own **Fortior FU6832N** BLDC controller (8051 + FOC with its own firmware, 5-pin header `5V GND` + 3 signals next to it). The U13 firmware calls them A4963 (`a4963_snk_v2.c`): the FU6832N firmware emulates the Allegro A4963 SPI register interface. Identification of the FU6832N is from the photos of the MI 302 board in [salonnikov/mower-stock-reverse](https://github.com/salonnikov/mower-stock-reverse); not yet checked on our board.
+
+| Signal | U13 pin |
+|--------|---------|
+| SPI1 SCK / MISO / MOSI | PB13 / PB14 / PB15 |
+| Common driver enable | PB12 (SPI1 NSS used as GPIO) |
+| Chip select left / right / blade | PD5 / PD4 / PD3 (active low) |
+| Speed PWM left / right / blade | TIMER2 full remap: PC9 (CH3) / PC8 (CH2) / PC7 (CH1) |
+| Wheel speed feedback | TIMER3 input capture |
+
+SPI word: bits 15–13 register address, bit 12 write, bits 11–0 data. The init writes eight registers per driver, e.g. `03E8 22DF 4753 6721 8735 A736 C000 EE0D` (`EE0D` = RUN).
 
 | Connector | Phases | Function |
 |-----------|--------|----------|
@@ -180,11 +204,14 @@ The ESP32 module (U5) is mapped to the display, buttons, sensors, and mainboard 
 | **Display MOSI** | **25** | Pad 10 | ESP32 Pad 10 (GPIO25) → `R34` → `TP29` → przelotka → Pin 14 (`DS`) rejestru `U1` |
 | **Button K3** (`OK`) | **19** | Pad 31 | Potwierdzone testem — GPIO19 zmienia stan przy naciśnięciu OK |
 | **Buzzer BU1** | **27** | Pad 12 | Buzzer PWM: ESP32 Pad 12 (GPIO27) → `R29` → transistor driver → BU1 |
-| **Rain Sensor J4** | **36** | Pad 4 | ADC Input (SENSOR_VP): J4 contact → input filtering → ESP32 Pad 4 |
+| **Button K1** (`START`) | **22** | Pad 36 | Input, internal pull-up, active low (firmware `0x400daf7c`) |
+| **Button K2** (`HOME`) | **21** | Pad 33 | Input, internal pull-up, active low |
+| **Rain sensor, measure** | **36** | Pad 4 | ADC1_CH0 (SENSOR_VP), 11 dB attenuation |
+| **Rain sensor, drive** | **18**, **5** | — | Outputs driving the two electrodes in alternating polarity (18 high / 5 low while measuring, reversed in between) |
 
-**Uwaga:** Przyciski ON (K4), START (K1) i HOME (K2) nie zostały zidentyfikowane na żadnym GPIO ESP32.
-Test polegający na skanowaniu wszystkich GPIO podczas naciskania każdego przycisku wykazał zmiany wyłącznie na GPIO19 (OK).
-Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze J8 i nie są podłączone do ESP32.
+ON (K4) is not wired to the ESP32; it goes only to J8. See "Final Determination" below.
+
+The rain sensor is resistive. Every 2 s the firmware drives GPIO18 high and GPIO5 low for 1 s, takes 5 ADC samples on GPIO36, then reverses the polarity for 1 s so the electrodes do not corrode. A running average above 3000 (of 4095) is dry, at or below is wet; 16 samples in a row on one side change the state. The ESP32 reports it to U13 as `0x22000000 {"rain":1}` (dry) or `{"rain":2}` (raining). Details: [`20261010_mower-stock-reverse-results.md`](20261010_mower-stock-reverse-results.md#czujnik-deszczu).
 
 ### Tracing wizualny ścieżek wyświetlacza (Zweryfikowany na PCB):
 
@@ -204,7 +231,7 @@ Wszystkie układy `U1/U3/U4` są zorientowane poziomo:
 | Connector | Pins | Function |
 |-----------|------|----------|
 | **J1** | 6-pin female header | ESP32 **programming** UART (UART0): `3U3 T R GND GND P` (P = IO0/Prog) — used with FT232R + esptool.py to dump 4 MB flash at 921600 baud. **Not connected to mainboard.** |
-| **J4** | 2 spring contacts | Rain/moisture detector (short when wet) |
+| **J3, J4** | spring contacts | Rain sensor electrodes; they press against the contact plate in the housing. Water lowers the resistance between them |
 | **Main header** | 7-pin white | Inter-board connector — mates with mainboard **J8**: `+5V ON → ← GND Start OK` |
 
 ---

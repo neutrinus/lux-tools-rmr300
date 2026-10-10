@@ -13,7 +13,7 @@ Unlike a dumb battery, this pack has its own **BMS with digital communication** 
 | Label | `J5` / `BATTERY` |
 | Type | 4-pin white connector |
 | Mating plug | JST VLP-04VJST (or compatible VL-connector 4-polig) |
-| Pinout (assumed) | V+, GND, data (x2) — likely UART or I2C |
+| Pinout | V+, GND and the BMS data line: a half-duplex UART to U13 (see below). Which J5 pin carries it has not been traced |
 
 **NOTE:** HARDWARE.md previously listed J5 as 2-pin. It is **4-pin** (confirmed by visual inspection and replacement batteries).
 
@@ -34,14 +34,32 @@ The battery pack contains a **smart BMS** (fuel gauge + protection) that communi
 | BMS model | `bms model=%d` |
 | Battery ID | `battery id changed` |
 
-### Communication protocol (partially known)
+### Communication protocol
 
-- U13 firmware contains **two drivers**: `driver_battery_snk_v1.c` and `v2.c`
-- Both use **CRC-checked commands**: `battery connect failed, crc value=%d, receive crc=%d`
-- Commands are sent and acknowledged: `send battery cmd failed, cansel cmd=%d`
-- Periodic polling loop: `send_battery_state_loop`
-- The protocol is **not reverse-engineered** (exact command bytes, baud rate, framing unknown)
-- Physical layer likely UART or I2C on the two data pins of J5
+- **U13 USART2 (`0x40004800`), 19200 8N1, half-duplex** on PD8/PD9 (init `0x080213c0`: GPIOD pin `0x100`, `mov.w r1,#0x4b00`). The driver switches PD8 between transmit and receive.
+- Two drivers, `driver_battery_snk_v1.c` and `v2.c`, same protocol.
+- Request: `1C A1 <LEN> <opcode> <args…> <CRC>`. Response: `3A A3 <LEN> <opcode> …<CRC>`. `LEN` counts the bytes after it (opcode + args + CRC). CRC is CRC-8/MAXIM (the same as on the display link) over opcode + args.
+- The request templates are in the U13 image (`.data`, compressed); in our dump `1C A1 03 C1 01 2E` sits at `0x0808d2b9` and `1C A1 09 CE 55…` at `0x0808d2e7`.
+
+| Opcode | Request | Purpose |
+|--------|---------|---------|
+| `C1` | `1C A1 03 C1 01 2E` | Connect / read voltage, current, temperature. Up to 4 tries at start-up |
+| `C3` | `1C A1 03 C3 01 BF` | Pack info (type, capacity, status), polled periodically |
+| `53` | `1C A1 05 53 00 02 1A 22` | Cell voltages, polled periodically |
+| `CE` | `1C A1 09 CE 55 55 55 55 55 55 55 6E` | Wake / resynchronise the link; sent at start-up, on a timeout and on a CRC error |
+| `B0` | `1C A1 03 B0 11 C1` | Charge mode / state commands ("send cmd into charge", "send cmd exit charge" and three state commands). Which B-opcode is which is not mapped |
+| `B1` | `1C A1 03 B1 00 C6` | |
+| `B2` | `1C A1 03 B2 00 93` | |
+| `B3` | `1C A1 03 B3 55 B3` | |
+| `B4` | `1C A1 03 B4 0F 78` | |
+
+Start-up sequence: `CE`, then `C1` (retry with `CE` on timeout), then `C3` and `53`. After that the BMS task keeps polling `C3` + `53`. There is no "enable discharge" command: the "can not discharger" messages are U13's own safety decisions.
+
+A response to `C1` captured over SWD on the MI 302: `3A A3 08 C1 01 19 0E …`. The parser checks `3A A3`, opcode `C1` and the CRC, then reads a status byte, current (u16) and voltage (u16).
+
+U13 also measures the pack directly with ADC0: PC5 (channel 15) = pack voltage, `mV = raw × 5.4277` (about 20.16 V at 100%), PC4 (channel 14) = current.
+
+Source: [salonnikov/mower-stock-reverse](https://github.com/salonnikov/mower-stock-reverse) `reverse-v2/factory-map/05-bms-pack.md` (their U13 version); the USART2 init and the frame templates were checked in our dump.
 
 ### BMS log sample (from Brucke RM500 community)
 

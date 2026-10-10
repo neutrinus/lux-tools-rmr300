@@ -175,7 +175,7 @@ Reguła: `0x4000000x` z `x` ≤ 6 → ESP→MB; `0x4000000x` z `x` ≥ 8 → MB�
 | `0x10000007` | 268435463 | — | KEY_SELECT | Wciśnięto START lub HOME (otwiera okno 3 s na OK) |
 | `0x10000008` | 268435464 | — | CLEAR_USER_SETTINGS | log ESP: "send command clear user setting". Also sent for cloud `cmd 113` |
 | `0x10000009` | 268435465 | — | MEMS_CORRECTION | log ESP: "send command mems correction" |
-| `0x22000000` | 570425344 | `rain:0/1` | RAIN | Rain sensor state (sensor on display board) |
+| `0x22000000` | 570425344 | `rain:1/2` | RAIN | Rain sensor state: **1 = dry, 2 = raining** (sensor on the display board). U13 only starts rain handling on 2 (`service_rain`, `0x08039198`) |
 | `0x30000005` | 805306373 | — | KEEPALIVE | Keepalive (ciągły, ~100ms) |
 | `0x30000006` | 805306374 | — | SETTING_MODE | Enter settings submenu |
 | `0x30000007` | 805306375 | — | SETTING_APPLY | Confirm/apply setting |
@@ -284,7 +284,7 @@ ESP responds (D1 w captures 01-06, D1 w captures 2026-06-21):
 Steady state:
   ESP: przed handshake 0x300000A1 co 100 ms; po nim 0x30000005 co ~500 ms, 0x30000021/22 co 1 s
   MB:  0x40000011 {"rtc":...} co ~1s
-  MB:  0x22000000 {"rain":0/1} — przy zmianie (UWAGA: deszcz jest wysyłany przez ESP, nie MB)
+  ESP: 0x22000000 {"rain":1|2} — przy zmianie, 1 = sucho, 2 = deszcz (deszcz wysyła ESP, nie MB)
 ```
 
 > **Korekta**: W poprzedniej wersji `0x22000000` (RAIN) był błędnie przypisany do MB→ESP.

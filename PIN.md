@@ -111,12 +111,12 @@ schedule, statistics, log, and the product config (`pdt_ver`, `type`, feature fl
 serial number). The mower may need its config restored with `env_config*.json`
 before it behaves as before. Untested on this unit.
 
-### U22 (I²C device) — does not hold the PIN
+### The I²C bus does not hold the PIN
 
-U22 sits on I2C2 (PB10/PB11, 7-bit address `0x68`). Bytes `0x00–0x5F` were read
-over a SOIC clip before the bus wedged, and the PIN was not among them. The firmware
-keeps the PIN in the SPI NOR env (`pwd`, loaded at `08060858`, saved at
-`0807c96e`), not in U22.
+The only device U13 talks to on I²C (PB10/PB11, 7-bit address `0x68`) is the IMU,
+a TDK ICM-426xx accelerometer/gyroscope. The bytes `0x00–0x5F` that were read from it
+are sensor registers. The firmware keeps the PIN in the SPI NOR env (`pwd`, loaded
+at `08060858`, saved at `0807c96e`).
 
 Details: [u13/notes/eeprom_dumping.md](u13/notes/eeprom_dumping.md)
 

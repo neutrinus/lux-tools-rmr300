@@ -281,9 +281,9 @@ Capture `02-boot-pin` (la_decode, oba kierunki w jednej osi czasu) pokazuje, że
 | FWDGT 1,6 s | `0x0806ff0a` → `0x0805dea6` | ÷32, reload 2000, po starcie usługi konfiguracji |
 | Pętla błędu `rw_init` | `0x0805b974` | gdy `[ctx+8]` (bity błędów inicjalizacji) ≠ 0: co 2 s `0x20000002 {"error":bity}` i miganie, **bez karmienia watchdoga** |
 | Bity błędów | `0x08060a44` | 0x1 ultradźwięki, 0x2 wersja MB, **0x4 „display borad disconnect”**, 0x8 płytka przewodu, 0x10 flash, … |
-| Odcięcie zasilania | `0x08070d3c` | zeruje PB12, PE9, PD11 (podtrzymanie zasilania) |
+| Wyłączenie | `0x08070d3c` → `0x0807e72c` | zeruje PWM silników, PB12 (enable sterowników), PE9, PD11, potem PE7 i w pętli **PE12 (główny zatrzask zasilania)** |
 
-Gdy ESP nie odpowie na handshake, U13 kończy inicjalizację z błędem, wysyła `0x20000002` i po ~16 s resetuje się przez watchdog. Reset zwalnia podtrzymanie zasilania, więc kosiarka gaśnie. To zgadza się z „kilkunastoma sekundami” i z `ha.md` §4 („MB wysyła 0x20000002 i odcina zasilanie”) [W: przejścia od porażki handshake do bitu 0x4 nie prześledziłem do końca].
+Gdy ESP nie odpowie na handshake, U13 kończy inicjalizację z błędem, wysyła `0x20000002` i po ~16 s resetuje się przez watchdog. Kosiarka gaśnie właśnie wtedy, co zgadza się z „kilkunastoma sekundami” i z `ha.md` §4 („MB wysyła 0x20000002 i odcina zasilanie”) [W: przejścia od porażki handshake do bitu 0x4 nie prześledziłem do końca]. Sam reset nie zwalnia zatrzasku: bootloader od razu znowu podnosi PE12 (`0x08000f38`) i loguje „watchdog Triggered”. Co wyłącza kosiarkę po resecie, nie jest prześledzone.
 
 Okno ciszy `boot_delay: 30` dokładnie wywoływało ten scenariusz: ESP milczał akurat wtedy, gdy U13 czekał na odpowiedź.
 
