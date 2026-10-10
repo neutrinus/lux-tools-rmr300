@@ -6,9 +6,9 @@ Read the PIN code from the Lux Tools A-RMR-300-24 (Landxcape) mower PCB via SWD 
 ## STATUS: ✅ PIN RECOVERED = **9633**
 
 PIN read from firmware RAM — confirmed working by the user.
-U22 does not hold the PIN. The firmware persists `pwd` in the EasyFlash env on the
-external SPI NOR (W25Q64). I2C communication with U22 was established and bytes
-0x00–0x5F were read.
+The firmware persists `pwd` in the EasyFlash env on the external SPI NOR (W25Q64).
+The I²C device at `0x68` that was read along the way is the IMU (TDK ICM-426xx), not
+a memory; see "I²C device at 0x68" below.
 
 ---
 
@@ -30,7 +30,7 @@ external SPI NOR (W25Q64). I2C communication with U22 was established and bytes
 | Component | Description |
 |-----------|-------------|
 | U13 | GD32F305 (Cortex-M4). Flash **1 MB** — `u13/firmware/u13_flash_1mb.bin` |
-| U22 | I²C device on I2C2, dev addr **`0xD0`** (7-bit `0x68`), content not identified — entire PCB covered in protective coating, difficult to probe directly |
+| IMU | TDK ICM-426xx on I2C2, dev addr **`0xD0`** (7-bit `0x68`). The part on the PCB has not been located |
 | SPI NOR | Winbond W25Q64JVSIQ (8 MB) — EasyFlash env (PIN `pwd`, settings, config), event log, firmware staging |
 | I2C peripheral | **I2C2** @ `0x40005800` (APB1EN bit22). I2C1 @ `0x40005400` DISABLED |
 | I2C2 pins | **PB10 = SCL, PB11 = SDA** (GPIOB CRH: PB10=0xF, PB11=0xF = AF open-drain) |
@@ -69,8 +69,9 @@ Confirmed by reading GPIOB CRH (`0x40010C0C` = `0x3333ff34`) and RCC APB1EN (bit
 ### 2. Device address = 0xD0
 
 Firmware function `0x08053930` uses device control byte **`0xD0`** (7-bit `0x68`).
-Differs from the typical `0xA0` for 24C02 — likely multiplexed with another
-device on the same bus, or pins A0/A1/A2 pulled differently.
+That is the default address of a TDK ICM-426xx IMU. The same driver checks WHO_AM_I
+against `0x47` / `0x6F` at `0x0807ce6a` ("Check ICM whoami value ERROR"), and its
+source path is `tdk42688_lib\IcmAlgo.c`.
 
 ### 3. Thread mode instead of PendSV — no more FPU/MPU faults
 
@@ -186,7 +187,7 @@ Dumped 48 KB RAM (`u13/firmware/ram_full.bin`, addresses `0x20000000–0x2000BFF
 
 ---
 
-## U22 — Read Status
+## I²C device at 0x68 — read status
 
 **Verified**: bytes 0x00–0x5F. The rest (0x60–0xFF) remains unread
 due to permanent I2C bus hang (slave holds SDA low).
@@ -200,8 +201,16 @@ due to permanent I2C bus hang (slave holds SDA low).
 50: 28 16 11 0d 39 00 82 0c 10 00 00 81 00 00 00 2f
 ```
 
-Content not identified. The PIN (`0x25A1`, uint32 LE) does not appear in this range,
-and the firmware stores it in the SPI NOR env, not in U22.
+These are ICM-42688 bank-0 registers, and the values fit a board lying flat:
+
+| Register | Bytes | Value |
+|----------|-------|-------|
+| `0x1D–0x1E` TEMP_DATA | `ff 94` | −108 → −108 / 132.48 + 25 ≈ **24 °C** |
+| `0x1F–0x20` ACCEL_X | `ff c7` | −57 |
+| `0x21–0x22` ACCEL_Y | `ff fa` | −6 |
+| `0x23–0x24` ACCEL_Z | `10 3c` | 4156 ≈ **1.01 g** at ±8 g full scale |
+
+The PIN is not on this bus; the firmware stores it in the SPI NOR env.
 
 ---
 

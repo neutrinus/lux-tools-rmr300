@@ -8,6 +8,7 @@
 #include "esphome/components/text_sensor/text_sensor.h"
 #include <driver/gpio.h>
 #include <driver/spi_master.h>
+#include <esp_adc/adc_oneshot.h>
 #include <ArduinoJson.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
@@ -39,6 +40,11 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_display_pins(uint8_t clk, uint8_t mosi, uint8_t cs);
   void set_buzzer_pin(gpio_num_t pin) { buzzer_pin_ = pin; }
   void set_rain_pin(gpio_num_t pin) { rain_pin_ = pin; }
+  void set_rain_drive_pins(gpio_num_t a, gpio_num_t b) {
+    rain_drive_a_ = a;
+    rain_drive_b_ = b;
+  }
+  void set_rain_threshold(int raw) { rain_threshold_ = raw; }
   void set_display_off_timeout(uint32_t minutes) { display_off_timeout_ms_ = minutes * 60000UL; }
 
   void set_battery_level_sensor(sensor::Sensor *s) { battery_level_sensor_ = s; }
@@ -51,6 +57,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_bat_health_sensor(sensor::Sensor *s) { bat_health_sensor_ = s; }
   void set_bat_level_bars_sensor(sensor::Sensor *s) { bat_level_bars_sensor_ = s; }
   void set_rain_delay_sensor(sensor::Sensor *s) { rain_delay_sensor_ = s; }
+  void set_rain_adc_sensor(sensor::Sensor *s) { rain_adc_sensor_ = s; }
 
   void set_is_mowing_sensor(binary_sensor::BinarySensor *s) { is_mowing_sensor_ = s; }
   void set_is_charging_sensor(binary_sensor::BinarySensor *s) { is_charging_sensor_ = s; }
@@ -58,6 +65,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   void set_has_error_sensor(binary_sensor::BinarySensor *s) { has_error_sensor_ = s; }
   void set_is_locked_sensor(binary_sensor::BinarySensor *s) { is_locked_sensor_ = s; }
   void set_is_returning_sensor(binary_sensor::BinarySensor *s) { is_returning_sensor_ = s; }
+  void set_raining_sensor(binary_sensor::BinarySensor *s) { raining_sensor_ = s; }
 
   void set_device_name_sensor(text_sensor::TextSensor *s) { device_name_sensor_ = s; }
   void set_model_sensor(text_sensor::TextSensor *s) { model_sensor_ = s; }
@@ -112,8 +120,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   uint32_t last_poll_{0};
   uint32_t last_keepalive_{0};
   uint32_t last_wifi_status_{0};
-  uint32_t last_rain_read_{0};
-  int last_rain_{-1};
 
   SemaphoreHandle_t tx_mutex_{nullptr};
   esp_timer_handle_t link_guard_timer_{nullptr};
@@ -139,6 +145,31 @@ class SnkMower : public Component, public uart::UARTDevice {
   int error_code_{0};
   int battery_percent_{0};
   bool station_{false};
+
+  // ── Rain sensor (snk_mower_rain.cpp) ─────────────────────────
+  // Resistive sensor: two electrodes driven in alternating polarity from
+  // rain_drive_a_/rain_drive_b_, read through ADC1 on rain_pin_.
+  // rain_state_ is what the original sends in 0x22000000: 1 dry, 2 raining.
+  static const uint8_t RAIN_DRY = 1, RAIN_WET = 2;
+  void setup_rain();
+  void rain_loop(uint32_t now);
+  void rain_sample();
+  void set_rain_polarity(uint8_t polarity);
+
+  gpio_num_t rain_drive_a_{GPIO_NUM_18};
+  gpio_num_t rain_drive_b_{GPIO_NUM_5};
+  int rain_threshold_{3000};
+  adc_oneshot_unit_handle_t rain_adc_{nullptr};
+  adc_channel_t rain_channel_{ADC_CHANNEL_0};
+  uint8_t rain_polarity_{1};
+  uint8_t rain_samples_left_{0};
+  uint32_t rain_phase_start_ms_{0};
+  uint32_t rain_last_sample_ms_{0};
+  int rain_acc_{0};  // 4 x running average, as in the original
+  uint8_t rain_dry_count_{0};
+  uint8_t rain_wet_count_{0};
+  uint8_t rain_state_{RAIN_DRY};
+  uint32_t rain_adc_published_ms_{0};
 
   // ── Display, buzzer, HA state (snk_mower_display.cpp) ────────
   void setup_display();
@@ -179,6 +210,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   sensor::Sensor *bat_health_sensor_{nullptr};
   sensor::Sensor *bat_level_bars_sensor_{nullptr};
   sensor::Sensor *rain_delay_sensor_{nullptr};
+  sensor::Sensor *rain_adc_sensor_{nullptr};
 
   binary_sensor::BinarySensor *is_mowing_sensor_{nullptr};
   binary_sensor::BinarySensor *is_charging_sensor_{nullptr};
@@ -186,6 +218,7 @@ class SnkMower : public Component, public uart::UARTDevice {
   binary_sensor::BinarySensor *has_error_sensor_{nullptr};
   binary_sensor::BinarySensor *is_locked_sensor_{nullptr};
   binary_sensor::BinarySensor *is_returning_sensor_{nullptr};
+  binary_sensor::BinarySensor *raining_sensor_{nullptr};
 
   text_sensor::TextSensor *device_name_sensor_{nullptr};
   text_sensor::TextSensor *model_sensor_{nullptr};

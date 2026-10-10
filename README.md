@@ -71,24 +71,25 @@ Go to **[BATTERY.md](BATTERY.md)** — compatible packs, replacement guide, DIY 
 ## System Overview
 
 ```
-                   Display Board (SNK_DISPLAY_CP_V11)
-                   ┌─────────────────────────────────────┐
-                   │ ESP32: UI, WiFi/BT, rain, buzzer    │
-                   │ 4-digit 7-seg LED + 4 buttons      │
-                   └────────┬────────────────────────────┘
-                            │ UART @230400 8N1, JSON
-                            │ #&{"cmd":...}\n
-                   ┌────────▼────────────────────────────┐
-                   │ Main Board (SNK_MAINBOARD_CP_V11)    │
-                   │                                      │
-                   │ U16 (GD32F303) — sensors, motors,    │
-                   │   link to U13, IEC 60730           │
-                   │                                      │
-                   │ U13 (GD32F305) — motors, navigation, │
-                   │   USB host, KV-store, ★ PIN        │
-                   │                                      │
-                   │ W25Q64 SPI NOR — env: PIN, settings  │
-                   └──────────────────────────────────────┘
+        Display Board (SNK_DISPLAY_CP_V11)
+        ┌──────────────────────────────────────────┐
+        │ ESP32: UI, START/HOME/OK, 4-digit LED,   │
+        │ buzzer, rain sensor, WiFi/BT             │
+        └────────────────────┬─────────────────────┘
+                             │ UART 230400 8N1, JSON &{...}<CRC8>#
+        Main Board (SNK_MAINBOARD_CP_V11)
+        ┌────────────────────▼─────────────────────┐
+        │ U13 (GD32F305): FSM, navigation, PIN,    │
+        │   USB bootloader, power latch (PE12)     │
+        │   ├─ USART1 (bdport) ── U16 (GD32F303):  │
+        │   │    border-wire coils, lift sensors   │
+        │   ├─ USART2 19200 ───── battery BMS (J5) │
+        │   ├─ SPI1 ───────────── 3× FU6832N BLDC  │
+        │   │                     (L, R, blade)    │
+        │   ├─ I2C 0x68 ───────── ICM-426xx IMU    │
+        │   └─ SPI ────────────── W25Q64 NOR: env  │
+        │                         (PIN, settings)  │
+        └──────────────────────────────────────────┘
 ```
 
 ---
@@ -107,6 +108,7 @@ kosiarka/
 ├── esp32/              ← ESP32: dumps, analysis notes
 ├── u13/                ← GD32F305: dumps, decomp, notes, eeprom
 ├── u16/                ← GD32F303: dump, notes
+├── archive/            ← dumps from other units (mower-stock-reverse: MI 302)
 │
 ├── captures/           ← UART logic analyzer captures (6 scenarios)
 ├── components/         ← ESPHome custom component (snk_mower)

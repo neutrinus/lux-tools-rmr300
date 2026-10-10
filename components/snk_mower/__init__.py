@@ -19,6 +19,11 @@ CONF_DISPLAY_CS = "display_cs"
 CONF_BUZZER_PIN = "buzzer_pin"
 CONF_DISPLAY_OFF_TIMEOUT = "display_off_timeout"
 CONF_RAIN_PIN = "rain_pin"
+CONF_RAIN_DRIVE_A = "rain_drive_a"
+CONF_RAIN_DRIVE_B = "rain_drive_b"
+CONF_RAIN_THRESHOLD = "rain_threshold"
+CONF_RAIN_ADC = "rain_adc"
+CONF_RAINING = "raining"
 
 CONF_ERROR_CODE = "error_code"
 CONF_IS_MOWING = "is_mowing"
@@ -62,7 +67,12 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_DISPLAY_CS, default=32): cv.int_range(0, 39),
             cv.Optional(CONF_BUZZER_PIN): cv.int_range(0, 39),
             cv.Optional(CONF_DISPLAY_OFF_TIMEOUT, default=0): cv.positive_int,
-            cv.Optional(CONF_RAIN_PIN): cv.int_range(0, 39),
+            # Rain sensor: ADC1 input (GPIO36 on the display board) and the
+            # two electrode drive pins, see 20261010_mower-stock-reverse-results.md.
+            cv.Optional(CONF_RAIN_PIN): cv.int_range(32, 39),
+            cv.Optional(CONF_RAIN_DRIVE_A, default=18): cv.int_range(0, 33),
+            cv.Optional(CONF_RAIN_DRIVE_B, default=5): cv.int_range(0, 33),
+            cv.Optional(CONF_RAIN_THRESHOLD, default=3000): cv.int_range(1, 4095),
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -111,6 +121,14 @@ CONFIG_SCHEMA = (
                 unit_of_measurement="min",
                 icon="mdi:weather-rainy",
                 accuracy_decimals=0,
+            ),
+            cv.Optional(CONF_RAIN_ADC): sensor.sensor_schema(
+                icon="mdi:water",
+                accuracy_decimals=0,
+                entity_category="diagnostic",
+            ),
+            cv.Optional(CONF_RAINING): binary_sensor.binary_sensor_schema(
+                device_class="moisture",
             ),
             cv.Optional(CONF_IS_MOWING): binary_sensor.binary_sensor_schema(
                 device_class="running",
@@ -176,6 +194,10 @@ async def to_code(config):
     if CONF_RAIN_PIN in config:
         cg.add(var.set_rain_pin(cg.RawExpression(
             f'(gpio_num_t){config[CONF_RAIN_PIN]}')))
+        cg.add(var.set_rain_drive_pins(
+            cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_A]}'),
+            cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_B]}')))
+        cg.add(var.set_rain_threshold(config[CONF_RAIN_THRESHOLD]))
 
     if config[CONF_DISPLAY_OFF_TIMEOUT] > 0:
         cg.add(var.set_display_off_timeout(config[CONF_DISPLAY_OFF_TIMEOUT]))
@@ -191,6 +213,7 @@ async def to_code(config):
         (CONF_BAT_HEALTH, "set_bat_health_sensor"),
         (CONF_BAT_LEVEL_BARS, "set_bat_level_bars_sensor"),
         (CONF_RAIN_DELAY, "set_rain_delay_sensor"),
+        (CONF_RAIN_ADC, "set_rain_adc_sensor"),
     ]:
         if key in config:
             sens = await sensor.new_sensor(config[key])
@@ -203,6 +226,7 @@ async def to_code(config):
         (CONF_HAS_ERROR, "set_has_error_sensor"),
         (CONF_IS_LOCKED, "set_is_locked_sensor"),
         (CONF_IS_RETURNING, "set_is_returning_sensor"),
+        (CONF_RAINING, "set_raining_sensor"),
     ]:
         if key in config:
             sens = await binary_sensor.new_binary_sensor(config[key])

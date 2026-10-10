@@ -75,6 +75,9 @@ Things to know before reading the disassembly:
 | `400dc890` | IoT replies and `command`/`passwd`/`rename`/`ota` handling |
 | `4012be00` / `4012be24` / `4012be8c` / `4012be6c` / `4012bf34` | cJSON GetObjectItem / AddItemToObject / CreateNumber / CreateBool / CreateObject [I: from call patterns] |
 | `4012ce9c` / `4012ce0c` / `4012cdd0` | `gpio_set_direction` / `gpio_set_pull_mode` / `gpio_get_level` |
+| `400df064` | Rain driver init: GPIO18 and GPIO5 outputs, ADC1 12-bit, channel 0 (GPIO36) at 11 dB, starts "rain detect thread" |
+| `400defb8` | Rain detect thread: 1 s per polarity (`400def40`: 1 = GPIO18 high / GPIO5 low, 2 = reversed); at the end of polarity 1 takes 5 samples 10 ms apart into a running average (`acc += raw − acc/4`). `acc > 11999` (average > 3000) counts dry, else wet; 16 in a row set the state to 1 (dry) or 2 (raining). Average kept at `0x3ffc5aee` |
+| `400e2774` | Sends `0x22000000 {"rain":state}` to the MB; called from the UI loop when the rain state changes |
 
 ### Key data [F]
 
@@ -108,7 +111,7 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | File | What |
 |---|---|
 | `u13_flash.bin` | 512 KB, mapped at `0x08000000` |
-| `u13_flash_1mb.bin` | Same start, 1 MB read |
+| `u13_flash_1mb.bin` | Same start, 1 MB read. **20 bytes at `0x080127a4–0x080127b7` (bootloader) are corrupt**: the bootloader CRC at `0x08017FFC` does not match. `u13_flash.bin` has the correct bytes there; use it for the bootloader and this file only above `0x08080000` |
 | `ram_full.bin`, `ram_low.bin` | RAM snapshots |
 
 **Layout** [F]:
@@ -116,6 +119,7 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
   - It also flashes the other boards ("BB IAP start", "LB IAP start").
   - `key.c` reads PE10/PE11 at `0x0800d01c` ("key press power on").
 - **App** vector table is at `0x08018000`. SP is `0x20017ff8`, reset is `0x08018441`. FreeRTOS, EasyLogger, EasyFlash.
+- **Image CRCs** [F]: hardware CRC32 (poly `0x04C11DB7`, init `0xFFFFFFFF`, 32-bit LE words, no reflection, no final XOR). Bootloader: over `0x08000000–0x08017FFB`, stored at `0x08017FFC`, checked by the bootloader reset code. Application: over `0x08018000–0x080FFFFB`, stored at `0x080FFFFC` (`0x94db942e` in our dump), checked by the application itself at start-up. Any patch of the app needs a new CRC.
 - **Literals** are PC-relative `ldr`.
 - **Log strings** are referenced with `adr` from the code right before them, not through a literal pool. Search the bytes next to a function, not with `gd32dis.py lit`.
 
@@ -175,9 +179,14 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 | `08046e00` | dpport receive task: 3 s queue timeout, counts unparseable frames at drv `+0x48` |
 | `08046f94` | dpport receive callback: more than 10 bad frames in a row sets link state 6 ("receive display board message error overtime") |
 | `08070f18` | Port check at manager start: dpport state 6 (or bdport/ledport 4/5/6) logs "communication failed" and cuts power |
-| `08070d3c` | Power cut: clears PB12, PE9, PD11 (power latch) |
+| `08070d3c` | Power-off, step 1: zeroes TIMER2 CH1–CH3 (motor PWM), clears PB12 (motor driver enable), PE9 and PD11, then jumps to `0807e72c` |
+| `0807e72c` | Power-off, step 2: clears PE7 (aux rail), then clears **PE12 (main power latch)** in an endless loop with a watchdog feed until the rail collapses |
+| `08000f38` | Bootloader GPIO init: raises PE12 (main latch) and PE7 first, configures USART0 PA9/PA10, UART3 PC10/PC11, SPI0 PA4–PA7, inputs PE10/PE11/PE8 |
+| `080213c0` | Battery (BMS) driver init: USART2 `0x40004800`, PD8/PD9, 19200. Protocol in [BATTERY.md](BATTERY.md#communication-protocol) |
+| `08039198` | `service_rain` tick. Rain value from the ESP (`0x22000000`) is at `+8`: **2 starts "raining"**, 1 runs the rain delay down (`+0x12` vs `+0x10`) and ends it ("rain delay finish"); any other value while delaying restarts it. Needs `rain_en` (`+0x14`) |
+| `0807ce6a` | IMU WHO_AM_I check (TDK ICM-426xx, `0x47` or `0x6F`) on I²C address `0x68` (`0xD0`, driver `08053930`) |
 | `0804b7f0` / `0804b840` | FWDGT config / reload. `0805deba` = 16 s (÷256, 2500) during `rw_init`, `0805dea6` = 1.6 s (÷32, 2000) once the config service runs |
-| `0805b974` | `rw_init` error loop: `0x20000002` every 2 s, blinks, **does not feed FWDGT**, so U13 resets after ~16 s |
+| `0805b974` | `rw_init` error loop: `0x20000002` every 2 s, blinks, **does not feed FWDGT**, so U13 resets after ~16 s. The bootloader then logs "watchdog Triggered" (`0801204c`) |
 | `08060a44` | Logs `rw_init` error bits: 0x1 ultrasonic, 0x2 MB version, **0x4 display board disconnect**, 0x8 border board disconnect, … |
 | `080395a4` | `deal_safety`. dpport is the first checked object (getter `080509a0`); link lost sets error `0x400000` |
 | `08068622` | `process_error` power-off counter `[ctx+0x24]` vs limit `[ctx+0x28]` (`0xbb80`, set at `08068756`). State `0xa` = power off. About 20 min [I] |
@@ -199,7 +208,7 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 The three groups bump separate counters at +0x08, +0x0c and +0x10 of the same context [I: statistics per source].
 
 **Display link and watchdogs** [F]:
-- At U13 boot the ESP must answer each `0x40000009` with ESP_INFO and each `0x40000008` with ESP_INIT. If it does not, `rw_init` records "display board disconnect" and loops on `0x20000002` without feeding FWDGT, so U13 resets after ~16 s and the mower loses power [I: the step from handshake timeout to init error bit 0x4 is not traced].
+- At U13 boot the ESP must answer each `0x40000009` with ESP_INFO and each `0x40000008` with ESP_INIT. If it does not, `rw_init` records "display board disconnect" and loops on `0x20000002` without feeding FWDGT, so U13 resets after ~16 s, and the mower is observed to switch off then [I: the step from handshake timeout to init error bit 0x4 is not traced]. The reset alone does not drop the latch: the bootloader raises PE12 again at `08000f38`. What turns the mower off after the watchdog reset is not traced (candidates: the bootloader's key/reset-cause handling in `key.c`, `0800cf50`).
 - Running: U13 expects a frame at least every 3 s. Otherwise it sends `0x20000004`, raises `0x400000` (display_error) and powers off after ~20 min in error (48000 ticks of 25 ms; 25 ms from the 2400-ticks-per-minute counter at `0802772e`). It recovers when frames return ("recover dpport").
 - More than 10 unparseable frames in a row set link state 6. If that is the state when the process manager starts, `08070f18` cuts power.
 Details are in the investigation report §10.
@@ -216,7 +225,11 @@ Details are in the investigation report §10.
 
 **Sources:** `process_comm.c`, `process_deal_board.c`, `rw_bdboard_init.c`, `driver_bdsensor.c`, `driver_mboard_port_snk_v2.c`, plus EasyLogger and FreeRTOS.
 
-**One JSON port:** `mport`, USART2 `0x40004800`, to U13 `bdport`. It has nothing for buttons, the display or the ESP32. It reports border-wire signal, lift/hall sensors and versions ("bdboard").
+**One JSON port:** `mport`, USART2 `0x40004800`, to U13 `bdport`. It has nothing for buttons, the display or the ESP32. It reports border-wire signal, lift/hall sensors and versions ("bdboard"). No motor, SPI-driver or power code.
+
+**Border receiver** [F]: two coils on **ADC0 channel 5** and **ADC1 channel 9** in dual mode with DMA (`08019bf4`; `DAT_08019cf0` = `0x40012400`, `DAT_08019cf4` = `0x40012800`), windows of 800 or 235 samples. "Base voltage" (`08012b6c`, check `0801a1f8`) is the receiver's DC offset: average of the samples, valid 1906–2191, otherwise 2048. The detector (`0801baf8`) counts samples with `|x| > 2500` (5000 in "strong signal" mode, entered after 20 saturated windows): fewer than 5 = no wave, more than 600 = interference. U13 cannot change these thresholds; it only sends commands and `{"cmd":32772,"rtc":…}`.
+
+**Self-test** [F]: IEC 60730 at start and at run time, including a CRC32 over the flash. Patching a threshold needs the CRC redone.
 
 More detail is in [`u16/notes/U16.md`](u16/notes/U16.md). Its diagram was corrected on 2026-10-09.
 
