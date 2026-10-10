@@ -164,6 +164,16 @@ button:
     icon: "mdi:home-import-outline"
     on_press:
       - lambda: 'id(my_mower).return_to_dock();'
+  - platform: template
+    name: "${friendly_name} Stop"
+    icon: "mdi:stop"
+    on_press:
+      - lambda: 'id(my_mower).stop_mowing();'
+  - platform: template
+    name: "${friendly_name} Trim Edge"
+    icon: "mdi:vector-square"
+    on_press:
+      - lambda: 'id(my_mower).trim_edge();'
 
 
   # === Send Raw JSON button (reads from text field below) ===

@@ -163,7 +163,7 @@ Implementacja jest w `components/snk_mower/snk_mower.cpp` (`key_start`, `key_hom
 
 **Niebezpieczny błąd w komponencie.** Stary `send_error_ack()` po każdym `ERROR_NOTIFY` wysyłał `0x10000007`, `0x10000001` i `0x10000002`. To było jak „START, OK, start koszenia, a potem wracaj do stacji” po każdym błędzie, także po podniesieniu kosiarki. Usunąłem to. Błędy nie wymagają żadnego potwierdzenia od ESP32.
 
-**Brakujące zdjęcia.** `HARDWARE.md` powołuje się na `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`. Nie ma ich w repo, bo `.gitignore` zawiera `/PXL_*.jpg`.
+**Brakujące zdjęcia.** `HARDWARE.md` powołuje się na `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`. `.gitignore` wyklucza `/PXL_*.jpg`; zdjęcie jest w repo jako `img/display_front2.jpg` (strona elementów płytki: U5 WROOM-32UE, złącze J1 `3V3/T/R/GND/GND/P` do programowania, J2 do płyty głównej). Przycisków na tej stronie nie widać, więc nie rozstrzyga mapowania K1–K3.
 
 W dokumentach dodałem na górze ramki „Korekta 2026-10-09” i poprawiłem tabele oraz wnioski. Historię rozumowania (np. metody 1–6 w ha.md) zostawiłem z przekreśleniami.
 
@@ -183,3 +183,64 @@ Szczegóły, zastrzeżenia i tabela adresów są w `tools/re/README.md`.
 - Przedzwonić K1, K2 i K3 do GPIO22, 21 i 19 oraz linie J8 `ST`/`OK` do U13 PE10/PE11.
 - Ustalić wyzwalacze zdarzeń `0x10000003` i `0x10000004`.
 - Przetestować na kosiarce, z LA na D1 i D2, `start_mowing()`, `return_to_dock()` oraz START/HOME→OK.
+
+## 9. Dopisek 2026-10-10: zdalne sterowanie, dane stanu, koszenie krawędzi
+
+Powiązany projekt: [Sdahl1234/Sunseeker-lawn-mower](https://github.com/Sdahl1234/Sunseeker-lawn-mower) (integracja HA z chmurą Sunseeker). Klucze, które nasz ESP32 wysyła do chmury `sk-robot.com` (`mode`, `power`, `errortype`, `station`, `rain_status`, `mul_zon1`…, `Trimming`, `slice`), to dokładnie te, które ta integracja obsługuje dla modeli „OLD”. To ten sam protokół chmury.
+
+### Komendy z aplikacji → UART [F]
+
+Zadanie IoT w ESP32 (`0x400dc4a8`) przyjmuje z chmury `{"cmd":101,"mode":N}`. Tłumaczy `mode` przez tabelę `0x3f4046b4` na komendę UART do MB:
+
+| `mode` z aplikacji | znaczenie (Sunseeker, OLD) | komenda ESP→MB |
+|---|---|---|
+| 0 | pauza / stop | `0x10000023` |
+| 1 | start | `0x10000021` |
+| 2 | do stacji | `0x10000022` |
+| 3 | — | `0x10000007` |
+| 4 | **koszenie krawędzi (border)** | `0x10000015` |
+
+Gdy ESP jest w stanie 4 (błąd), każda komenda `mode` zamienia się na `0x10000007`.
+
+Po stronie U13 dekoder komend (`0x08063808`, `dpport`) zamienia je na bity akcji, te same co dla klawiszy (zapis w `*0x200002c0 + 4`):
+
+| bit | klawisze (`0x100000xx`) | zdalne | co robi U13 w stanie oczekiwania (`0x0806ab90`) |
+|---|---|---|---|
+| 0x01 | `0x0a` | `0x15` | `0x0803a2cc`: „idle manual trim command, leave to trim”, **tylko gdy kosiarka stoi w stacji** |
+| 0x02 | `0x01` | `0x11`, `0x21` | `0x0803a080`: „manual start command, leave to cutting” |
+| 0x04 | `0x02` | `0x12`, `0x22` | `0x08038f6c`: powrót |
+| 0x08 | `0x03` | `0x13`, `0x23` | stop / pauza |
+| 0x10 | `0x04` | `0x14`, `0x24` | wywołanie zwrotne (nieustalone) |
+| 0x40 | `0x07` | — | wybór (START/HOME), okno potwierdzenia |
+
+**Odpowiedź: tak, protokół ma koszenie krawędzi.** To `0x10000015` (albo `0x1000000a`). U13 wykonuje je tylko ze stacji. W przeciwnym razie loguje „trim command, but robot not in station, ignore”. Komend zdalnych nie widać w żadnym capture'ze (nikt nie używał aplikacji przy LA). To wynik z firmware, nie z testu.
+
+W komponencie: `stop_mowing()` = `0x10000023`, `trim_edge()` = `0x10000015`. Start i powrót zostają na sekwencji klawiszy, bo ją potwierdzają capture'y. `0x10000021/22` są zapasową drogą.
+
+### Co ESP32 wie o stanie [F]
+
+Parser `0x330000A0` (`0x400d9d20`) zapisuje do struktury `0x3ffbf460`:
+
+| klucz | znaczenie | w komponencie |
+|---|---|---|
+| `state` | stan MB (1–5 bez zmian, reszta mapowana na stan ESP) | Mower State |
+| `bat_per`, `bat_lv` | % baterii, poziom (kreski) | Battery Level, Battery Bars |
+| `bat_ctime`, `bat_dtime`, `bat_health` | czasy ładowania/rozładowania, zdrowie | Battery Health |
+| `error` | kod błędu (maska bitowa, np. 16 = brak przewodu, 4 = podniesienie) | Error Code |
+| `station` | w stacji | Is Docked |
+| `rain_state`, `rain_delay` | deszcz, opóźnienie po deszczu | Rain Delay |
+| `total_minutes`, `on_minutes`, `cur_minutes` | czasy pracy | Total/On Minutes |
+| `cut_area`, `current_area` | powierzchnia | Cut Area |
+| `led_en`, `white_en`, `night_en`, `night_start`, `night_end` | ustawienia LED/nocne | — |
+| `ult_en`, `ult_sen` | czujnik ultradźwiękowy | — |
+| `pwd_en`, `rain_en`, `sch_en`, `zone_en`, `com_en`, `sp_en`, `gps_en`, `map_en` | flagi funkcji | — |
+| `bat_id`, `bat_name`, `bat_t` | typ ogniwa (np. `5S2P_SUMSANG_20R`) | Battery Name |
+| `mb_hv/sv`, `bb_hv/sv`, `db_hv/sv`, `lb_hv/sv`, `mblt_sv` | wersje HW/SW płytek | Firmware Version |
+
+Do chmury ESP wysyła m.in. `mode` (stan), `power` = `bat_per`, `errortype` (tylko w stanie błędu), `station`.
+
+Mapowanie `mode` w chmurze (Sunseeker, `lawn_mower.py`) to: 0 czuwanie, 1 koszenie, 2 powrót, 3 ładowanie, 4 błąd, 5 PIN, 6 aktualizacja, 7 koszenie krawędzi.
+
+### Home Assistant
+
+ESPHome nie ma platformy `lawn_mower`. Komponent wystawia przyciski Start Mowing, Stop, Return to Dock i Trim Edge, sensor Mower State oraz sensory baterii. Do encji `lawn_mower` w HA trzeba osobnej integracji (np. MQTT `lawn_mower`) albo szablonu po stronie HA. Tego nie zrobiłem.

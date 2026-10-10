@@ -187,7 +187,7 @@ Pozostałe przyciski prawdopodobnie idą wyłącznie do mainboard przez złącze
 
 ### Tracing wizualny ścieżek wyświetlacza (Zweryfikowany na PCB):
 
-Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`) *(tych zdjęć nie ma w repo: `.gitignore` wyklucza `/PXL_*.jpg`)* potwierdzono dokładne połączenia:
+Dzięki fizycznej analizie ścieżek na płycie `SNK_DISPLAY_CP_V11` (zdjęcia `PXL_20260616_120305142 (2).jpg` i `PXL_20260620_182450200.jpg`, w repo jako [`img/display_front2.jpg`](img/display_front2.jpg)) potwierdzono dokładne połączenia:
 1. **SCLK (Clock) - GPIO33 (Pad 9)**: Biegnie do `R33`, pod układ `U3`, do linii `SH_CP` (Pin 11) wszystkich układów `74HC595`.
 2. **CS/Latch - GPIO32 (Pad 8)**: Biegnie do `R31`, pod układ `U3`, przez punkt testowy `TP27` bezpośrednio na linię `ST_CP` (Pin 12) wszystkich układów `74HC595`.
 3. **MOSI (Data) - GPIO25 (Pad 10)**: Biegnie do `R34`, punktu testowego `TP29` i przez przelotkę na drugą stronę płyty bezpośrednio do linii `DS` (Pin 14) pierwszego układu `U1`.

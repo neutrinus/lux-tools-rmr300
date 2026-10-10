@@ -127,3 +127,7 @@ kosiarka/
 ---
 
 *Documentation produced through reverse engineering for educational purposes.*
+
+## Related projects
+
+- [Sdahl1234/Sunseeker-lawn-mower](https://github.com/Sdahl1234/Sunseeker-lawn-mower): Home Assistant integration for the Sunseeker cloud. Our ESP32 speaks the same cloud protocol ("OLD" models: `mode`, `power`, `errortype`), see `20261009_claude_investigation.md` §9.

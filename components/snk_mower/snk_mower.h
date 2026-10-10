@@ -63,6 +63,8 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   void start_mowing();
   void return_to_dock();
+  void stop_mowing();
+  void trim_edge();
   // Front-panel buttons, call from binary_sensor on_press
   void key_start();
   void key_home();

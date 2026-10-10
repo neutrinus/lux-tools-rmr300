@@ -65,6 +65,14 @@ static const uint32_t CMD_DOCKED_CHARGE  = 0x41000007;
 static const uint32_t CMD_KEY_START_CONFIRM = 0x10000001;  // START then OK: start mowing
 static const uint32_t CMD_KEY_HOME_CONFIRM  = 0x10000002;  // HOME then OK: return to station
 static const uint32_t CMD_KEY_SELECT        = 0x10000007;  // START or HOME pressed
+// ESP->MB remote (cloud) actions. The original firmware's IoT task maps the
+// app's "mode" (cmd 101) through a table at 0x3f4046b4: 0 pause, 1 start,
+// 2 home, 3 select, 4 border. U13 dpport (0x08063808) maps them to the same
+// action bits as the keys. Found in firmware, not seen in a capture yet.
+static const uint32_t CMD_REMOTE_START = 0x10000021;  // action bit 0x02
+static const uint32_t CMD_REMOTE_HOME  = 0x10000022;  // action bit 0x04
+static const uint32_t CMD_REMOTE_STOP  = 0x10000023;  // action bit 0x08 (app "pause")
+static const uint32_t CMD_REMOTE_EDGE  = 0x10000015;  // action bit 0x01: edge trim, only from the station
 static const uint32_t KEY_CONFIRM_WINDOW_MS = 3000;        // 300 ticks of 10 ms in original fw
 
 static const uint32_t CMD_SETTING_ACK_BASE = 0x33000000;
@@ -1122,6 +1130,18 @@ void SnkMower::start_mowing() {
   ESP_LOGI(TAG, "Command: start mowing (KEY_SELECT, then START_CONFIRM)");
   send_cmd(CMD_KEY_SELECT);
   this->set_timeout("key_confirm", 500, [this]() { send_cmd(CMD_KEY_START_CONFIRM); });
+}
+
+void SnkMower::stop_mowing() {
+  ESP_LOGI(TAG, "Command: stop (REMOTE_STOP)");
+  send_cmd(CMD_REMOTE_STOP);
+}
+
+void SnkMower::trim_edge() {
+  // U13 ignores this unless the mower is in the station ("trim command, but
+  // robot not in station, ignore").
+  ESP_LOGI(TAG, "Command: edge trim (REMOTE_EDGE)");
+  send_cmd(CMD_REMOTE_EDGE);
 }
 
 void SnkMower::return_to_dock() {
