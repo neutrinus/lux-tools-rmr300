@@ -50,27 +50,33 @@ Additional firmware files for peripheral boards:
 
 ## FORMATFLASH.json — Factory Reset
 
-> **Correction (2026-10-10, from the bootloader code, see [`20261010_usb_investigation.md`](../../20261010_usb_investigation.md)):** the file must be
-> **non-empty** (the bootloader skips files with size 0), and it erases the **external SPI NOR**
-> (EasyFlash env/KV, logs, firmware staging) with a chip-erase, not the GD32 internal flash.
+1. Put a file named `FORMATFLASH.json` on the pendrive. **It must not be empty**: the
+   bootloader skips files of size 0. Any content works, e.g. `{}`.
+2. Insert and power on.
+3. The bootloader chip-erases the external SPI NOR (W25Q64, `0xC7` at `08001fa0`).
+4. Remove the stick and power-cycle.
 
-To perform a full factory reset (erases entire flash including PIN):
-
-1. Create an empty file named `FORMATFLASH.json` on the pendrive
-2. Insert and power on
-3. The bootloader will wipe all flash memory
-
-After this, the mower is in factory state — no PIN required on first boot.
+The SPI NOR holds the EasyFlash env, so this wipes the PIN (`pwd`), user settings,
+schedule, statistics, the event log, the firmware staging area and the product config
+(`pdt_ver`, `type`, feature flags, `sn`). The GD32 internal flash (bootloader and app)
+is not touched.
 
 ## How it works
 
-The MBTL bootloader uses wildcard file matching:
-- `env_config*.json` → reads version configuration
-- `FORMATFLASH.json` → triggers full flash erase
-- `SNK_MB_*.bin`, `btl_MB_*.bin`, etc. → firmware update
+At power-on the U13 bootloader (`0x08000000–0x08017fff`) decides between USB host
+(pendrive) and USB device (PC) mode. In host mode it mounts the stick and scans the root
+directory in this order (`08003544`):
+- `FORMATFLASH.json` → SPI NOR chip erase
+- `env_config*.json` → version info + product config (applied by the app on next start)
+- `env_read.json`
+- `SNK_MB_*.bin`, `SNK_BB_*.bin`, `SNK_DB*_*.bin`, `btl_MB_*.bin` / `SNK_MBTL_*.bin`,
+  `SNK_LB_*.bin` → firmware images, copied into the SPI NOR staging area first, then
+  programmed by the bootloader's "load app" step (U13) or sent over UART to the other boards
 
-The bootloader is part of the U13 1 MB flash image and is updated
-separately via `SNK_MBTL_*.bin`.
+Where several files match a pattern, the highest number in the name wins.
+The bootloader itself is updated via `SNK_MBTL_*.bin` / `btl_MB_*.bin`.
+
+Full trace: [`20261010_usb_investigation.md`](../../20261010_usb_investigation.md).
 
 ## Known firmware versions
 

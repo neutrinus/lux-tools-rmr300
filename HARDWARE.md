@@ -28,15 +28,15 @@ Both are manufactured on the **SNK** platform, shared with **Adano RM5** (Harald
 
 | Ref | Chip | Architecture | Role |
 |-----|------|-------------|------|
-| **U13** | `GD32F305 AGT6` (GigaDevice) | ARM Cortex-M4 | Main MCU — motors, BLDC control, navigation, boundary wire sensing, EEPROM access |
+| **U13** | `GD32F305 AGT6` (GigaDevice) | ARM Cortex-M4 | Main MCU — motors, BLDC control, navigation, PIN/settings (env on SPI NOR), USB bootloader |
 | **U16** | `GD32F303 CGT6` (GigaDevice) | ARM Cortex-M4 | Secondary MCU: boundary-wire coils, lift/hall sensors. JSON link to U13 (`mport` USART2 ↔ U13 `bdport`). Not connected to the display board |
 
 ### Memory
 
 | Ref | Package | Likely Type | Role |
 |-----|---------|-------------|------|
-| **U22** | SOIC-8 (left of U13) | I²C EEPROM (24C02/04) | **Stores PIN code**, schedule, working hours, ENV/KV config — entire PCB covered in protective coating, difficult to probe directly |
-| **U12** | SOIC-8 (right of U13, below crystal) | SPI Flash (25xx) or 2nd EEPROM | Firmware update staging or additional logging |
+| — | 8-pin | SPI NOR, Winbond W25Q64JVSIQ (8 MB) | EasyFlash env/KV store of U13: **PIN (`pwd`)**, user settings, schedule, product config (`cfgstr`, `pdt_ver`, feature flags), event log, firmware staging for USB/UART updates. Erased whole by `FORMATFLASH.json` |
+| **U22** | 8-pin, below U13 next to J7 | I²C device on I2C2 (PB10/PB11), 7-bit address `0x68` | Content not identified. The PIN is not here: the firmware keeps `pwd` in the SPI NOR env (U22 bytes `0x00–0x5F` were read, see [`u13/notes/eeprom_dumping.md`](u13/notes/eeprom_dumping.md)). PCB is conformal-coated, so clip probing is difficult |
 
 ### Power
 
@@ -81,13 +81,14 @@ The **bidirectional UART** on pins 3-4 is the only digital communication channel
 |-----------|-------|----------|
 | `J10` / `H2` | `HALL +5V GND` | Hall effect sensor on front bumper — lift/tilt or collision detection |
 | `J9` | — | Boundary wire loop coils (EM sensing, 2 coils under chassis) |
-| `J7` | — | 4-pin UART diagnostic port (TX/RX/GND) — **unpopulated in this unit** |
+| `J7` | `+5V ↑ ↓ GND` | 4-pin header, populated but **not connected to anything** in the assembled mower. Serial port (+5V, TX, RX, GND): same arrow notation as the UART pins of J8, TVS TUS5/TUS6 and series resistors R169/R171 on the two signal lines. Probably the port for the optional LED/ultrasonic board (`ledport`, UART3, enabled by `lboard_en`); inferred, not traced to U13 pins. Not USB — see below |
 | `U19` | `STOP` | Physical emergency stop button connector |
 
 ### USB Port
 - **Type**: USB-A female (host), covered by rubber grommet on mower exterior
 - **Function**: USB flash drive for log export and firmware update files
-- **Parts next to J6** (photo): FB5/FB6 ferrites on D+/D-, TUS4 TVS, U12 (likely VBUS switch). Wired to U13 USBFS (PA11/PA12), used only by the U13 bootloader at power-on: pendrive (host) or PC custom-HID (device). See [`20261010_usb_investigation.md`](20261010_usb_investigation.md)
+- **Parts next to J6** (photo): FB5/FB6 ferrites on D+/D-, TUS4 TVS, U12 (SOT-23-5, likely VBUS switch). Wired to U13 USBFS (PA11/PA12), used only by the U13 bootloader at power-on: pendrive (host) or PC custom-HID (device). See [`20261010_usb_investigation.md`](20261010_usb_investigation.md)
+- **Only USB on the board.** The GD32F305 has a single USBFS peripheral (PA11/PA12) and it goes to J6. J7 has no ferrites on its lines and is labelled with direction arrows (USB D+/D- are bidirectional and the board labels them `D- D+` on J6), so J7 is a UART, not a second USB port. The bootloader's PC (device) mode also runs on J6, presumably with an A-to-A cable at the factory
 
 ### SWD Debug Ports
 

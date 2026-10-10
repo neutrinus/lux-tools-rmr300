@@ -73,45 +73,31 @@ Full hardware documentation (PCB, SWD ports, pinouts): [HARDWARE.md](HARDWARE.md
 
 ### FORMATFLASH.json (factory reset)
 
-> **Correction (2026-10-10, from the bootloader code, see [`20261010_usb_investigation.md`](20261010_usb_investigation.md)):** the file must be
-> **non-empty** (the bootloader skips files with size 0), and it erases the **external SPI NOR**
-> (EasyFlash env/KV, logs, firmware staging) with a chip-erase, not the GD32 internal flash.
-
-
-The firmware contains string `"FORMATFLASH.json"`. The MBTL bootloader (in U13)
-uses wildcard file matching on USB: `env_config*.json`, `SNK_MB_*.bin`, etc.
-`FORMATFLASH.json` is caught by the same mechanism and erases all flash
-including the KV-store and PIN.
+The U13 bootloader checks a FAT32 pendrive in the mainboard USB socket (J6) at every
+power-on. If it finds `FORMATFLASH.json`, it chip-erases the external SPI NOR
+(W25Q64, command `0xC7`). That flash holds the EasyFlash env, which includes `pwd`
+(the PIN), `usr_pwd_en`, the user settings, the product config, the event log and the
+firmware staging area. Details and addresses:
+[`20261010_usb_investigation.md`](20261010_usb_investigation.md).
 
 **How to use:**
-1. Format a FAT32 USB stick (≤16 GB)
-2. Place an empty file named `FORMATFLASH.json` on it
-3. Insert into the mower's internal USB port
-4. Power on — the bootloader wipes the flash
-5. After reboot the mower is factory fresh — **no PIN required**
+1. Format a FAT32 USB stick (≤16 GB).
+2. Put a file named `FORMATFLASH.json` on it. **It must not be empty**: the bootloader
+   skips files of size 0. Any content works, e.g. `{}`.
+3. Insert it into the mainboard USB socket and power on.
+4. The bootloader erases the SPI NOR. Remove the stick and power-cycle.
 
-Confirmed by the Brucke RM500 community (io-tech.fi).
+After that the PIN is gone, and so is everything else in the env: user settings,
+schedule, statistics, log, and the product config (`pdt_ver`, `type`, feature flags,
+serial number). The mower may need its config restored with `env_config*.json`
+before it behaves as before. Untested on this unit.
 
-### Does FORMATFLASH.json actually work?
+### U22 (I²C device) — does not hold the PIN
 
-The string exists in our firmware but we found no direct code references in
-the main application. However, the MBTL bootloader (also in the 1 MB flash)
-uses wildcard matching — the same mechanism as `env_config*.json`.
-The Brucke RM500 community confirms it works.
-
-### EEPROM reader (SOIC-8 clip) — partially works
-
-The PIN is stored in **U22 (24C02, I2C EEPROM, 256B)** on I2C2 bus
-(address `0xD0`). We tried — I2C communication works, we read bytes
-`0x00–0x5F`. After ~96 bytes the I2C bus wedges (slave holds SDA low)
-and requires a power cycle.
-
-**Problem:** the entire PCB is covered in conformal coating (protective
-lacquer), making direct SOIC clip probing difficult. The I2C bus wedge
-after ~96B further complicates things.
-
-The PIN was not in the read range, and further attempts were unnecessary
-after a successful SWD read.
+U22 sits on I2C2 (PB10/PB11, 7-bit address `0x68`). Bytes `0x00–0x5F` were read
+over a SOIC clip before the bus wedged, and the PIN was not among them. The firmware
+keeps the PIN in the SPI NOR env (`pwd`, loaded at `08060858`, saved at
+`0807c96e`), not in U22.
 
 Details: [u13/notes/eeprom_dumping.md](u13/notes/eeprom_dumping.md)
 

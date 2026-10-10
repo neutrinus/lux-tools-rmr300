@@ -60,7 +60,6 @@ Annotated crops: [`img/pb2_trace.jpg`](img/pb2_trace.jpg).
 than a VBUS sense. TP257 is a bare test pad on the back. Measuring its voltage needs no scraping:
 power on with no stick, then with a stick. High in both cases means the strap explanation;
 a change means a sense line.
-  `HARDWARE.md` names "U3" as the USB IC; on the photo the part near J6 is U12.
 
 ## Boot flow [F]
 
@@ -128,7 +127,7 @@ highest number in its name wins (`080071aa` parses it).
 
 | Pattern | Flag | What happens |
 |---|---|---|
-| `FORMATFLASH.json` | none | **Erases the whole external SPI NOR** (`08001fa0`: WREN, `0xC7` chip erase), then logs "format flash" through the assert handler `080041b4` [I: the mower stops there until power-cycled]. Checked first |
+| `FORMATFLASH.json` | none | Name loaded by `adr` at `0800359e`. **Erases the whole external SPI NOR** (`08001fa0`: WREN, `0xC7` chip erase), then logs "format flash" through the assert handler `080041b4` [I: the mower stops there until power-cycled]. Checked first |
 | `env_config*.json` | bit 2 | `08003e0c` loads it, `08009720` parses it (below) |
 | `env_read.json` | bit 11 | `08002fc0`: opens/creates the file, reports to the display, waits 2 s. Looks unfinished: nothing is written into the JSON [I] |
 | `SNK_MB_*.bin` | 0x80 | Main board (U13 app). Accepted only for version 30000–49999 |
@@ -209,15 +208,39 @@ The `cfg_rst` handshake (`0xAA55` → `0xA5A5` → device mode on a later boot) 
 bootloader does; who writes `0xAA55` outside device mode, and when the app clears `0xA5A5`,
 is not traced. The app only reads it (`0804dd58`, "get reset flag value=%d error").
 
-## What the repo got wrong before this note
+## What FORMATFLASH.json erases [F]
 
-- `u13/notes/firmware_update.md`, `GD32F305.md`: "**empty** `FORMATFLASH.json`" — empty files
-  are skipped. The file must have at least one byte.
-- Same files: "erases the entire (U13) flash". It erases the **external SPI NOR**
-  (EasyFlash env/KV, logs, firmware staging), not the GD32 internal flash.
-- `GD32F305.md`: "no direct code references to `FORMATFLASH.json`". It is loaded by `adr` at
-  `0800359e`.
-- `GD32F305.md` §8 flag table: bit 2 is `env_config` (`08003e0c`), not IAP; `08002fc0` is
-  `env_read.json` (bit 11); IAP is mask `0xd380`.
-- `GD32F305.md`: "U13 detects pendrive … programs its own flash". It stages the image in SPI
-  NOR and the "load app" step programs it.
+The SPI NOR (W25Q64) holds the EasyFlash env shared by the bootloader and the app.
+The app keeps the PIN there: it loads `pwd` with the env getter at `08060858` into the
+RAM cache `0x2000027C` and saves it with the env setter at `0807c96e`. The same env holds
+`usr_pwd_en`, user settings, schedule, statistics, `cfg_rst`, `cfgstr`, the product config
+(`pdt_ver`, `type`, `sn`, feature flags), the event log and the firmware staging area.
+The chip erase removes all of it. The GD32 internal flash (bootloader and app) is untouched.
+
+So a non-empty `FORMATFLASH.json` removes the PIN. [I] After it the app starts with
+default values; whether the product config then needs restoring with `env_config*.json`
+is untested.
+
+U22 (I2C2, address `0x68`) is not where the PIN is kept; no `pwd` path leads to I2C.
+
+## J7 [P]
+
+J7 is a populated 4-pin header below U13, next to U22, silkscreen `+5V ↑ ↓ GND`. In the
+assembled mower nothing is plugged into it (owner's observation, 2026-10-10). The two signal lines have
+TVS diodes TUS5/TUS6 and series resistors R169/R171 (R157, R218 nearby).
+
+It is a UART, not USB:
+- The GD32F305 has one USBFS peripheral (PA11/PA12), and it is wired to J6 through FB5/FB6
+  [P, F: the only USB code is in the bootloader and uses that peripheral].
+- J7's signal pins carry direction arrows, the same notation the board uses for the UART
+  pins of J8 (`→ ←`). USB D+/D- are bidirectional and are labelled `D- D+` on J6. There are
+  no ferrites on J7 as there are on J6.
+
+[I] The app has exactly three serial ports: `dpport` (USART0, ESP32 via J8), `bdport`
+(USART1, U16 on the board) and `ledport` (UART3, `0x40004C00`, LED/ultrasonic board). The
+LED board is optional (`lboard_en`; the bootloader only flashes `SNK_LB_*.bin` when it is
+set), and the Lux unit has none. So J7 is most likely the `ledport` connector, left empty on
+models without that board. The traces from R169/R171 were not followed to U13 pins under
+the coating, so the UART3 pins (PC10/PC11, LQFP100 pins 78/79) are unconfirmed. To check
+without scraping: a USB-UART adapter on J7 (GND plus the two arrow pins, levels not
+measured yet) during boot would show whether U13 polls an LED board there.

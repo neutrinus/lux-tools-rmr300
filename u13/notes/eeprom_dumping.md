@@ -6,8 +6,9 @@ Read the PIN code from the Lux Tools A-RMR-300-24 (Landxcape) mower PCB via SWD 
 ## STATUS: ✅ PIN RECOVERED = **9633**
 
 PIN read from firmware RAM — confirmed working by the user.
-U22 EEPROM was ultimately NOT needed to obtain the PIN (though I2C
-communication was established and bytes 0x00–0x5F were read).
+U22 does not hold the PIN. The firmware persists `pwd` in the EasyFlash env on the
+external SPI NOR (W25Q64). I2C communication with U22 was established and bytes
+0x00–0x5F were read.
 
 ---
 
@@ -29,7 +30,8 @@ communication was established and bytes 0x00–0x5F were read).
 | Component | Description |
 |-----------|-------------|
 | U13 | GD32F305 (Cortex-M4). Flash **1 MB** — `u13/firmware/u13_flash_1mb.bin` |
-| U22 | EEPROM 24C02 (256 B) on I2C2, dev addr **`0xD0`** (7-bit `0x68`) — entire PCB covered in protective coating, difficult to probe directly |
+| U22 | I²C device on I2C2, dev addr **`0xD0`** (7-bit `0x68`), content not identified — entire PCB covered in protective coating, difficult to probe directly |
+| SPI NOR | Winbond W25Q64JVSIQ (8 MB) — EasyFlash env (PIN `pwd`, settings, config), event log, firmware staging |
 | I2C peripheral | **I2C2** @ `0x40005800` (APB1EN bit22). I2C1 @ `0x40005400` DISABLED |
 | I2C2 pins | **PB10 = SCL, PB11 = SDA** (GPIOB CRH: PB10=0xF, PB11=0xF = AF open-drain) |
 | GPIOB | STM32F1-style @ `0x40010C00` (NOT F3-style `0x48000400`) |
@@ -159,9 +161,10 @@ and shift >> 16. CRC table (256× u32) @ `0x08085E70`.
 
 ### Persistence
 
-User-modified values are saved in flash @ `0x08028000`
-(alias `0x00028000`). The `pwd` value (9633) was found in RAM — it's possible
-the PIN was entered by the user earlier and loaded from EEPROM or flash.
+Values are persisted in the EasyFlash env on the external SPI NOR (W25Q64). The app
+loads `pwd` with the env getter at `08060858` and saves it with the env setter at
+`0807c96e`. The U13 bootloader reads the same env (`ota`, `cfg_rst`, …) and
+`FORMATFLASH.json` erases it, see [`20261010_usb_investigation.md`](../../20261010_usb_investigation.md).
 
 ---
 
@@ -183,7 +186,7 @@ Dumped 48 KB RAM (`u13/firmware/ram_full.bin`, addresses `0x20000000–0x2000BFF
 
 ---
 
-## EEPROM — Read Status
+## U22 — Read Status
 
 **Verified**: bytes 0x00–0x5F. The rest (0x60–0xFF) remains unread
 due to permanent I2C bus hang (slave holds SDA low).
@@ -197,10 +200,8 @@ due to permanent I2C bus hang (slave holds SDA low).
 50: 28 16 11 0d 39 00 82 0c 10 00 00 81 00 00 00 2f
 ```
 
-Data looks like operational state (hours of operation, calibration, timestamp @ `0x4C`).
-No obvious ASCII PIN — the PIN is stored as uint32 LE
-in RAM cache, and in the EEPROM it may be stored in the same format in the
-unread range 0x60–0xFF.
+Content not identified. The PIN (`0x25A1`, uint32 LE) does not appear in this range,
+and the firmware stores it in the SPI NOR env, not in U22.
 
 ---
 
@@ -253,4 +254,4 @@ EOF
 5. **KV definitions in flash vs runtime**: The definition table (`0x08085458`) contains
    RAM buffer addresses and sizes for each key. Default values are
    initialized in these buffers during boot, then overwritten
-   from persistent storage (flash/EEPROM) if changed.
+   from the env on the external SPI NOR if changed.

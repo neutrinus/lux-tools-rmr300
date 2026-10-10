@@ -763,7 +763,7 @@ PRE ──→ DONE
 ┌─────────────────────────────────────────────────────────────────────┐
 │ U13: GD32F305AGT6                                                    │
 │  → Motor control                                                     │
-│  → KV-store (EEPROM U22 — PIN, configuration)                       │
+│  → KV-store (env on SPI NOR W25Q64 — PIN, configuration)            │
 │  → cJSON parser                                                     │
 │  → RTC (display only, not schedule)                                 │
 └─────────────────────────────────────────────────────────────────────┘

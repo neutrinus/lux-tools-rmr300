@@ -86,7 +86,7 @@ Go to **[BATTERY.md](BATTERY.md)** — compatible packs, replacement guide, DIY 
                    │ U13 (GD32F305) — motors, navigation, │
                    │   USB host, KV-store, ★ PIN        │
                    │                                      │
-                   │ U22 (24C02 EEPROM) — PIN, settings   │
+                   │ W25Q64 SPI NOR — env: PIN, settings  │
                    └──────────────────────────────────────┘
 ```
 
