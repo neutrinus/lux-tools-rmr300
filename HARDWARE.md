@@ -87,7 +87,7 @@ The **bidirectional UART** on pins 3-4 is the only digital communication channel
 ### USB Port
 - **Type**: USB-A female (host), covered by rubber grommet on mower exterior
 - **Function**: USB flash drive for log export and firmware update files
-- **IC** (U3 area): USB host controller / power switch
+- **Parts next to J6** (photo): FB5/FB6 ferrites on D+/D-, TUS4 TVS, U12 (likely VBUS switch). Wired to U13 USBFS (PA11/PA12), used only by the U13 bootloader at power-on: pendrive (host) or PC custom-HID (device). See [`u13/notes/USB.md`](u13/notes/USB.md)
 
 ### SWD Debug Ports
 

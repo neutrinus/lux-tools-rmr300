@@ -50,6 +50,10 @@ Additional firmware files for peripheral boards:
 
 ## FORMATFLASH.json — Factory Reset
 
+> **Correction (2026-10-10, from the bootloader code, see [`USB.md`](USB.md)):** the file must be
+> **non-empty** (the bootloader skips files with size 0), and it erases the **external SPI NOR**
+> (EasyFlash env/KV, logs, firmware staging) with a chip-erase, not the GD32 internal flash.
+
 To perform a full factory reset (erases entire flash including PIN):
 
 1. Create an empty file named `FORMATFLASH.json` on the pendrive

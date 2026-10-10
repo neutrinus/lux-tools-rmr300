@@ -119,6 +119,21 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 - **Literals** are PC-relative `ldr`.
 - **Log strings** are referenced with `adr` from the code right before them, not through a literal pool. Search the bytes next to a function, not with `gd32dis.py lit`.
 
+**USB** [F] lives only in the bootloader; the app has no USB code. Details in [`u13/notes/USB.md`](u13/notes/USB.md).
+
+| Address | Function |
+|---|---|
+| `0800e800` | Bootloader main: init, mode select, flag-word loop on `*0x20000018` |
+| `080043ec` | Mode select from env `ota` / `cfg_rst`, else `08002f18` |
+| `08002f18` | Sets PB6, reads PB2: high = USB host (`08002ddc`), low = USB device (`08002784`) |
+| `08002ddc` | Host: waits up to 1.5 s for D+ (PA12) high, starts the MSC host library |
+| `08003544` | "USB disk Ready": scans `FORMATFLASH.json`, `env_config*.json`, `env_read.json`, `SNK_*.bin`, `btl_MB_*.bin` |
+| `0800303c` | IAP: copies firmware from the stick into SPI NOR staging |
+| `08003cdc` | Writes `log_yyyymmdd_hhmmss.html` |
+| `08009720` | `env_config` parser; stores the text as env `cfgstr` + `cfgupdate=0xA5` (applied by the app at `08076314`) |
+| `080027c8` | Device mode: custom-HID frame handler `A5 len cmd …` (VID 28E9 PID 0567) |
+| `08001fa0` | SPI NOR chip erase (`0xC7`), used by `FORMATFLASH.json` |
+
 **Source tree** (from paths in strings):
 
 | Area | Files |
