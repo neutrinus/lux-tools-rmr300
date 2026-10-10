@@ -72,26 +72,8 @@ void SnkMower::loop() {
   display_loop(now);
   if (now - last_stats_ms_ >= STATS_INTERVAL_MS)
     log_link_stats(now);
-  if (!trace_dumped_ && now >= TRACE_DUMP_AFTER_MS) {
-    trace_dumped_ = true;
-    dump_trace();
-  }
-}
-
-void SnkMower::trace(const char *dir, const char *json) {
-  if (trace_.size() >= TRACE_MAX)
-    return;
-  char head[24];
-  snprintf(head, sizeof(head), "%7.3f %s ", millis() / 1000.0f, dir);
-  trace_.push_back(std::string(head) + json);
-}
-
-void SnkMower::dump_trace() {
-  ESP_LOGD(TAG, "Trace of the first %u frames since boot (s, direction, JSON):", (unsigned) trace_.size());
-  for (const auto &line : trace_) {
-    ESP_LOGD(TAG, "  %s", line.c_str());
-    delay(2);  // let the API log keep up
-  }
+  if (!trace_done_ && now >= TRACE_DUMP_AFTER_MS)
+    trace_loop();
 }
 
 void SnkMower::log_link_stats(uint32_t now) {
@@ -105,6 +87,26 @@ void SnkMower::log_link_stats(uint32_t now) {
     ESP_LOGV(TAG, "Link %s: rx %u frames (%u bad, %u bytes), last %u ms ago; tx %u frames; state=%d locked-pin=%s",
              LINK_NAMES[static_cast<int>(link_)], (unsigned) rx_frames_, (unsigned) rx_bad_, (unsigned) rx_bytes_,
              (unsigned) (now - last_rx_ms_), (unsigned) tx_frames_, state_, pin_retries_ >= 5 ? "gave up" : "ok");
+}
+
+void SnkMower::trace(const char *dir, const char *json) {
+  if (trace_done_ || trace_.size() >= TRACE_MAX)
+    return;
+  char head[24];
+  snprintf(head, sizeof(head), "%7.3f %s ", millis() / 1000.0f, dir);
+  trace_.push_back(std::string(head) + json);
+}
+
+void SnkMower::trace_loop() {
+  // One line per loop() so the log task and the API keep up.
+  if (trace_dump_pos_ == 0)
+    ESP_LOGD(TAG, "Trace of the first %u frames since boot (s, direction, JSON):", (unsigned) trace_.size());
+  if (trace_dump_pos_ < trace_.size()) {
+    ESP_LOGD(TAG, "  %s", trace_[trace_dump_pos_++].c_str());
+    return;
+  }
+  trace_done_ = true;
+  std::vector<std::string>().swap(trace_);
 }
 
 // ── Link ──────────────────────────────────────────────────────────

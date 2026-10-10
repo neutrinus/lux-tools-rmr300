@@ -1273,6 +1273,7 @@ The component had two bugs here:
 
 ### Hard facts (from the logs)
 
+- **The unlock survives an ESP-only restart.** After a second OTA, U13 replayed the boot sequence without `lock:1`: `0x41000003` and `state:6` straight away. It did not answer the PIN we sent at link up (no `0x41000020`), and that did no harm.
 - **U13 answers `ESP_BOOT` (`0x40000004`) by replaying its boot sequence** (`0x20000001`, `0x20000004`, `lock:1`, full status), also when only the ESP restarted. No power cycle is needed to unlock after an OTA.
 - **Link**: about 19 RX frames per 10 s at rest (RTC `0x40000011` every 1 s plus the `0x33000021/22` acks of our WiFi/BT status), about 40 TX frames per 10 s, 0 bad frames.
 - **Response times**: START about 45 ms (`0x41000005` + `state:8`), STOP about 100 ms (`0x41000003` + `state:6`), HOME+OK about 40 ms (`0x41000006` + `state:9`).

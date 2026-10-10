@@ -93,8 +93,6 @@ class SnkMower : public Component, public uart::UARTDevice {
   void key_ok();
   // Debugging: sends any JSON object as a frame
   void send_raw_json(const std::string &json);
-  // Debugging: logs the frames recorded since boot (also done once, 60 s after boot)
-  void dump_trace();
 
  protected:
   // ── Link to U13 (snk_mower.cpp) ──────────────────────────────
@@ -143,7 +141,9 @@ class SnkMower : public Component, public uart::UARTDevice {
   void trace(const char *dir, const char *json);
   static constexpr size_t TRACE_MAX = 80;
   std::vector<std::string> trace_;
-  bool trace_dumped_{false};
+  void trace_loop();
+  size_t trace_dump_pos_{0};
+  bool trace_done_{false};
 
   SemaphoreHandle_t tx_mutex_{nullptr};
   esp_timer_handle_t link_guard_timer_{nullptr};
