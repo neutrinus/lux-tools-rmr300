@@ -119,7 +119,7 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 - **Literals** are PC-relative `ldr`.
 - **Log strings** are referenced with `adr` from the code right before them, not through a literal pool. Search the bytes next to a function, not with `gd32dis.py lit`.
 
-**USB** [F] lives only in the bootloader; the app has no USB code. Details in [`u13/notes/USB.md`](u13/notes/USB.md).
+**USB** [F] lives only in the bootloader; the app has no USB code. Details in [`20261010_usb_investigation.md`](20261010_usb_investigation.md).
 
 | Address | Function |
 |---|---|

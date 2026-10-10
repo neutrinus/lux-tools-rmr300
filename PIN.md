@@ -73,7 +73,7 @@ Full hardware documentation (PCB, SWD ports, pinouts): [HARDWARE.md](HARDWARE.md
 
 ### FORMATFLASH.json (factory reset)
 
-> **Correction (2026-10-10, from the bootloader code, see [`USB.md`](u13/notes/USB.md)):** the file must be
+> **Correction (2026-10-10, from the bootloader code, see [`20261010_usb_investigation.md`](20261010_usb_investigation.md)):** the file must be
 > **non-empty** (the bootloader skips files with size 0), and it erases the **external SPI NOR**
 > (EasyFlash env/KV, logs, firmware staging) with a chip-erase, not the GD32 internal flash.
 

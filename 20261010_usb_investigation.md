@@ -1,9 +1,9 @@
-# USB port on the mainboard (J6)
+# USB port on the mainboard (J6) — investigation 2026-10-10
 
 What the USB-A socket on the mainboard is for, traced in the U13 dump
 (`u13/firmware/u13_flash.bin`) with `tools/re/gd32dis.py` and a linear Thumb sweep.
 
-Markers as in [`FIRMWARE_MAP.md`](../../FIRMWARE_MAP.md):
+Markers as in [`FIRMWARE_MAP.md`](FIRMWARE_MAP.md):
 **[F]** read from the firmware, **[P]** seen on the board photos, **[I]** inferred, not verified.
 
 ## Summary
@@ -28,7 +28,12 @@ Markers as in [`FIRMWARE_MAP.md`](../../FIRMWARE_MAP.md):
 - FB5 / FB6 ferrite beads in the D+/D- lines towards U13 (top-right of U13).
 - TUS4 TVS on the data lines, U12 (SOT-23-5/6) with C104/C105/R144 next to the 5V pin
   [I: VBUS power switch].
-- The silkscreen does not show which U13 pins PB2 / PB6 (below) go to.
+- Sharper top-side photo (2026-10-10, `PXL_20260616_111216406.jpg` in the project thread): U12 sits between
+  the 5V buck (U7/L1) and the J6 5V pin, with C102/C104/C105, R144, FB2 and TP48. TUS4 with R143/R153
+  sits next to the data lines.
+- The silkscreen does not show which U13 pins PB2 / PB6 (below) go to. To trace them, check continuity
+  from U13 LQFP100 pins: PB2 = 37, PB6 = 92, PA11 (D-) = 70, PA12 (D+) = 71 [I: GD32F30x LQFP100
+  pinout]. Expected [I]: PB6 drives U12 EN, PB2 reads U12 FLAG or VBUS.
   `HARDWARE.md` names "U3" as the USB IC; on the photo the part near J6 is U12.
 
 ## Boot flow [F]
