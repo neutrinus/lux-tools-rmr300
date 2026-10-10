@@ -149,7 +149,7 @@ blinks on display        (state 0x0D)         0x0B "0000" CS
                               │                     │
                               │          ┌──────────▼──────────┐
                               │          │  Mainboard U13       │
-                              │          │  Reads PIN from U22  │
+                              │          │  Reads PIN (env pwd) │
                               │          │  Compares & responds │
                               │          └──────────┬──────────┘
                               │                     │
@@ -166,11 +166,13 @@ blinks on display        (state 0x0D)         0x0B "0000" CS
                          └─────────┘          └────────────┘
 ```
 
-**Key insight**: The ESP32 forwards the PIN entry to the mainboard (U13) for verification. The PIN itself is **never stored on the ESP32** — it is stored on the mainboard EEPROM U22. The ESP32 is merely a UART terminal for PIN input and result display.
+**Key insight**: The ESP32 forwards the PIN entry to the mainboard (U13) for verification. The PIN itself is **never stored on the ESP32** — it is stored by U13 in the EasyFlash env (`pwd`) on the external SPI NOR W25Q64, cached in RAM at `0x2000027C` (not in U22, see [PIN.md](../../PIN.md)). The ESP32 is merely a UART terminal for PIN input and result display.
 
 ## WiFi/MQTT Subsystem
 
-Despite not being used in the retail product, the ESP32 firmware contains a complete MQTT client implementation:
+The same ESP32 firmware family is used with WiFi and the Sunseeker app on Brucke/Sunseeker units
+(io-tech.fi thread, see [`20261010_forum_io-techfi.md`](../../20261010_forum_io-techfi.md)).
+Whether a Lux unit pairs with the app has not been tried.
 
 ### NVS Configuration
 
@@ -187,26 +189,55 @@ Stored in the NVS partition at offset `0x9000`:
 | `pdt_ver` | — | Product version |
 | `model` | — | Product model |
 
-### MQTT Topics (Inferred from Firmware)
+### MQTT broker and topics [F]
 
-Based on the string `"server.sk-robot.com"` and MQTT-related strings in the firmware:
+> **Corrected 2026-10-10.** The earlier table (`snk/device/{sn}/status|command|config|ota`) was
+> guessed and is wrong.
 
-| Topic Pattern | Direction | Description |
-|---------------|-----------|-------------|
-| `snk/device/{sn}/status` | Device→Cloud | Status reports |
-| `snk/device/{sn}/command` | Cloud→Device | Remote commands |
-| `snk/device/{sn}/config` | Both | Configuration sync |
-| `snk/device/{sn}/ota` | Cloud→Device | OTA firmware update |
+- Broker: `mqtt://server.sk-robot.com`, plain MQTT (no TLS), port 1883. Other URIs in the image:
+  `mqtt://test1.sk-robot.com` … `mqtt://test4.sk-robot.com` and a `mqtt://%s` template
+  (log strings `set iot server ali / amazon / aws test / local server`).
+- Topic format strings: `/%s/%s/get` (commands to the mower) and `/%s/%s/update` (mower reports).
+  The community sees them as `/device/<id>/get` and `/device/<id>/update`.
+- The community found that the cloud broker accepted any login until 07.2025 and that log
+  replies (`cmd 509`) carry the WiFi SSID and password in plain text [W].
+
+### Cloud commands [F for the rows marked F, else W]
+
+Command list from [OlliKantola/Sunseeker_LawnMower_Control](https://github.com/OlliKantola/Sunseeker_LawnMower_Control) [W].
+The IoT command task `400dc4a8` reads `cmd` and handles 100–199 inline (200+ further down).
+Rows marked [F] were traced in `ota_0.bin`. A UART command is built as a cJSON number from a
+double constant (`l32r` lo/hi pair), see `FIRMWARE_MAP.md`.
+
+| `cmd` | Payload | What it does | UART to U13 |
+|---|---|---|---|
+| 101 | `mode` 0/1/2/4 | stop / mow / home / edge trim [F] | `0x10000023` / `0x10000021` / `0x10000022` / `0x10000015` [F] |
+| 102 | `ymd`, `hms`, `week` | set clock [F: compare `0x66` at `400dc565`] | |
+| 103 | `slice`, `trimming`, `auto`, `pause` | schedule [W] | |
+| 105 | `rain_en`, `rain_delay_set` | rain delay [F: compare `0x69` at `400dca20`] | |
+| 107 | `rename` | device name [W] | — |
+| 108 | `mul_*` | start points / zones [W] | |
+| 109 | — | restart communications [W] | |
+| 111 | `type`, `ver` | firmware info (`Robot_env`, `fw_ver`, `ota`) [F: compare `0x6f` at `400dcef5`] | |
+| **112** | — | **reset PIN to `0000`** [F] | **`0x30000023`** (compare `0x70` at `400dcfbc`, double `0x41c80000:0x11800000`) |
+| 113 | — | [W: "restart data manager"] | **`0x10000008`** = CLEAR_USER_SETTINGS (compare `0x71` at `400dcfd8`) [F] |
+| 115 | `led_*`, `white_en`, `night_*` | LEDs [F: compare `0x73` at `400dcff4`] | |
+| 200–210 | — | queries, replies 500–516 (`208` → `508` versions and SN) [W] | |
+
+Other handlers in the same task read `passwd_old`/`passwd_new`, `ssid`/`passwd`, `mul_*` and `ult_*`;
+their `cmd` numbers were not mapped.
+
+`cmd 112` takes no parameters and has no state check in the ESP. What U13 does with
+`0x30000023` is in [PROTOCOLS.md](../../PROTOCOLS.md) (RESET_PWD).
 
 ### WiFi Configuration Flow
 
 1. ESP32 boots, reads NVS
 2. If `robot_ssid` is set → connects to that WiFi network as station
 3. If connection fails → optionally starts AP mode with SSID `"MyMower"` for direct configuration (untested in this unit)
-4. On WiFi connect → connects MQTT to `server.sk-robot.com`:
-   - Username: `robot_sn` (serial number)
-   - Password: `robot_password`
-5. Subscribes to command topic
+4. On WiFi connect → connects MQTT to `server.sk-robot.com` (port 1883, no TLS).
+   Username/password [I: `robot_sn` / `robot_password`, not traced]
+5. Subscribes to `/…/…/get`
 6. Relays commands between MQTT and mainboard UART
 
 ## Display Control

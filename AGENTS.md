@@ -47,6 +47,7 @@ python3 tools/esp32_img2elf.py <image.bin>                     # ESP32 image -> 
 - **Ignore banner direction tables in `ha.md` §2** (generated from constants; wrong). Use `PROTOCOLS.md`.
 - **Ignore the binary protocol `0xAA 0x55` @115200 in `esp32/notes/ESP32.md`** — it is wrong.
 - `captures/2026-06-21/README.md` has **reversed D1/D2 labels**; direction labels in `captures/README.md` (01–06) are correct.
+- `0x33000021/22` are MB acks of the ESP WiFi/BT status frames, **not PIN results**. `0x30000023` resets the PIN to `0000` (cloud `cmd 112`). Cloud MQTT topics are `/<…>/<id>/get|update` on plain `mqtt://server.sk-robot.com`, not `snk/device/...`. Brucke firmware files from io-tech.fi do not fit our bootloader. See `20261010_forum_io-techfi.md`.
 - `0x10000001/2/7` are **key commands, not error ACKs** (START/HOME → `0x10000007`, then OK → `0x10000001` mow / `0x10000002` home).
 
 ## Hard-won constraints (don't re-litigate)

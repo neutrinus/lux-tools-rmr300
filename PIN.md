@@ -71,6 +71,25 @@ Full hardware documentation (PCB, SWD ports, pinouts): [HARDWARE.md](HARDWARE.md
 
 ## Alternative Methods
 
+### Reset to `0000` with command `0x30000023` (no SWD, keeps settings)
+
+U13 has a "reset pwd" command [F]. On `0x30000023` (ESP→MB, no fields) the handler at
+`0804650a` writes env `pwd` = 0, clears the wrong-PIN counter, re-enables PIN entry and
+answers `0x33000023 {"result":true}`. Nothing else in the env is touched, and there is no state
+check. After it the PIN is `0000`. Details: [PROTOCOLS.md](PROTOCOLS.md),
+[`20261010_forum_io-techfi.md`](20261010_forum_io-techfi.md).
+
+Two ways to get it to U13:
+
+1. **Cloud command `{"cmd":112}`.** The original ESP32 firmware turns it into `0x30000023`
+   (`400dcfbc`) [F]. The Brucke community confirmed the reset this way (io-tech.fi, 05.2024).
+   The ESP talks plain MQTT to `server.sk-robot.com:1883`, so a local broker reached through a
+   DNS override or NAT can send it on `/<…>/<id>/get`. Needs the mower's WiFi to be set up
+   (app pairing), which was never tried on a Lux unit. Untested here.
+2. **Custom ESP firmware.** Our ESPHome component can send `{"cmd":805306403}` over the J8 UART
+   after the boot handshake. Not implemented yet.
+
+
 ### FORMATFLASH.json (factory reset)
 
 The U13 bootloader checks a FAT32 pendrive in the mainboard USB socket (J6) at every
@@ -105,6 +124,10 @@ Details: [u13/notes/eeprom_dumping.md](u13/notes/eeprom_dumping.md)
 
 - **Searching flash for PIN** — no plaintext PIN (ASCII/BCD) in any dump
   (U13 1 MB, U16 256 KB, ESP32 4 MB). PIN is stored binary as uint32.
+- **Removing the RTC coin cell** — the PIN is in the SPI NOR env, not in battery-backed RAM.
+  A Brucke owner had the battery out for four months and the PIN stayed (io-tech.fi, 04.2026).
+- **Waiting out a lockout** works, it is not a reset: after 10 wrong PINs the mower locks; leave it
+  **switched on** for 10 minutes and entry is allowed again (manufacturer FAQ, quoted on io-tech.fi).
 - **Reading from ESP32** — the ESP32 on the display board only relays the
   PIN to the mainboard for verification; it does not store it.
 - **Ghidra headless** — full decompilation via Ghidra 12.1.2 headless fails

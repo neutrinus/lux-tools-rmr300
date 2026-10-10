@@ -26,9 +26,10 @@ original firmware with ESPHome.
 All share part numbers: mainboard `80102372-01`, display `80102373-01`.
 OEM: SNK (also SK-Robot for MQTT cloud).
 
-Interesting fact: despite the manufacturer not advertising or supporting it,
-every mower has fully functional WiFi and Bluetooth on the ESP32 — disabled
-in the original firmware but unlockable by flashing custom firmware.
+Interesting fact: every mower has WiFi and Bluetooth on the ESP32, and the original
+firmware has a full MQTT cloud client (`server.sk-robot.com`, plain MQTT). Brucke and
+Sunseeker owners use it with the Sunseeker app. Lux does not advertise it, and pairing a
+Lux unit with the app has not been tried.
 
 ---
 
@@ -122,7 +123,10 @@ kosiarka/
 ## External References
 
 - [Brucke RM500/RM501/RM800 infopaketti (io-tech.fi)](https://bbs.io-tech.fi/threads/brucke-rm500-rm501-rm800-robottiruohonleikkurin-infopaketti.405186/)
-  Finnish community thread covering the same SNK/Sunseeker platform.
+  Finnish community thread covering the same SNK/Sunseeker platform. What it adds and what it
+  corrects: [`20261010_forum_io-techfi.md`](20261010_forum_io-techfi.md).
+- [OlliKantola/Sunseeker_LawnMower_Control](https://github.com/OlliKantola/Sunseeker_LawnMower_Control):
+  cloud MQTT command list (`cmd 101` mode, `112` PIN reset, …), see [esp32/notes/ESP32.md](esp32/notes/ESP32.md).
 
 ---
 

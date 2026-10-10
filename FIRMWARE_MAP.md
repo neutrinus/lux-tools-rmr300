@@ -71,7 +71,7 @@ Things to know before reading the disassembly:
 | `400e6da0` | `TubeInit`: SPI display MOSI 25, SCLK 33, CS 32, 400 kHz |
 | `400d9d20` | Parser for MB `0x330000A0` (MachineState). Fills the state struct |
 | `400db4c4` | Builds the cloud status report (`mode`, `power`, `errortype`, `station`, …) |
-| `400dc4a8` | IoT command task: cloud `cmd` 100–199 to UART commands. `cmd 101` = `mode` |
+| `400dc4a8` | IoT command task: cloud `cmd` 100–199 to UART commands. `cmd 101` = `mode`, `cmd 112` → `0x30000023` (reset PIN, `400dcfbc`), `cmd 113` → `0x10000008` (`400dcfd8`) |
 | `400dc890` | IoT replies and `command`/`passwd`/`rename`/`ota` handling |
 | `4012be00` / `4012be24` / `4012be8c` / `4012be6c` / `4012bf34` | cJSON GetObjectItem / AddItemToObject / CreateNumber / CreateBool / CreateObject [I: from call patterns] |
 | `4012ce9c` / `4012ce0c` / `4012cdd0` | `gpio_set_direction` / `gpio_set_pull_mode` / `gpio_get_level` |
@@ -154,6 +154,8 @@ The machine state struct at `0x3ffbf460` is filled by `400d9d20`:
 
 | Address | Function |
 |---|---|
+| `08044860` | dpport dispatcher for `0x3000xxxx` commands from the ESP (`tbh` table at `0804489a` for `0x30000005..0x30000023`, index = cmd − `0x30000005`) |
+| `0804650a` | `0x30000023` "reset pwd": env `pwd` = 0, wrong-PIN counter = 0, PIN input enabled, replies `0x33000023` |
 | `08063808` | dpport key/action command decoder. Maps `0x10000001..0a`, `0x10000011..15`, `0x10000021..24` to action bits |
 | `08076244` | `set_action(bits)`: stores into the command-service context at `*0x200002c0 + 4` |
 | `0804d17c` | `get_action()` |
