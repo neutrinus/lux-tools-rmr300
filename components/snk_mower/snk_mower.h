@@ -116,6 +116,14 @@ class SnkMower : public Component, public uart::UARTDevice {
   static const uint8_t KEY_NONE = 0, KEY_START = 1, KEY_HOME = 2;
   void arm_key(uint8_t key);
 
+  // return_to_dock() needs a stop first while U13 is mowing or trimming; the
+  // HOME/OK sequence is sent by handle_status() (or by a timeout in loop())
+  // once U13 reports that it stopped.
+  static constexpr uint32_t RETURN_HOME_SETTLE_MS = 500;
+  void send_home_sequence();
+  bool return_pending_{false};
+  uint32_t return_stop_ms_{0};
+
   std::string pin_;
   Link link_{Link::WAIT_MB};
   bool pin_sent_{false};

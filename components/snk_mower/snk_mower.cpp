@@ -19,6 +19,9 @@ static constexpr uint32_t WIFI_STATUS_INTERVAL_MS = 1000;
 static constexpr uint32_t KEY_CONFIRM_WINDOW_MS = 3000;  // 300 ticks of 10 ms in the original
 static constexpr uint32_t STATS_INTERVAL_MS = 10000;
 static constexpr uint32_t TRACE_DUMP_AFTER_MS = 60000;
+// After a stop U13 needs a moment before it accepts the next key sequence;
+// if it never reports the stopped state, send HOME anyway after this long.
+static constexpr uint32_t RETURN_HOME_CONFIRM_MS = 3000;
 
 void SnkMower::setup() {
   ESP_LOGI(TAG, "Setting up SNK mower link (230400 8N1)");
@@ -70,6 +73,13 @@ void SnkMower::loop() {
   if (rain_adc_ != nullptr)
     rain_loop(now);
   display_loop(now);
+  // A return-to-dock is waiting for the stop to be confirmed; if U13 never
+  // reports it (e.g. it was already stopped), send HOME anyway.
+  if (return_pending_ && now - return_stop_ms_ >= RETURN_HOME_CONFIRM_MS) {
+    return_pending_ = false;
+    ESP_LOGW(TAG, "Return to dock: no stop confirmation, sending HOME anyway");
+    send_home_sequence();
+  }
   if (now - last_stats_ms_ >= STATS_INTERVAL_MS)
     log_link_stats(now);
   if (!trace_done_ && now >= TRACE_DUMP_AFTER_MS)
@@ -270,11 +280,26 @@ void SnkMower::send_raw_json(const std::string &json) {
 void SnkMower::start_mowing() {
   // Same as a user pressing START, then OK.
   ESP_LOGI(TAG, "Start mowing");
+  return_pending_ = false;
   send_cmd(proto::KEY_SELECT);
   set_timeout("key_confirm", 500, [this]() { send_cmd(proto::KEY_START_CONFIRM); });
 }
 
 void SnkMower::return_to_dock() {
+  // U13 ignores the HOME/OK key sequence while it is mowing (state 8) or edge
+  // trimming (state 16): the mower has to be stopped first. Send a remote stop
+  // and let handle_status() send HOME once U13 reports that it stopped.
+  if (state_ == 8 || state_ == 16) {
+    ESP_LOGI(TAG, "Return to dock: mowing/trimming, sending stop first");
+    return_pending_ = true;
+    return_stop_ms_ = millis();
+    send_cmd(proto::REMOTE_STOP);
+    return;
+  }
+  send_home_sequence();
+}
+
+void SnkMower::send_home_sequence() {
   // Same as a user pressing HOME, then OK.
   ESP_LOGI(TAG, "Return to dock");
   send_cmd(proto::KEY_SELECT);
@@ -283,6 +308,7 @@ void SnkMower::return_to_dock() {
 
 void SnkMower::stop_mowing() {
   ESP_LOGI(TAG, "Stop");
+  return_pending_ = false;
   send_cmd(proto::REMOTE_STOP);
 }
 

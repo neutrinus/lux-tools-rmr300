@@ -102,6 +102,8 @@ MB → ESP  0x330000A0 {"state":6}
 
 Keys are a two-step sequence, exactly as the original display firmware sends them: START or HOME sends `0x10000007`, then OK within 3 s sends `0x10000001` (after START) or `0x10000002` (after HOME).
 
+While the mower is mowing (`state` 8) or edge trimming (`state` 16), U13 ignores the HOME/OK sequence. A remote stop (`0x10000023`) has to be sent first, and the mower has to reach the stopped state, before the return command is accepted; the `snk_mower` component does this automatically (see [component.md](component.md#actions)).
+
 | Action | ESP → MB | MB → ESP | Time |
 |---|---|---|---|
 | Start mowing | `0x10000007`, then `0x10000001` | `0x41000005` (departure), `state:8` | ~45 ms |

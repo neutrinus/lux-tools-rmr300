@@ -231,6 +231,13 @@ void SnkMower::handle_status(const JsonDocument &doc) {
     buzz(s == MowerState::ERROR_STATE ? 300 : 100);
   publish_mower_state(s);
 
+  // A pending return-to-dock: the stop took effect, U13 now accepts the
+  // HOME/OK sequence. Allow a short settle time before sending it.
+  if (return_pending_ && s != MowerState::MOWING && s != MowerState::TRIMMING) {
+    return_pending_ = false;
+    set_timeout("return_home", RETURN_HOME_SETTLE_MS, [this]() { this->send_home_sequence(); });
+  }
+
   ESP_LOGD(TAG, "Status: state=%d bat=%d%% error=%d station=%d", state_, battery_percent_, error_code_, station_);
 }
 

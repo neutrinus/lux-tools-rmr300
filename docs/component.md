@@ -67,7 +67,7 @@ Call them from lambdas (`id(my_mower).start_mowing();`):
 | Method | Effect |
 |---|---|
 | `start_mowing()` | START, then OK: `0x10000007`, `0x10000001` |
-| `return_to_dock()` | HOME, then OK: `0x10000007`, `0x10000002` |
+| `return_to_dock()` | HOME, then OK: `0x10000007`, `0x10000002`. While mowing or edge trimming, a remote stop `0x10000023` is sent first and HOME follows once the mower has stopped |
 | `stop_mowing()` | Remote stop `0x10000023` |
 | `trim_edge()` | Edge trim `0x10000015` (only from the station) |
 | `key_start()`, `key_home()`, `key_ok()` | Front buttons: START/HOME arm a 3 s window, OK confirms. Wire them to `gpio` binary sensors on GPIO22/21/19 (`INPUT_PULLUP`, inverted) |
