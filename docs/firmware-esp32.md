@@ -108,6 +108,18 @@ Filled by `400d9d20` from U13 `0x330000A0`:
 | +0x124 | `rain_delay` |
 | +0x168..+0x18c | Board versions `mb_sv/hv`, `bb_sv/hv`, `db_sv/hv`, `lb_sv/hv` |
 
+## Differences between 3.02.02 and 3.02.05 [F]
+
+Compared function by function (`ota_0` of both dumps, normalised disassembly). Partition table, boot handshake, frame format, key handling, display driver, buttons, rain driver and settings menu are the same; most changed functions only differ in register allocation or inlining (the frame parser at `400e41a0` merges two copies of the same code, with the same `&`, `#` and `0x5B` constants). What 3.02.05 adds:
+
+| Area | 3.02.05 (addresses in its image) | Relevance to the ESPHome component |
+|---|---|---|
+| Paused state | `0x41000003` with `"pause":1` is shown as the pause screen (same as `0x41000014`), not as idle (`400e17db`) | None for our U13: it sends `0x41000003` without fields (`0x0803c338`). The MI 302 U13 has a temporary schedule pause ("pause schedule temporary", "Robot is on schedule but schedule is paused") |
+| Schedule | Reads `pause` from `0x330000A6` and writes it in `0x300000A6` (`400da605`, `400dc908`) | Only if the component ever edits the schedule |
+| Cloud `mode` 5 | Sends `0x1000000b` with `point` (table `0x3f4073b4`, `400dc67b`) | None: the U13 key decoder (`0x08063808`, same code in the MI 302 dump) handles only `0x10000001`–`0x1000000a` and `0x10000011`–`0x10000024`, and `0x1000000b` appears in neither U13 dump |
+| Capability flags | `sch_ex` and `add_func` from U13 env (state struct `+0x170`, `+0x171`), reported to the cloud as `sche_ex` and `add_func` | None. Our U13 has `sch_ex`; neither dump has `add_func` |
+| MQTT broker | `iot_mode` 4/5/6/7 selects `mqtt://mergemqtt-wired.sk-robot.com` / `test1` / `test2` / `test3`, anything else `mqtt://server.sk-robot.com` (`400d78bb`); `test4` is gone | None |
+
 ## WiFi, Bluetooth and cloud
 
 The hardware and firmware support WiFi, Bluetooth and a cloud client, used by the Sunseeker app on Brucke/Sunseeker units. Lux does not advertise it; pairing a Lux unit with the app has not been tried.
@@ -136,8 +148,9 @@ The IoT task `400dc4a8` reads `cmd` from the JSON message. Rows marked [F] were 
 | `cmd` | Payload | Action | UART to U13 |
 |---|---|---|---|
 | 101 | `mode` 0/1/2/3/4 | stop / mow / home / select / edge trim [F, table `0x3f4046b4`] | `0x10000023` / `0x10000021` / `0x10000022` / `0x10000007` / `0x10000015` [F] |
+| 101 | `mode` 5, `point` | 3.02.05 only: mow from a start point [I] | `0x1000000b {"point":N}` [F]. Not decoded by our U13 |
 | 102 | `ymd`, `hms`, `week` | Set the clock [F] | |
-| 103 | `slice`, `trimming`, `auto`, `pause` | Schedule | |
+| 103 | `slice`, `trimming`, `auto`, `pause` | Schedule. 3.02.02 has no `pause` key; 3.02.05 passes it through [F] | `0x300000A6` |
 | 105 | `rain_en`, `rain_delay_set` | Rain delay [F] | |
 | 107 | `rename` | Device name | |
 | 108 | `mul_*` | Start points / zones | |

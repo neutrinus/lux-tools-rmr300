@@ -177,7 +177,7 @@ Error codes are a bitmask matching the Sunseeker "OLD" list: 1 up/down, 2 trappe
 | `0x330000A0` | 855638176 | see above | Status |
 | `0x330000A1` | 855638177 | `name`, `sn`, `version`, `model`, `avail`, `pwd_en`, `rain_en`, `sch_en`, `bat_name`, … | Device info |
 | `0x330000A2` | 855638178 | `mb_hv`, `mb_sv`, `mblt_sv`, `bb_hv`, `bb_sv`, `db_hv`, `db_sv`, `lb_hv`, `lb_sv` | Board versions |
-| `0x330000A6` | 855638182 | `trim`, `auto`, `sun_st`, `sun_len`, … `sat_len` | Schedule (start minute and length per weekday) |
+| `0x330000A6` | 855638182 | `trim`, `auto`, `pause`, `sun_st`, `sun_len`, … `sat_len` | Schedule (start minute and length per weekday). `pause` is a key of U13's schedule parser; display firmware 3.02.05 reads and writes it, 3.02.02 ignores it |
 | `0x330000A7` | 855638183 | `rain_en`, `rain_delay` | Rain configuration |
 | `0x330000A8` | 855638184 | `mul_en`, `mul_auto`, `mul_z1..4`, `meter_en`, `meter_z1..4` | Multi-zone configuration |
 | `0x330000AA` | 855638186 | — | Follows the schedule; meaning unknown |
@@ -199,6 +199,7 @@ Error codes are a bitmask matching the Sunseeker "OLD" list: 1 up/down, 2 trappe
 | `0x41000007` | 1090519047 | — | Docked, charging starts |
 | `0x41000008` | 1090519048 | — | Shutting down |
 | `0x41000013` | 1090519059 | — | Departure to trim the edge |
+| `0x41000014` | 1090519060 | — | Paused: the display firmware shows its pause screen. No sender found in either U13 dump |
 | `0x41000020` | 1090519072 | `result` | PIN result |
 | `0x50000021` | 1342177313 | `bat` | Battery bars 0–3 |
 
