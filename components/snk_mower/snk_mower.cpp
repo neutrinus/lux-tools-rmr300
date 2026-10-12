@@ -90,13 +90,16 @@ void SnkMower::log_link_stats(uint32_t now) {
   static const char *const LINK_NAMES[] = {"WAIT_MB", "HANDSHAKE", "UP"};
   last_stats_ms_ = now;
   now = millis();  // read_uart() may have set last_rx_ms_ after `now`
-  if (last_rx_ms_ == 0)
+  // Braces keep the branches non-empty when verbose logging is compiled out
+  // (ESP_LOGV expands to nothing), which would otherwise trip -Wempty-body.
+  if (last_rx_ms_ == 0) {
     ESP_LOGV(TAG, "Link %s: nothing received yet, tx %u frames", LINK_NAMES[static_cast<int>(link_)],
              (unsigned) tx_frames_);
-  else
+  } else {
     ESP_LOGV(TAG, "Link %s: rx %u frames (%u bad, %u bytes), last %u ms ago; tx %u frames; state=%d locked-pin=%s",
              LINK_NAMES[static_cast<int>(link_)], (unsigned) rx_frames_, (unsigned) rx_bad_, (unsigned) rx_bytes_,
              (unsigned) (now - last_rx_ms_), (unsigned) tx_frames_, state_, pin_retries_ >= 5 ? "gave up" : "ok");
+  }
 }
 
 void SnkMower::trace(const char *dir, const char *json) {
