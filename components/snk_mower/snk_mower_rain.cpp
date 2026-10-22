@@ -85,24 +85,34 @@ void SnkMower::rain_sample() {
   rain_acc_ += raw - rain_acc_ / 4;
   int avg = rain_acc_ / 4;
 
-  // A dry sensor reads high (about 3000+ of 4095); water between the
-  // electrodes pulls the reading down.
+  // A dry sensor reads high (a steady 4095 on our unit); water between the
+  // electrodes pulls the reading down. The original firmware's threshold is
+  // 3000, but in heavy rain our unit reads 3100-4000 with spells of 4095
+  // lasting up to ~10 min, so the default threshold is higher and "dry" must
+  // also hold for rain_dry_hold_ms_ before the state clears.
+  uint32_t now = millis();
   uint8_t state = rain_state_;
   if (rain_acc_ >= rain_threshold_ * 4) {
     rain_wet_count_ = 0;
-    if (rain_dry_count_ < RAIN_DEBOUNCE)
+    if (rain_dry_count_ < RAIN_DEBOUNCE) {
       rain_dry_count_++;
-    else
+    } else if (rain_state_ != RAIN_WET) {
       state = RAIN_DRY;
+    } else if (!rain_dry_pending_) {
+      rain_dry_pending_ = true;
+      rain_dry_since_ms_ = now;
+    } else if (now - rain_dry_since_ms_ >= rain_dry_hold_ms_) {
+      state = RAIN_DRY;
+    }
   } else {
     rain_dry_count_ = 0;
+    rain_dry_pending_ = false;
     if (rain_wet_count_ < RAIN_DEBOUNCE)
       rain_wet_count_++;
     else
       state = RAIN_WET;
   }
 
-  uint32_t now = millis();
   if (rain_adc_sensor_ && (rain_adc_published_ms_ == 0 || now - rain_adc_published_ms_ >= RAIN_ADC_PUBLISH_MS)) {
     rain_adc_published_ms_ = now;
     rain_adc_sensor_->publish_state(avg);

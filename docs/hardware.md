@@ -185,7 +185,7 @@ The board photos with the traces are [img/display_front2.jpg](img/display_front2
 
 ### Rain sensor
 
-Resistive, between the J3/J4 electrodes. Every 2 s GPIO18 is driven high and GPIO5 low for 1 s, five ADC samples are taken on GPIO36 at the end of that phase, then the polarity is reversed for 1 s so the electrodes do not corrode. A running average above 3000 (of 4095) is dry; 16 readings in a row on one side change the state. The ESP32 reports it to U13 as `0x22000000 {"rain":1}` (dry) or `{"rain":2}` (raining).
+Resistive, between the J3/J4 electrodes. Every 2 s GPIO18 is driven high and GPIO5 low for 1 s, five ADC samples are taken on GPIO36 at the end of that phase, then the polarity is reversed for 1 s so the electrodes do not corrode. A running average above 3000 (of 4095) is dry; 16 readings in a row on one side change the state. The ESP32 reports it to U13 as `0x22000000 {"rain":1}` (dry) or `{"rain":2}` (raining). Measured on one unit over a night of heavy rain: a steady 4095 dry, 3100–4000 wet with spells of 4095 up to ~10 min, i.e. almost always above the original threshold. The ESPHome component therefore defaults to 4000 and holds "raining" until the sensor has read dry for 15 min.
 
 ### J1: programming header
 

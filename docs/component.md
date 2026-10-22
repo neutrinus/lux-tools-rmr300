@@ -39,7 +39,8 @@ snk_mower:
 | `buzzer_pin` | — | 27 on the display board. Without it the buzzer is silent |
 | `rain_pin` | — | 36 on the display board. Without it the rain sensor is off and "dry" is reported |
 | `rain_drive_a`, `rain_drive_b` | 18, 5 | Rain electrode drive pins |
-| `rain_threshold` | 3000 | ADC average (0–4095) above which the sensor is dry |
+| `rain_threshold` | 4000 | ADC average (0–4095) at or above which the sensor reads dry. The original firmware uses 3000, but a wet sensor stays above that (3100–4000 in heavy rain, a steady 4095 dry); see the `rain_adc` sensor to tune it |
+| `rain_dry_hold` | 15min | How long the sensor must read dry before `raining` clears. In rain it reads 4095 for up to ~10 min at a time |
 
 ## Entities
 
@@ -80,7 +81,7 @@ Call them from lambdas (`id(my_mower).start_mowing();`):
 - **PIN**: sent when the mainboard asks for it (`{"lock":1}`) and once at link up; up to five retries if rejected, then the state shows `locked`.
 - **Display**: shows `boot`, then the state (`IdLE`, `Mow`, `Cut`, `HoME`, `ChAr`, `dock`, `Err` + code, `LoCK`), alternating with the battery percentage while mowing or charging; `byE` on power-off. Multiplexed at 2 ms per digit from a hardware timer, like the original.
 - **Buzzer**: short beeps on key presses, a beep when mowing starts, a long one on errors.
-- **Rain**: same measurement and thresholds as the original firmware; the state goes to the mainboard as `0x22000000` (1 dry, 2 raining), which starts the mainboard's own rain delay.
+- **Rain**: same measurement as the original firmware, with a higher default threshold (4000 instead of 3000) and a dry hold time (see `rain_threshold`, `rain_dry_hold`); the state goes to the mainboard as `0x22000000` (1 dry, 2 raining), which starts the mainboard's own rain delay. The mainboard ignores it when its rain setting (`rain_en` in `0x330000A7`) is off; the component logs a warning then.
 - **Logging**: at DEBUG every non-periodic frame is logged as `TX {...}` / `RX {...}`, and the first 80 frames after boot are printed again 60 s after boot (the API log connects too late to see them). Mainboard log lines (`0x15000001`) appear as `MB log: ...`. Link statistics every 10 s at VERBOSE.
 
 The protocol itself is documented in [protocol.md](protocol.md).

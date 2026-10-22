@@ -50,6 +50,7 @@ class SnkMower : public Component, public uart::UARTDevice {
     rain_drive_b_ = b;
   }
   void set_rain_threshold(int raw) { rain_threshold_ = raw; }
+  void set_rain_dry_hold(uint32_t ms) { rain_dry_hold_ms_ = ms; }
   void set_display_off_timeout(uint32_t minutes) { display_off_timeout_ms_ = minutes * 60000UL; }
   void set_display_night_brightness(uint8_t percent) { display_night_brightness_ = percent; }
 
@@ -189,7 +190,10 @@ class SnkMower : public Component, public uart::UARTDevice {
 
   gpio_num_t rain_drive_a_{GPIO_NUM_18};
   gpio_num_t rain_drive_b_{GPIO_NUM_5};
-  int rain_threshold_{3000};
+  int rain_threshold_{4000};
+  uint32_t rain_dry_hold_ms_{15 * 60 * 1000};
+  uint32_t rain_dry_since_ms_{0};  // start of the current dry spell while raining
+  bool rain_dry_pending_{false};
   adc_oneshot_unit_handle_t rain_adc_{nullptr};
   adc_channel_t rain_channel_{ADC_CHANNEL_0};
   uint8_t rain_polarity_{1};
