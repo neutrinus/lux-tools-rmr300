@@ -24,6 +24,7 @@ CONF_RAIN_PIN = "rain_pin"
 CONF_RAIN_DRIVE_A = "rain_drive_a"
 CONF_RAIN_DRIVE_B = "rain_drive_b"
 CONF_RAIN_THRESHOLD = "rain_threshold"
+CONF_RAIN_DRY_HOLD = "rain_dry_hold"
 CONF_RAIN_ADC = "rain_adc"
 CONF_RAINING = "raining"
 
@@ -73,7 +74,10 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_RAIN_PIN): cv.int_range(32, 39),
             cv.Optional(CONF_RAIN_DRIVE_A, default=18): cv.int_range(0, 33),
             cv.Optional(CONF_RAIN_DRIVE_B, default=5): cv.int_range(0, 33),
-            cv.Optional(CONF_RAIN_THRESHOLD, default=3000): cv.int_range(1, 4095),
+            cv.Optional(CONF_RAIN_THRESHOLD, default=4000): cv.int_range(1, 4095),
+            # How long the sensor must read dry before "raining" clears; in
+            # rain it reads dry for several minutes at a time.
+            cv.Optional(CONF_RAIN_DRY_HOLD, default="15min"): cv.positive_time_period_milliseconds,
             cv.Optional(CONF_BATTERY_LEVEL): sensor.sensor_schema(
                 unit_of_measurement="%",
                 accuracy_decimals=0,
@@ -212,6 +216,7 @@ async def to_code(config):
             cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_A]}'),
             cg.RawExpression(f'(gpio_num_t){config[CONF_RAIN_DRIVE_B]}')))
         cg.add(var.set_rain_threshold(config[CONF_RAIN_THRESHOLD]))
+        cg.add(var.set_rain_dry_hold(config[CONF_RAIN_DRY_HOLD]))
 
     cg.add(var.set_display_night_brightness(config[CONF_DISPLAY_NIGHT_BRIGHTNESS]))
 

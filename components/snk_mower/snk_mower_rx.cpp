@@ -133,6 +133,8 @@ void SnkMower::handle_json(const JsonDocument &doc) {
         work_area_sensor_->publish_state(doc["area"].as<int>());
       break;
     case proto::MB_RAIN_CFG:
+      if (doc["rain_en"].is<int>() && doc["rain_en"].as<int>() == 0)
+        ESP_LOGW(TAG, "Rain sensor is off on the mower (rain_en=0): rain will not stop mowing");
       if (rain_delay_sensor_ && doc["rain_delay"].is<int>())
         rain_delay_sensor_->publish_state(doc["rain_delay"].as<int>());
       break;
